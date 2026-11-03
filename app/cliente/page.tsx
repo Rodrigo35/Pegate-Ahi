@@ -11,7 +11,8 @@ interface TurnoCliente {
   tipo_corte: string;
   monto: number;
   modalidad_espera?: 'local' | 'diligencia';
-  estado: 'espera' | 'atendiendo' | 'finalizado' | 'cancelado';
+  estado: 'espera' | 'atendiendo' | 'finalizado' | 'cancelado' | 'ausente';
+  llamado_en?: string;
   barbero_nombre?: string;
   creado_en: string;
 }
@@ -26,20 +27,19 @@ function ClienteContent() {
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
 
-  // Estados del cliente
   const [nombre, setNombre] = useState('');
   const [servicioSeleccionado, setServicioSeleccionado] = useState(SERVICIOS[0]);
   const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
   const [registrando, setRegistrando] = useState(false);
 
-  // Estados del turno activo
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
   const [personasAdelante, setPersonasAdelante] = useState<number>(0);
   const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Reloj digital en vivo
+  // Reloj digital y temporizador de 30 min
   const [horaActual, setHoraActual] = useState<string>('');
+  const [tiempoRestanteSegundos, setTiempoRestanteSegundos] = useState<number | null>(null);
 
   useEffect(() => {
     const actualizarHora = () => {
@@ -110,6 +110,24 @@ function ClienteContent() {
     };
   }, [ticketParam, turno?.id, turno?.codigo_ticket]);
 
+  // Cálculo del temporizador regresivo de 30 minutos (1800 segundos)
+  useEffect(() => {
+    if (turno && turno.estado === 'atendiendo' && turno.modalidad_espera === 'diligencia' && turno.llamado_en) {
+      const interval = setInterval(() => {
+        const horaLlamado = new Date(turno.llamado_en!).getTime();
+        const ahora = new Date().getTime();
+        const segundosTranscurridos = Math.floor((ahora - horaLlamado) / 1000);
+        const restante = 1800 - segundosTranscurridos;
+
+        setTiempoRestanteSegundos(restante > 0 ? restante : 0);
+      }, 1000);
+
+      return () => clearInterval(interval);
+    } else {
+      setTiempoRestanteSegundos(null);
+    }
+  }, [turno]);
+
   const unirmeALaCola = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre.trim()) return;
@@ -163,6 +181,13 @@ function ClienteContent() {
     volverAlInicio();
   };
 
+  // Dar formato visual a los segundos mm:ss
+  const formatearTiempo = (seg: number) => {
+    const mins = Math.floor(seg / 60);
+    const secs = seg % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   if (loading) {
     return (
       <div className="text-center py-10">
@@ -172,7 +197,7 @@ function ClienteContent() {
     );
   }
 
-  // --- MONITOR CON MODALIDAD Y PROGRESO ---
+  // --- MONITOREO DE TURNO Y TEMPORIZADOR DE LLEGADA ---
   if (turno && turno.estado !== 'cancelado') {
     const tiempoEstimado = personasAdelante * 20;
 
@@ -183,13 +208,12 @@ function ClienteContent() {
 
     return (
       <div className="space-y-6">
-        {/* Reloj Digital */}
         <div className="flex justify-between items-center text-xs text-slate-400 bg-slate-800/40 px-4 py-2 rounded-xl border border-slate-800">
           <span>Hora Actual:</span>
           <span className="font-mono font-bold text-amber-400 text-sm">{horaActual}</span>
         </div>
 
-        {/* Encabezado del ticket */}
+        {/* Header Ticket */}
         <div className="bg-slate-800/80 border border-slate-700/60 p-6 rounded-2xl text-center shadow-lg relative overflow-hidden">
           <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Tu Número de Turno</span>
           <p className="text-5xl font-black text-amber-400 mt-1">{turno.codigo_ticket}</p>
@@ -205,7 +229,7 @@ function ClienteContent() {
           </div>
         </div>
 
-        {/* CONTADOR & BARRA DE TIEMPO */}
+        {/* ESTADO 1: EN ESPERA */}
         {turno.estado === 'espera' && (
           <div className="space-y-4">
             <div className="bg-slate-800/60 border border-slate-800 p-4 rounded-xl space-y-2">
@@ -221,27 +245,26 @@ function ClienteContent() {
               </div>
             </div>
 
-            {/* Aviso especial si está en diligencias */}
             {turno.modalidad_espera === 'diligencia' && (
               <div className="p-3 bg-indigo-500/20 border border-indigo-500/30 rounded-xl text-center text-xs font-semibold text-indigo-300">
-                🚶‍♂️ Tienes tiempo para tus trámites. Te sugerimos regresar cuando queden <strong>2 personas</strong> por delante.
+                🚶‍♂️ Estás de diligencia. Al llamarte dispondrás de <strong>30 minutos</strong> para llegar.
               </div>
             )}
 
             {personasAdelante === 0 ? (
               <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-center text-xs font-bold text-emerald-300 animate-pulse">
-                ⚡ ¡Eres el próximo en entrar a la silla! Regresa a la barbería.
+                ⚡ ¡Eres el próximo en entrar! Ve dirigiéndote al local.
               </div>
             ) : personasAdelante === 1 ? (
               <div className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-xl text-center text-xs font-bold text-amber-300 animate-pulse">
-                🔔 ¡Atención! Solo hay 1 persona delante de ti. Por favor, ve acercándote al local.
+                🔔 Queda 1 persona delante. ¡Ve regresando a la barbería!
               </div>
             ) : null}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-800/40 border border-slate-800 p-4 rounded-xl text-center">
                 <span className="text-[10px] text-slate-400 uppercase font-bold">Personas Delante</span>
-                <p className="text-3xl font-black text-slate-100 mt-1">{personasAdelante === 0 ? '0' : personasAdelante}</p>
+                <p className="text-3xl font-black text-slate-100 mt-1">{personasAdelante}</p>
               </div>
 
               <div className="bg-slate-800/40 border border-slate-800 p-4 rounded-xl text-center">
@@ -252,7 +275,6 @@ function ClienteContent() {
               </div>
             </div>
 
-            {/* Selector dinámico para cambiar de modalidad en vivo */}
             <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
               <span className="text-slate-400">¿Dónde esperarás?</span>
               <div className="flex gap-1">
@@ -290,14 +312,65 @@ function ClienteContent() {
           </div>
         )}
 
+        {/* ESTADO 2: TE HAN LLAMADO (CON CONTADOR REGRESIVO DE 30 MIN) */}
         {turno.estado === 'atendiendo' && (
-          <div className="bg-emerald-500/20 border-2 border-emerald-500 p-6 rounded-2xl text-center space-y-3 animate-bounce">
-            <span className="text-3xl">✂️</span>
-            <h2 className="text-2xl font-black text-white">¡ES TU TURNO!</h2>
-            <p className="text-xs text-emerald-200 font-medium">Por favor dirígete a la silla del barbero.</p>
+          <div className="space-y-4">
+            {turno.modalidad_espera === 'diligencia' && tiempoRestanteSegundos !== null ? (
+              <div className="bg-slate-900 border-2 border-amber-500 p-6 rounded-2xl text-center space-y-4 shadow-2xl animate-pulse">
+                <span className="text-4xl">🏃‍♂️</span>
+                <div>
+                  <h2 className="text-xl font-black text-amber-400 uppercase">¡EL BARBERO TE HA LLAMADO!</h2>
+                  <p className="text-xs text-slate-300 mt-1">Tienes 30 minutos para presentarte al local.</p>
+                </div>
+
+                {/* RELOJ REGRESIVO DE 30 MINUTOS */}
+                <div className="bg-slate-950 border border-slate-800 p-5 rounded-xl text-center">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tiempo Restante para Llegar</span>
+                  <p className={`text-5xl font-black font-mono mt-1 ${
+                    tiempoRestanteSegundos < 300 ? 'text-rose-500 animate-ping' : 'text-amber-400'
+                  }`}>
+                    {formatearTiempo(tiempoRestanteSegundos)}
+                  </p>
+                </div>
+
+                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-amber-500 transition-all duration-1000"
+                    style={{ width: `${(tiempoRestanteSegundos / 1800) * 100}%` }}
+                  ></div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-emerald-500/20 border-2 border-emerald-500 p-6 rounded-2xl text-center space-y-3 animate-bounce">
+                <span className="text-3xl">✂️</span>
+                <h2 className="text-2xl font-black text-white">¡ES TU TURNO!</h2>
+                <p className="text-xs text-emerald-200 font-medium">Por favor dirígete a la silla del barbero.</p>
+              </div>
+            )}
           </div>
         )}
 
+        {/* ESTADO 3: AUSENTE / TIEMPO AGOTADO */}
+        {turno.estado === 'ausente' && (
+          <div className="bg-rose-500/10 border-2 border-rose-500/40 p-6 rounded-2xl text-center space-y-4">
+            <span className="text-4xl">⏱️</span>
+            <div>
+              <h2 className="text-lg font-bold text-rose-300">¡Tiempo Límite Agotado!</h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Transcurrieron los 30 minutos de tolerancia y el barbero avanzó con el siguiente cliente.
+              </p>
+            </div>
+
+            <button
+              onClick={volverAlInicio}
+              className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg active:scale-95"
+            >
+              🔄 Solicitar un Nuevo Turno
+            </button>
+          </div>
+        )}
+
+        {/* ESTADO 4: FINALIZADO */}
         {turno.estado === 'finalizado' && (
           <div className="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl text-center space-y-4">
             <span className="text-3xl">🎉</span>
@@ -318,7 +391,6 @@ function ClienteContent() {
     );
   }
 
-  // --- FORMULARIO DE REGISTRO CON MODALIDAD DE ESPERA ---
   return (
     <form onSubmit={unirmeALaCola} className="space-y-6">
       <div className="flex justify-between items-center text-xs text-slate-400 bg-slate-800/40 px-4 py-2 rounded-xl border border-slate-800 mb-2">
@@ -331,7 +403,6 @@ function ClienteContent() {
         <p className="text-xs text-slate-400">Tu próximo corte, sin largas esperas.</p>
       </div>
 
-      {/* Nombre */}
       <div>
         <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Tu Nombre</label>
         <input
@@ -344,7 +415,6 @@ function ClienteContent() {
         />
       </div>
 
-      {/* Servicios */}
       <div className="space-y-2">
         <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">Selecciona tu servicio</label>
         <div className="grid grid-cols-1 gap-2.5">
@@ -371,7 +441,6 @@ function ClienteContent() {
         </div>
       </div>
 
-      {/* OPCIÓN: ¿Dónde esperarás? */}
       <div className="space-y-2">
         <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">¿Dónde esperarás tu turno?</label>
         <div className="grid grid-cols-2 gap-3">
@@ -403,7 +472,7 @@ function ClienteContent() {
             <span className="text-lg">🏃‍♂️</span>
             <div className="mt-2">
               <p className="font-bold text-xs text-white">Hacer Diligencias</p>
-              <p className="text-[10px] text-slate-400">Salgo y vuelvo a mi hora</p>
+              <p className="text-[10px] text-slate-400">Tengo 30 min para regresar</p>
             </div>
           </button>
         </div>
