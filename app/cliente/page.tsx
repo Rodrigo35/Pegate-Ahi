@@ -31,9 +31,22 @@ function ClienteContent() {
 
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
   const [personasAdelante, setPersonasAdelante] = useState<number>(0);
+  const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Función principal para obtener turno y calcular posicion actual
+  // Reloj digital en tiempo real
+  const [horaActual, setHoraActual] = useState<string>('');
+
+  useEffect(() => {
+    const actualizarHora = () => {
+      const ahora = new Date();
+      setHoraActual(ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    };
+    actualizarHora();
+    const interval = setInterval(actualizarHora, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const cargarTurnoYPosicion = async (codigoOId: string) => {
     let query = supabase.from('turnos').select('*');
     if (codigoOId.includes('-')) {
@@ -47,7 +60,6 @@ function ClienteContent() {
     if (!error && miTurno) {
       setTurno(miTurno as TurnoCliente);
 
-      // Si el turno está en espera, contar exactamente cuántos turnos activos hay antes que este
       if (miTurno.estado === 'espera') {
         const { count } = await supabase
           .from('turnos')
@@ -55,7 +67,13 @@ function ClienteContent() {
           .eq('estado', 'espera')
           .lt('creado_en', miTurno.creado_en);
 
-        setPersonasAdelante(count || 0);
+        const delante = count || 0;
+        setPersonasAdelante(delante);
+
+        // Fijar una base para la barra de progreso
+        if (delante >= totalInicialCola) {
+          setTotalInicialCola(delante + 1);
+        }
       }
     }
     setLoading(false);
@@ -70,7 +88,6 @@ function ClienteContent() {
       setLoading(false);
     }
 
-    // Escuchador Realtime para actualizar la posición AL INSTANTE si hay cambios en la tabla
     const channel = supabase
       .channel('cliente_realtime_cola')
       .on(
@@ -90,7 +107,6 @@ function ClienteContent() {
     };
   }, [ticketParam, turno?.id, turno?.codigo_ticket]);
 
-  // Registro de nuevo turno
   const unirmeALaCola = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre.trim()) return;
@@ -150,12 +166,23 @@ function ClienteContent() {
     );
   }
 
-  // --- MODO 1: MONITOR DE TURNO CON CONTADOR REALTIME ---
+  // --- MONITOR CON BARRA DE TIEMPO INTERACTIVA Y HORA ---
   if (turno && turno.estado !== 'cancelado') {
     const tiempoEstimado = personasAdelante * 20;
 
+    // Cálculo dinámico del porcentaje de la barra de progreso
+    const porcentajeProgreso = turno.estado === 'atendiendo' || turno.estado === 'finalizado'
+      ? 100
+      : Math.min(100, Math.max(10, Math.round(((totalInicialCola - personasAdelante) / totalInicialCola) * 100)));
+
     return (
       <div className="space-y-6">
+        {/* Reloj Digital superior */}
+        <div className="flex justify-between items-center text-xs text-slate-400 bg-slate-800/40 px-4 py-2 rounded-xl border border-slate-800">
+          <span>Hora Actual:</span>
+          <span className="font-mono font-bold text-amber-400 text-sm">{horaActual}</span>
+        </div>
+
         {/* Encabezado del ticket */}
         <div className="bg-slate-800/80 border border-slate-700/60 p-6 rounded-2xl text-center shadow-lg relative overflow-hidden">
           <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Tu Número de Turno</span>
@@ -166,9 +193,22 @@ function ClienteContent() {
           </span>
         </div>
 
-        {/* CONTADOR Y TIEMPO REALTIME */}
+        {/* BARRA INTERACTIVA DE TIEMPO / PROGRESO */}
         {turno.estado === 'espera' && (
-          <div className="space-y-3">
+          <div className="space-y-4">
+            <div className="bg-slate-800/60 border border-slate-800 p-4 rounded-xl space-y-2">
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span className="text-slate-400">Progreso en Cola</span>
+                <span className="text-amber-400 font-mono">{porcentajeProgreso}%</span>
+              </div>
+              <div className="w-full h-3 bg-slate-900 rounded-full overflow-hidden border border-slate-700/50 p-0.5">
+                <div
+                  className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all duration-700 ease-out shadow-sm"
+                  style={{ width: `${porcentajeProgreso}%` }}
+                ></div>
+              </div>
+            </div>
+
             {personasAdelante === 0 ? (
               <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-center text-xs font-bold text-emerald-300 animate-pulse">
                 ⚡ ¡Eres el próximo en entrar a la silla!
@@ -182,22 +222,17 @@ function ClienteContent() {
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-800/40 border border-slate-800 p-4 rounded-xl text-center">
                 <span className="text-[10px] text-slate-400 uppercase font-bold">Personas Delante</span>
-                <p className="text-3xl font-black text-slate-100 mt-1 transition-all">
+                <p className="text-3xl font-black text-slate-100 mt-1">
                   {personasAdelante === 0 ? '0' : personasAdelante}
                 </p>
               </div>
 
               <div className="bg-slate-800/40 border border-slate-800 p-4 rounded-xl text-center">
                 <span className="text-[10px] text-slate-400 uppercase font-bold">Tiempo Estimado</span>
-                <p className="text-3xl font-black text-amber-400 mt-1 transition-all">
+                <p className="text-3xl font-black text-amber-400 mt-1">
                   {personasAdelante === 0 ? '~ 5 min' : `~ ${tiempoEstimado} min`}
                 </p>
               </div>
-            </div>
-
-            <div className="bg-slate-800/30 border border-slate-800/80 p-4 rounded-xl flex items-center justify-between text-xs">
-              <span className="text-slate-400 font-medium">Estado actual:</span>
-              <span className="font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md">En espera</span>
             </div>
 
             <button
@@ -210,8 +245,8 @@ function ClienteContent() {
         )}
 
         {turno.estado === 'atendiendo' && (
-          <div className="bg-emerald-500/20 border-2 border-emerald-500 p-6 rounded-2xl text-center space-y-2 animate-bounce">
-            <span className="text-2xl">✂️</span>
+          <div className="bg-emerald-500/20 border-2 border-emerald-500 p-6 rounded-2xl text-center space-y-3 animate-bounce">
+            <span className="text-3xl">✂️</span>
             <h2 className="text-2xl font-black text-white">¡ES TU TURNO!</h2>
             <p className="text-xs text-emerald-200 font-medium">Por favor dirígete a la silla del barbero.</p>
           </div>
@@ -237,9 +272,13 @@ function ClienteContent() {
     );
   }
 
-  // --- MODO 2: FORMULARIO PRINCIPAL ---
   return (
     <form onSubmit={unirmeALaCola} className="space-y-6">
+      <div className="flex justify-between items-center text-xs text-slate-400 bg-slate-800/40 px-4 py-2 rounded-xl border border-slate-800 mb-2">
+        <span>Hora Actual:</span>
+        <span className="font-mono font-bold text-amber-400 text-sm">{horaActual}</span>
+      </div>
+
       <div className="text-center space-y-1">
         <h2 className="text-xl font-extrabold text-white">¡Bienvenido!</h2>
         <p className="text-xs text-slate-400">Tu próximo corte, sin largas esperas.</p>
