@@ -18,15 +18,26 @@ export default function BarberoView() {
   const [atendidosHoy, setAtendidosHoy] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
+  // Reloj digital en vivo
+  const [horaActual, setHoraActual] = useState<string>('');
+
+  useEffect(() => {
+    const actualizarHora = () => {
+      const ahora = new Date();
+      setHoraActual(ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    };
+    actualizarHora();
+    const interval = setInterval(actualizarHora, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   const fetchTurnos = async () => {
-    // 1. Traer todos los turnos activos en espera o atendiendo
     const { data: activos, error: errorActivos } = await supabase
       .from('turnos')
       .select('id, codigo_ticket, nombre_cliente, tipo_corte, monto, estado, creado_en')
       .in('estado', ['espera', 'atendiendo'])
       .order('creado_en', { ascending: true });
 
-    // 2. Contar el total de atendidos hoy
     const { count } = await supabase
       .from('turnos')
       .select('*', { count: 'exact', head: true })
@@ -42,9 +53,8 @@ export default function BarberoView() {
   useEffect(() => {
     fetchTurnos();
 
-    // Escuchar cambios en tiempo real
     const channel = supabase
-      .channel('barbero_dashboard_realtime')
+      .channel('barbero_channel')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'turnos' },
@@ -62,7 +72,6 @@ export default function BarberoView() {
   const turnoActual = turnos.find((t) => t.estado === 'atendiendo');
   const colaEspera = turnos.filter((t) => t.estado === 'espera');
 
-  // Acciones de control
   const llamarSiguiente = async () => {
     if (colaEspera.length === 0) return;
     const siguiente = colaEspera[0];
@@ -90,16 +99,23 @@ export default function BarberoView() {
     <main className="min-h-screen bg-slate-950 text-white p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
         
-        {/* Header Barbero */}
+        {/* Header con Reloj Digital */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div>
             <h1 className="text-2xl font-black text-amber-500 tracking-wide">PÉGATE AHÍ</h1>
             <p className="text-xs text-slate-400">Control de Barbería & Turnos</p>
           </div>
-          <span className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold rounded-full">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            En Línea
-          </span>
+          
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex flex-col items-end">
+              <span className="text-[10px] text-slate-500 uppercase font-bold">Hora Servidor</span>
+              <span className="text-sm font-mono font-bold text-amber-400">{horaActual}</span>
+            </div>
+            <span className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold rounded-full">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              En Línea
+            </span>
+          </div>
         </div>
 
         {/* MÉTRICAS SUPERIORES */}
@@ -115,7 +131,7 @@ export default function BarberoView() {
           </div>
         </div>
 
-        {/* CLIENTE ACTUAL EN SILLA */}
+        {/* CLIENTE ACTUAL */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <h2 className="text-xs uppercase tracking-widest text-slate-400 font-bold">Cliente Actual en Silla</h2>
@@ -176,7 +192,7 @@ export default function BarberoView() {
           </div>
         </div>
 
-        {/* LISTA DE ESPERA CON DETALLE DE NOMBRE Y SERVICIO */}
+        {/* LISTA DE ESPERA */}
         {colaEspera.length > 0 && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
             <h3 className="text-xs uppercase tracking-wider text-slate-400 font-bold mb-3">
