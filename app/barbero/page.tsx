@@ -9,6 +9,7 @@ interface Turno {
   nombre_cliente: string;
   tipo_corte: string;
   monto: number;
+  modalidad_espera?: 'local' | 'diligencia';
   estado: 'espera' | 'atendiendo' | 'finalizado' | 'cancelado';
   creado_en: string;
 }
@@ -34,7 +35,7 @@ export default function BarberoView() {
   const fetchTurnos = async () => {
     const { data: activos, error: errorActivos } = await supabase
       .from('turnos')
-      .select('id, codigo_ticket, nombre_cliente, tipo_corte, monto, estado, creado_en')
+      .select('id, codigo_ticket, nombre_cliente, tipo_corte, monto, modalidad_espera, estado, creado_en')
       .in('estado', ['espera', 'atendiendo'])
       .order('creado_en', { ascending: true });
 
@@ -131,7 +132,7 @@ export default function BarberoView() {
           </div>
         </div>
 
-        {/* CLIENTE ACTUAL */}
+        {/* CLIENTE ACTUAL EN SILLA */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <h2 className="text-xs uppercase tracking-widest text-slate-400 font-bold">Cliente Actual en Silla</h2>
@@ -151,10 +152,17 @@ export default function BarberoView() {
               
               <div className="pt-2 border-t border-slate-700/40">
                 <p className="text-2xl font-bold text-white">{turnoActual.nombre_cliente}</p>
-                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-sm font-semibold">
-                  <span>✂️ Servicio:</span>
-                  <span className="text-white">{turnoActual.tipo_corte || 'Corte clásico'}</span>
-                  {turnoActual.monto && <span className="text-amber-400 font-bold">(${turnoActual.monto})</span>}
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+                  <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-sm font-semibold">
+                    ✂️ Servicio: <span className="text-white">{turnoActual.tipo_corte || 'Corte clásico'}</span> (${turnoActual.monto || 10})
+                  </span>
+                  <span className={`px-3 py-1 border rounded-lg text-sm font-semibold ${
+                    turnoActual.modalidad_espera === 'diligencia'
+                      ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300'
+                      : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+                  }`}>
+                    {turnoActual.modalidad_espera === 'diligencia' ? '🏃‍♂️ Estaba de diligencia' : '💈 Estaba en el local'}
+                  </span>
                 </div>
               </div>
             </div>
@@ -192,7 +200,7 @@ export default function BarberoView() {
           </div>
         </div>
 
-        {/* LISTA DE ESPERA */}
+        {/* LISTA DE ESPERA CON INDICADOR DE DÓNDE ESPERA CADA CLIENTE */}
         {colaEspera.length > 0 && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
             <h3 className="text-xs uppercase tracking-wider text-slate-400 font-bold mb-3">
@@ -209,10 +217,21 @@ export default function BarberoView() {
                     <span className="font-extrabold text-amber-400 text-sm">{item.codigo_ticket}</span>
                     <span className="text-white font-bold text-sm">{item.nombre_cliente}</span>
                   </div>
+
                   <div className="flex items-center gap-2">
+                    {/* Indicador de Ubicación / Modalidad */}
+                    <span className={`px-2.5 py-1 rounded-md font-semibold ${
+                      item.modalidad_espera === 'diligencia'
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}>
+                      {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 En local'}
+                    </span>
+
                     <span className="text-slate-300 bg-slate-800 px-2.5 py-1 rounded-md font-medium">
                       {item.tipo_corte || 'Corte clásico'}
                     </span>
+
                     {item.monto && (
                       <span className="text-amber-400 font-bold bg-amber-500/10 px-2 py-1 rounded-md">
                         ${item.monto}
