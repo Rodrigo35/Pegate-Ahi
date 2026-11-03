@@ -8,7 +8,8 @@ interface Turno {
   codigo_ticket: string;
   nombre_cliente: string;
   tipo_corte: string;
-  estado: 'espera' | 'atendiendo' | 'finalizado';
+  monto: number;
+  estado: 'espera' | 'atendiendo' | 'finalizado' | 'cancelado';
   creado_en: string;
 }
 
@@ -18,14 +19,14 @@ export default function BarberoView() {
   const [loading, setLoading] = useState<boolean>(true);
 
   const fetchTurnos = async () => {
-    // 1. Cargar turnos activos (espera y atendiendo)
+    // 1. Traer todos los turnos activos en espera o atendiendo
     const { data: activos, error: errorActivos } = await supabase
       .from('turnos')
-      .select('*')
+      .select('id, codigo_ticket, nombre_cliente, tipo_corte, monto, estado, creado_en')
       .in('estado', ['espera', 'atendiendo'])
       .order('creado_en', { ascending: true });
 
-    // 2. Contar total de atendidos/finalizados del día
+    // 2. Contar el total de atendidos hoy
     const { count } = await supabase
       .from('turnos')
       .select('*', { count: 'exact', head: true })
@@ -43,7 +44,7 @@ export default function BarberoView() {
 
     // Escuchar cambios en tiempo real
     const channel = supabase
-      .channel('barbero_dashboard')
+      .channel('barbero_dashboard_realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'turnos' },
@@ -61,7 +62,7 @@ export default function BarberoView() {
   const turnoActual = turnos.find((t) => t.estado === 'atendiendo');
   const colaEspera = turnos.filter((t) => t.estado === 'espera');
 
-  // Acción: Llamar al siguiente cliente disponible
+  // Acciones de control
   const llamarSiguiente = async () => {
     if (colaEspera.length === 0) return;
     const siguiente = colaEspera[0];
@@ -74,7 +75,6 @@ export default function BarberoView() {
     fetchTurnos();
   };
 
-  // Acción: Finalizar el servicio actual
   const finalizarServicio = async () => {
     if (!turnoActual) return;
 
@@ -90,7 +90,7 @@ export default function BarberoView() {
     <main className="min-h-screen bg-slate-950 text-white p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
         
-        {/* Header */}
+        {/* Header Barbero */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div>
             <h1 className="text-2xl font-black text-amber-500 tracking-wide">PÉGATE AHÍ</h1>
@@ -102,7 +102,7 @@ export default function BarberoView() {
           </span>
         </div>
 
-        {/* MÉTROLOGÍA / CUADROS CON NÚMEROS */}
+        {/* MÉTRICAS SUPERIORES */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-center shadow-lg">
             <span className="text-xs uppercase tracking-wider text-slate-400 font-bold">En Espera</span>
@@ -115,13 +115,13 @@ export default function BarberoView() {
           </div>
         </div>
 
-        {/* TARJETA DEL CLIENTE ACTUAL */}
+        {/* CLIENTE ACTUAL EN SILLA */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <h2 className="text-xs uppercase tracking-widest text-slate-400 font-bold">Cliente Actual en Silla</h2>
             {turnoActual && (
-              <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold rounded-md uppercase">
-                Cortando ✂️
+              <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold rounded-md uppercase">
+                Atendiendo ✂️
               </span>
             )}
           </div>
@@ -130,23 +130,25 @@ export default function BarberoView() {
             <p className="text-center text-slate-500 py-8 animate-pulse text-sm">Cargando información...</p>
           ) : turnoActual ? (
             <div className="bg-slate-800/50 border border-slate-700/60 rounded-xl p-6 text-center space-y-3">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Código de Turno</span>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Turno Asignado</span>
               <p className="text-6xl font-black text-amber-400">{turnoActual.codigo_ticket}</p>
               
-              <div className="pt-2">
-                <p className="text-xl font-bold text-white">{turnoActual.nombre_cliente || 'Cliente sin nombre'}</p>
-                <p className="text-sm font-medium text-amber-300/90 mt-1">
-                  ✂️ Servicio: <span className="text-slate-200">{turnoActual.tipo_corte || 'Corte Normal'}</span>
-                </p>
+              <div className="pt-2 border-t border-slate-700/40">
+                <p className="text-2xl font-bold text-white">{turnoActual.nombre_cliente}</p>
+                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-sm font-semibold">
+                  <span>✂️ Servicio:</span>
+                  <span className="text-white">{turnoActual.tipo_corte || 'Corte clásico'}</span>
+                  {turnoActual.monto && <span className="text-amber-400 font-bold">(${turnoActual.monto})</span>}
+                </div>
               </div>
             </div>
           ) : (
             <div className="bg-slate-950/40 border border-dashed border-slate-800 rounded-xl p-8 text-center">
-              <p className="text-slate-500 text-sm font-medium">Silla libre. Presiona el botón para llamar al siguiente cliente.</p>
+              <p className="text-slate-500 text-sm font-medium">Silla libre. Presiona "Llamar Siguiente Cliente" para atender.</p>
             </div>
           )}
 
-          {/* BOTONES PRINCIPALES DE ACCIÓN */}
+          {/* BOTONES DE ACCIÓN */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             <button
               onClick={llamarSiguiente}
@@ -174,26 +176,33 @@ export default function BarberoView() {
           </div>
         </div>
 
-        {/* LISTA EN ESPERA (VISTA RÁPIDA ABAJO) */}
+        {/* LISTA DE ESPERA CON DETALLE DE NOMBRE Y SERVICIO */}
         {colaEspera.length > 0 && (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
             <h3 className="text-xs uppercase tracking-wider text-slate-400 font-bold mb-3">
-              Próximos en Lista ({colaEspera.length})
+              Próximos en Cola ({colaEspera.length})
             </h3>
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
               {colaEspera.map((item, idx) => (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between bg-slate-800/30 border border-slate-800/80 px-4 py-3 rounded-lg text-xs"
+                  className="flex items-center justify-between bg-slate-800/40 border border-slate-800 px-4 py-3 rounded-xl text-xs"
                 >
                   <div className="flex items-center gap-3">
                     <span className="text-slate-500 font-bold">#{idx + 1}</span>
-                    <span className="font-extrabold text-amber-400">{item.codigo_ticket}</span>
-                    <span className="text-slate-300 font-medium">{item.nombre_cliente || 'Cliente'}</span>
+                    <span className="font-extrabold text-amber-400 text-sm">{item.codigo_ticket}</span>
+                    <span className="text-white font-bold text-sm">{item.nombre_cliente}</span>
                   </div>
-                  <span className="text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md">
-                    {item.tipo_corte || 'Corte Normal'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-300 bg-slate-800 px-2.5 py-1 rounded-md font-medium">
+                      {item.tipo_corte || 'Corte clásico'}
+                    </span>
+                    {item.monto && (
+                      <span className="text-amber-400 font-bold bg-amber-500/10 px-2 py-1 rounded-md">
+                        ${item.monto}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
