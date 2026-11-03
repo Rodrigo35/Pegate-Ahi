@@ -25,18 +25,16 @@ function ClienteContent() {
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
 
-  // Estados del cliente
   const [nombre, setNombre] = useState('');
   const [servicioSeleccionado, setServicioSeleccionado] = useState(SERVICIOS[0]);
   const [registrando, setRegistrando] = useState(false);
 
-  // Estados del turno activo
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
   const [personasAdelante, setPersonasAdelante] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Cargar datos del turno activo si existe
-  const cargarTurno = async (codigoOId: string) => {
+  // Función principal para obtener turno y calcular posicion actual
+  const cargarTurnoYPosicion = async (codigoOId: string) => {
     let query = supabase.from('turnos').select('*');
     if (codigoOId.includes('-')) {
       query = query.eq('codigo_ticket', codigoOId.toUpperCase());
@@ -44,17 +42,18 @@ function ClienteContent() {
       query = query.eq('id', codigoOId);
     }
 
-    const { data, error } = await query.single();
+    const { data: miTurno, error } = await query.single();
 
-    if (!error && data) {
-      setTurno(data as TurnoCliente);
+    if (!error && miTurno) {
+      setTurno(miTurno as TurnoCliente);
 
-      if (data.estado === 'espera') {
+      // Si el turno está en espera, contar exactamente cuántos turnos activos hay antes que este
+      if (miTurno.estado === 'espera') {
         const { count } = await supabase
           .from('turnos')
           .select('*', { count: 'exact', head: true })
           .eq('estado', 'espera')
-          .lt('creado_en', data.creado_en);
+          .lt('creado_en', miTurno.creado_en);
 
         setPersonasAdelante(count || 0);
       }
@@ -63,28 +62,35 @@ function ClienteContent() {
   };
 
   useEffect(() => {
-    if (ticketParam) {
-      cargarTurno(ticketParam);
+    const idBusqueda = ticketParam || turno?.id || turno?.codigo_ticket;
+
+    if (idBusqueda) {
+      cargarTurnoYPosicion(idBusqueda);
     } else {
       setLoading(false);
     }
 
-    // Suscripción a cambios en tiempo real
+    // Escuchador Realtime para actualizar la posición AL INSTANTE si hay cambios en la tabla
     const channel = supabase
-      .channel('cliente_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {
-        if (ticketParam || turno?.id) {
-          cargarTurno(ticketParam || turno!.id);
+      .channel('cliente_realtime_cola')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'turnos' },
+        () => {
+          const actualId = ticketParam || turno?.id || turno?.codigo_ticket;
+          if (actualId) {
+            cargarTurnoYPosicion(actualId);
+          }
         }
-      })
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [ticketParam, turno?.id]);
+  }, [ticketParam, turno?.id, turno?.codigo_ticket]);
 
-  // Acción: Registrar nuevo turno
+  // Registro de nuevo turno
   const unirmeALaCola = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre.trim()) return;
@@ -111,19 +117,17 @@ function ClienteContent() {
     if (!error && data) {
       setTurno(data as TurnoCliente);
       window.history.pushState({}, '', `/cliente?ticket=${data.codigo_ticket}`);
-      cargarTurno(data.codigo_ticket);
+      cargarTurnoYPosicion(data.codigo_ticket);
     }
     setRegistrando(false);
   };
 
-  // Acción: Volver al inicio para un nuevo turno
   const volverAlInicio = () => {
     setTurno(null);
     setNombre('');
     window.history.pushState({}, '', '/cliente');
   };
 
-  // Acción: Cancelar turno
   const cancelarTurno = async () => {
     if (!turno) return;
     const confirmar = confirm('¿Seguro que deseas cancelar tu turno en la cola?');
@@ -141,12 +145,12 @@ function ClienteContent() {
     return (
       <div className="text-center py-10">
         <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-        <p className="text-slate-400 text-xs animate-pulse">Cargando la cola de barbería...</p>
+        <p className="text-slate-400 text-xs animate-pulse">Cargando datos de la cola...</p>
       </div>
     );
   }
 
-  // --- MODO 1: SEGUIMIENTO DEL TURNO ---
+  // --- MODO 1: MONITOR DE TURNO CON CONTADOR REALTIME ---
   if (turno && turno.estado !== 'cancelado') {
     const tiempoEstimado = personasAdelante * 20;
 
@@ -162,34 +166,38 @@ function ClienteContent() {
           </span>
         </div>
 
-        {/* Notificación según el estado */}
+        {/* CONTADOR Y TIEMPO REALTIME */}
         {turno.estado === 'espera' && (
           <div className="space-y-3">
-            {personasAdelante === 1 && (
-              <div className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-xl text-center text-xs font-bold text-amber-300 animate-pulse">
-                🔔 ¡Atención! Eres el siguiente en la lista.
+            {personasAdelante === 0 ? (
+              <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-center text-xs font-bold text-emerald-300 animate-pulse">
+                ⚡ ¡Eres el próximo en entrar a la silla!
               </div>
-            )}
+            ) : personasAdelante === 1 ? (
+              <div className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-xl text-center text-xs font-bold text-amber-300 animate-pulse">
+                🔔 ¡Atención! Solo hay 1 persona delante de ti.
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-800/40 border border-slate-800 p-4 rounded-xl text-center">
                 <span className="text-[10px] text-slate-400 uppercase font-bold">Personas Delante</span>
-                <p className="text-2xl font-black text-slate-200 mt-1">
-                  {personasAdelante === 0 ? '¡Ninguna!' : personasAdelante}
+                <p className="text-3xl font-black text-slate-100 mt-1 transition-all">
+                  {personasAdelante === 0 ? '0' : personasAdelante}
                 </p>
               </div>
 
               <div className="bg-slate-800/40 border border-slate-800 p-4 rounded-xl text-center">
                 <span className="text-[10px] text-slate-400 uppercase font-bold">Tiempo Estimado</span>
-                <p className="text-2xl font-black text-amber-400 mt-1">
+                <p className="text-3xl font-black text-amber-400 mt-1 transition-all">
                   {personasAdelante === 0 ? '~ 5 min' : `~ ${tiempoEstimado} min`}
                 </p>
               </div>
             </div>
 
             <div className="bg-slate-800/30 border border-slate-800/80 p-4 rounded-xl flex items-center justify-between text-xs">
-              <span className="text-slate-400 font-medium">Barbero asignado:</span>
-              <span className="font-bold text-slate-200">{turno.barbero_nombre || 'Por asignar'}</span>
+              <span className="text-slate-400 font-medium">Estado actual:</span>
+              <span className="font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md">En espera</span>
             </div>
 
             <button
@@ -229,7 +237,7 @@ function ClienteContent() {
     );
   }
 
-  // --- MODO 2: FORMULARIO PARA REGISTRARSE ---
+  // --- MODO 2: FORMULARIO PRINCIPAL ---
   return (
     <form onSubmit={unirmeALaCola} className="space-y-6">
       <div className="text-center space-y-1">
@@ -237,7 +245,6 @@ function ClienteContent() {
         <p className="text-xs text-slate-400">Tu próximo corte, sin largas esperas.</p>
       </div>
 
-      {/* Input Nombre */}
       <div>
         <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Tu Nombre</label>
         <input
@@ -250,7 +257,6 @@ function ClienteContent() {
         />
       </div>
 
-      {/* Selección de Servicio */}
       <div className="space-y-2">
         <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">Selecciona tu servicio</label>
         <div className="grid grid-cols-1 gap-2.5">
@@ -277,7 +283,6 @@ function ClienteContent() {
         </div>
       </div>
 
-      {/* Botón Principal */}
       <button
         type="submit"
         disabled={registrando}
