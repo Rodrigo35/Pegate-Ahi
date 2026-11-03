@@ -7,20 +7,43 @@ interface Turno {
   id: string;
   codigo_ticket: string;
   nombre_cliente: string;
+  tipo_corte: string;
   estado: 'espera' | 'atendiendo' | 'finalizado';
   creado_en: string;
 }
 
 export default function BarberoView() {
   const [turnos, setTurnos] = useState<Turno[]>([]);
+  const [atendidosHoy, setAtendidosHoy] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Cargar turnos iniciales y escuchar cambios en tiempo real
+  const fetchTurnos = async () => {
+    // 1. Cargar turnos activos (espera y atendiendo)
+    const { data: activos, error: errorActivos } = await supabase
+      .from('turnos')
+      .select('*')
+      .in('estado', ['espera', 'atendiendo'])
+      .order('creado_en', { ascending: true });
+
+    // 2. Contar total de atendidos/finalizados del día
+    const { count } = await supabase
+      .from('turnos')
+      .select('*', { count: 'exact', head: true })
+      .eq('estado', 'finalizado');
+
+    if (!errorActivos && activos) {
+      setTurnos(activos as Turno[]);
+    }
+    setAtendidosHoy(count || 0);
+    setLoading(false);
+  };
+
   useEffect(() => {
     fetchTurnos();
 
+    // Escuchar cambios en tiempo real
     const channel = supabase
-      .channel('barbero_turnos')
+      .channel('barbero_dashboard')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'turnos' },
@@ -35,111 +58,148 @@ export default function BarberoView() {
     };
   }, []);
 
-  const fetchTurnos = async () => {
-    const { data, error } = await supabase
-      .from('turnos')
-      .select('*')
-      .in('estado', ['espera', 'atendiendo'])
-      .order('creado_en', { ascending: true });
-
-    if (!error && data) {
-      setTurnos(data as Turno[]);
-    }
-    setLoading(false);
-  };
-
-  const cambiarEstado = async (id: string, nuevoEstado: 'atendiendo' | 'finalizado') => {
-    await supabase
-      .from('turnos')
-      .update({ estado: nuevoEstado })
-      .eq('id', id);
-    
-    fetchTurnos();
-  };
-
   const turnoActual = turnos.find((t) => t.estado === 'atendiendo');
   const colaEspera = turnos.filter((t) => t.estado === 'espera');
 
+  // Acción: Llamar al siguiente cliente disponible
+  const llamarSiguiente = async () => {
+    if (colaEspera.length === 0) return;
+    const siguiente = colaEspera[0];
+
+    await supabase
+      .from('turnos')
+      .update({ estado: 'atendiendo' })
+      .eq('id', siguiente.id);
+
+    fetchTurnos();
+  };
+
+  // Acción: Finalizar el servicio actual
+  const finalizarServicio = async () => {
+    if (!turnoActual) return;
+
+    await supabase
+      .from('turnos')
+      .update({ estado: 'finalizado' })
+      .eq('id', turnoActual.id);
+
+    fetchTurnos();
+  };
+
   return (
     <main className="min-h-screen bg-slate-950 text-white p-4 md:p-8">
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
         
-        {/* Header Barbero */}
+        {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div>
-            <h1 className="text-2xl font-bold text-amber-500">Panel del Barbero</h1>
-            <p className="text-xs text-slate-400">Pégate Ahí — Gestión de Turnos</p>
+            <h1 className="text-2xl font-black text-amber-500 tracking-wide">PÉGATE AHÍ</h1>
+            <p className="text-xs text-slate-400">Control de Barbería & Turnos</p>
           </div>
-          <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold rounded-full">
-            ● En Línea
+          <span className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold rounded-full">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            En Línea
           </span>
         </div>
 
-        {loading ? (
-          <p className="text-center text-slate-400 py-10 animate-pulse">Cargando cola de turnos...</p>
-        ) : (
-          <>
-            {/* Cliente Actual en Silla */}
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <h2 className="text-xs uppercase tracking-wider text-slate-400 mb-4">Atendiendo Ahora</h2>
-              {turnoActual ? (
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-800/50 border border-slate-700/50 p-5 rounded-xl">
-                  <div>
-                    <span className="text-3xl font-extrabold text-amber-400">{turnoActual.codigo_ticket}</span>
-                    <p className="text-lg font-semibold text-white mt-1">{turnoActual.nombre_cliente || 'Cliente'}</p>
+        {/* MÉTROLOGÍA / CUADROS CON NÚMEROS */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-center shadow-lg">
+            <span className="text-xs uppercase tracking-wider text-slate-400 font-bold">En Espera</span>
+            <p className="text-4xl font-extrabold text-amber-400 mt-2">{colaEspera.length}</p>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-center shadow-lg">
+            <span className="text-xs uppercase tracking-wider text-slate-400 font-bold">Atendidos Hoy</span>
+            <p className="text-4xl font-extrabold text-emerald-400 mt-2">{atendidosHoy}</p>
+          </div>
+        </div>
+
+        {/* TARJETA DEL CLIENTE ACTUAL */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+            <h2 className="text-xs uppercase tracking-widest text-slate-400 font-bold">Cliente Actual en Silla</h2>
+            {turnoActual && (
+              <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold rounded-md uppercase">
+                Cortando ✂️
+              </span>
+            )}
+          </div>
+
+          {loading ? (
+            <p className="text-center text-slate-500 py-8 animate-pulse text-sm">Cargando información...</p>
+          ) : turnoActual ? (
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-xl p-6 text-center space-y-3">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Código de Turno</span>
+              <p className="text-6xl font-black text-amber-400">{turnoActual.codigo_ticket}</p>
+              
+              <div className="pt-2">
+                <p className="text-xl font-bold text-white">{turnoActual.nombre_cliente || 'Cliente sin nombre'}</p>
+                <p className="text-sm font-medium text-amber-300/90 mt-1">
+                  ✂️ Servicio: <span className="text-slate-200">{turnoActual.tipo_corte || 'Corte Normal'}</span>
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-slate-950/40 border border-dashed border-slate-800 rounded-xl p-8 text-center">
+              <p className="text-slate-500 text-sm font-medium">Silla libre. Presiona el botón para llamar al siguiente cliente.</p>
+            </div>
+          )}
+
+          {/* BOTONES PRINCIPALES DE ACCIÓN */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            <button
+              onClick={llamarSiguiente}
+              disabled={colaEspera.length === 0 || !!turnoActual}
+              className={`w-full py-4 px-6 font-bold text-sm rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+                colaEspera.length === 0 || !!turnoActual
+                  ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-800'
+                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950 active:scale-95 shadow-amber-500/10'
+              }`}
+            >
+              📢 Llamar Siguiente Cliente
+            </button>
+
+            <button
+              onClick={finalizarServicio}
+              disabled={!turnoActual}
+              className={`w-full py-4 px-6 font-bold text-sm rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 ${
+                !turnoActual
+                  ? 'bg-slate-800 text-slate-600 cursor-not-allowed border border-slate-800'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95 shadow-emerald-600/20'
+              }`}
+            >
+              ✅ Finalizar Servicio
+            </button>
+          </div>
+        </div>
+
+        {/* LISTA EN ESPERA (VISTA RÁPIDA ABAJO) */}
+        {colaEspera.length > 0 && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl">
+            <h3 className="text-xs uppercase tracking-wider text-slate-400 font-bold mb-3">
+              Próximos en Lista ({colaEspera.length})
+            </h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {colaEspera.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between bg-slate-800/30 border border-slate-800/80 px-4 py-3 rounded-lg text-xs"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-500 font-bold">#{idx + 1}</span>
+                    <span className="font-extrabold text-amber-400">{item.codigo_ticket}</span>
+                    <span className="text-slate-300 font-medium">{item.nombre_cliente || 'Cliente'}</span>
                   </div>
-                  <button
-                    onClick={() => cambiarEstado(turnoActual.id, 'finalizado')}
-                    className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition-all shadow-lg active:scale-95"
-                  >
-                    Finalizar Corte
-                  </button>
+                  <span className="text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md">
+                    {item.tipo_corte || 'Corte Normal'}
+                  </span>
                 </div>
-              ) : (
-                <p className="text-slate-500 text-sm italic py-4 text-center">No hay nadie en la silla en este momento.</p>
-              )}
-            </section>
-
-            {/* Cola de Espera */}
-            <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <h2 className="text-xs uppercase tracking-wider text-slate-400 mb-4">
-                En Espera ({colaEspera.length})
-              </h2>
-
-              {colaEspera.length === 0 ? (
-                <p className="text-slate-500 text-sm italic py-4 text-center">No hay clientes esperando en cola.</p>
-              ) : (
-                <div className="space-y-3">
-                  {colaEspera.map((item, index) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between bg-slate-800/40 border border-slate-800 p-4 rounded-xl hover:border-slate-700 transition-all"
-                    >
-                      <div className="flex items-center gap-4">
-                        <span className="text-xs text-slate-500 font-bold">#{index + 1}</span>
-                        <div>
-                          <p className="font-bold text-amber-400">{item.codigo_ticket}</p>
-                          <p className="text-sm text-slate-300">{item.nombre_cliente || 'Cliente sin nombre'}</p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => cambiarEstado(item.id, 'atendiendo')}
-                        disabled={!!turnoActual}
-                        className={`px-4 py-2 font-bold text-xs rounded-lg transition-all ${
-                          turnoActual
-                            ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                            : 'bg-amber-500 hover:bg-amber-400 text-slate-950 active:scale-95'
-                        }`}
-                      >
-                        Llamar a Silla
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </>
+              ))}
+            </div>
+          </div>
         )}
+
       </div>
     </main>
   );
