@@ -10,6 +10,7 @@ interface TurnoCliente {
   nombre_cliente: string;
   tipo_corte: string;
   monto: number;
+  modalidad_espera?: 'local' | 'diligencia';
   estado: 'espera' | 'atendiendo' | 'finalizado' | 'cancelado';
   barbero_nombre?: string;
   creado_en: string;
@@ -25,16 +26,19 @@ function ClienteContent() {
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
 
+  // Estados del cliente
   const [nombre, setNombre] = useState('');
   const [servicioSeleccionado, setServicioSeleccionado] = useState(SERVICIOS[0]);
+  const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
   const [registrando, setRegistrando] = useState(false);
 
+  // Estados del turno activo
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
   const [personasAdelante, setPersonasAdelante] = useState<number>(0);
   const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Reloj digital en tiempo real
+  // Reloj digital en vivo
   const [horaActual, setHoraActual] = useState<string>('');
 
   useEffect(() => {
@@ -70,7 +74,6 @@ function ClienteContent() {
         const delante = count || 0;
         setPersonasAdelante(delante);
 
-        // Fijar una base para la barra de progreso
         if (delante >= totalInicialCola) {
           setTotalInicialCola(delante + 1);
         }
@@ -124,6 +127,7 @@ function ClienteContent() {
           nombre_cliente: nombre,
           tipo_corte: servicioSeleccionado.nombre,
           monto: servicioSeleccionado.precio,
+          modalidad_espera: modalidadEspera,
           estado: 'espera',
         },
       ])
@@ -138,6 +142,12 @@ function ClienteContent() {
     setRegistrando(false);
   };
 
+  const cambiarModalidadEnVivo = async (nuevaModalidad: 'local' | 'diligencia') => {
+    if (!turno) return;
+    setTurno({ ...turno, modalidad_espera: nuevaModalidad });
+    await supabase.from('turnos').update({ modalidad_espera: nuevaModalidad }).eq('id', turno.id);
+  };
+
   const volverAlInicio = () => {
     setTurno(null);
     setNombre('');
@@ -149,11 +159,7 @@ function ClienteContent() {
     const confirmar = confirm('¿Seguro que deseas cancelar tu turno en la cola?');
     if (!confirmar) return;
 
-    await supabase
-      .from('turnos')
-      .update({ estado: 'cancelado' })
-      .eq('id', turno.id);
-
+    await supabase.from('turnos').update({ estado: 'cancelado' }).eq('id', turno.id);
     volverAlInicio();
   };
 
@@ -166,18 +172,18 @@ function ClienteContent() {
     );
   }
 
-  // --- MONITOR CON BARRA DE TIEMPO INTERACTIVA Y HORA ---
+  // --- MONITOR CON MODALIDAD Y PROGRESO ---
   if (turno && turno.estado !== 'cancelado') {
     const tiempoEstimado = personasAdelante * 20;
 
-    // Cálculo dinámico del porcentaje de la barra de progreso
-    const porcentajeProgreso = turno.estado === 'atendiendo' || turno.estado === 'finalizado'
-      ? 100
-      : Math.min(100, Math.max(10, Math.round(((totalInicialCola - personasAdelante) / totalInicialCola) * 100)));
+    const porcentajeProgreso =
+      turno.estado === 'atendiendo' || turno.estado === 'finalizado'
+        ? 100
+        : Math.min(100, Math.max(10, Math.round(((totalInicialCola - personasAdelante) / totalInicialCola) * 100)));
 
     return (
       <div className="space-y-6">
-        {/* Reloj Digital superior */}
+        {/* Reloj Digital */}
         <div className="flex justify-between items-center text-xs text-slate-400 bg-slate-800/40 px-4 py-2 rounded-xl border border-slate-800">
           <span>Hora Actual:</span>
           <span className="font-mono font-bold text-amber-400 text-sm">{horaActual}</span>
@@ -188,12 +194,18 @@ function ClienteContent() {
           <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Tu Número de Turno</span>
           <p className="text-5xl font-black text-amber-400 mt-1">{turno.codigo_ticket}</p>
           <p className="text-sm font-semibold text-white mt-1">{turno.nombre_cliente}</p>
-          <span className="inline-block mt-2 px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs rounded-full font-medium">
-            {turno.tipo_corte} (${turno.monto})
-          </span>
+          
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <span className="px-3 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs rounded-full font-medium">
+              {turno.tipo_corte} (${turno.monto})
+            </span>
+            <span className="px-3 py-1 bg-slate-700/60 text-slate-300 border border-slate-600/50 text-xs rounded-full font-medium">
+              {turno.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera (Diligencia)' : '💈 En Barbería'}
+            </span>
+          </div>
         </div>
 
-        {/* BARRA INTERACTIVA DE TIEMPO / PROGRESO */}
+        {/* CONTADOR & BARRA DE TIEMPO */}
         {turno.estado === 'espera' && (
           <div className="space-y-4">
             <div className="bg-slate-800/60 border border-slate-800 p-4 rounded-xl space-y-2">
@@ -209,22 +221,27 @@ function ClienteContent() {
               </div>
             </div>
 
+            {/* Aviso especial si está en diligencias */}
+            {turno.modalidad_espera === 'diligencia' && (
+              <div className="p-3 bg-indigo-500/20 border border-indigo-500/30 rounded-xl text-center text-xs font-semibold text-indigo-300">
+                🚶‍♂️ Tienes tiempo para tus trámites. Te sugerimos regresar cuando queden <strong>2 personas</strong> por delante.
+              </div>
+            )}
+
             {personasAdelante === 0 ? (
               <div className="p-3 bg-emerald-500/20 border border-emerald-500/30 rounded-xl text-center text-xs font-bold text-emerald-300 animate-pulse">
-                ⚡ ¡Eres el próximo en entrar a la silla!
+                ⚡ ¡Eres el próximo en entrar a la silla! Regresa a la barbería.
               </div>
             ) : personasAdelante === 1 ? (
               <div className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-xl text-center text-xs font-bold text-amber-300 animate-pulse">
-                🔔 ¡Atención! Solo hay 1 persona delante de ti.
+                🔔 ¡Atención! Solo hay 1 persona delante de ti. Por favor, ve acercándote al local.
               </div>
             ) : null}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-slate-800/40 border border-slate-800 p-4 rounded-xl text-center">
                 <span className="text-[10px] text-slate-400 uppercase font-bold">Personas Delante</span>
-                <p className="text-3xl font-black text-slate-100 mt-1">
-                  {personasAdelante === 0 ? '0' : personasAdelante}
-                </p>
+                <p className="text-3xl font-black text-slate-100 mt-1">{personasAdelante === 0 ? '0' : personasAdelante}</p>
               </div>
 
               <div className="bg-slate-800/40 border border-slate-800 p-4 rounded-xl text-center">
@@ -232,6 +249,35 @@ function ClienteContent() {
                 <p className="text-3xl font-black text-amber-400 mt-1">
                   {personasAdelante === 0 ? '~ 5 min' : `~ ${tiempoEstimado} min`}
                 </p>
+              </div>
+            </div>
+
+            {/* Selector dinámico para cambiar de modalidad en vivo */}
+            <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between text-xs">
+              <span className="text-slate-400">¿Dónde esperarás?</span>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => cambiarModalidadEnVivo('local')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                    turno.modalidad_espera === 'local'
+                      ? 'bg-amber-500 text-slate-950'
+                      : 'bg-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  💈 Local
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cambiarModalidadEnVivo('diligencia')}
+                  className={`px-3 py-1 rounded-lg font-bold transition-all ${
+                    turno.modalidad_espera === 'diligencia'
+                      ? 'bg-indigo-500 text-white'
+                      : 'bg-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  🏃 Fuera
+                </button>
               </div>
             </div>
 
@@ -272,6 +318,7 @@ function ClienteContent() {
     );
   }
 
+  // --- FORMULARIO DE REGISTRO CON MODALIDAD DE ESPERA ---
   return (
     <form onSubmit={unirmeALaCola} className="space-y-6">
       <div className="flex justify-between items-center text-xs text-slate-400 bg-slate-800/40 px-4 py-2 rounded-xl border border-slate-800 mb-2">
@@ -284,6 +331,7 @@ function ClienteContent() {
         <p className="text-xs text-slate-400">Tu próximo corte, sin largas esperas.</p>
       </div>
 
+      {/* Nombre */}
       <div>
         <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Tu Nombre</label>
         <input
@@ -296,6 +344,7 @@ function ClienteContent() {
         />
       </div>
 
+      {/* Servicios */}
       <div className="space-y-2">
         <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">Selecciona tu servicio</label>
         <div className="grid grid-cols-1 gap-2.5">
@@ -319,6 +368,44 @@ function ClienteContent() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* OPCIÓN: ¿Dónde esperarás? */}
+      <div className="space-y-2">
+        <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">¿Dónde esperarás tu turno?</label>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setModalidadEspera('local')}
+            className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+              modalidadEspera === 'local'
+                ? 'bg-amber-500/10 border-amber-500 text-amber-400'
+                : 'bg-slate-800/40 border-slate-800 text-slate-400 hover:border-slate-700'
+            }`}
+          >
+            <span className="text-lg">💈</span>
+            <div className="mt-2">
+              <p className="font-bold text-xs text-white">En el Local</p>
+              <p className="text-[10px] text-slate-400">Espero dentro de la barbería</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setModalidadEspera('diligencia')}
+            className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+              modalidadEspera === 'diligencia'
+                ? 'bg-indigo-500/10 border-indigo-500 text-indigo-400'
+                : 'bg-slate-800/40 border-slate-800 text-slate-400 hover:border-slate-700'
+            }`}
+          >
+            <span className="text-lg">🏃‍♂️</span>
+            <div className="mt-2">
+              <p className="font-bold text-xs text-white">Hacer Diligencias</p>
+              <p className="text-[10px] text-slate-400">Salgo y vuelvo a mi hora</p>
+            </div>
+          </button>
         </div>
       </div>
 
