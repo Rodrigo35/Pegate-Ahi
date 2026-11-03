@@ -91,7 +91,6 @@ function ClienteContent() {
 
     setRegistrando(true);
 
-    // Generar correlativo aleatorio (Ej: B-012)
     const numero = Math.floor(Math.random() * 900) + 100;
     const codigo = `B-${numero}`;
 
@@ -111,11 +110,17 @@ function ClienteContent() {
 
     if (!error && data) {
       setTurno(data as TurnoCliente);
-      // Actualizar URL sin recargar
       window.history.pushState({}, '', `/cliente?ticket=${data.codigo_ticket}`);
       cargarTurno(data.codigo_ticket);
     }
     setRegistrando(false);
+  };
+
+  // Acción: Volver al inicio para un nuevo turno
+  const volverAlInicio = () => {
+    setTurno(null);
+    setNombre('');
+    window.history.pushState({}, '', '/cliente');
   };
 
   // Acción: Cancelar turno
@@ -129,8 +134,7 @@ function ClienteContent() {
       .update({ estado: 'cancelado' })
       .eq('id', turno.id);
 
-    setTurno(null);
-    window.history.pushState({}, '', '/cliente');
+    volverAlInicio();
   };
 
   if (loading) {
@@ -142,9 +146,9 @@ function ClienteContent() {
     );
   }
 
-  // --- MODO 1: SEGUIMIENTO DEL TURNO (SI YA ESTÁ REGISTRADO) ---
+  // --- MODO 1: SEGUIMIENTO DEL TURNO ---
   if (turno && turno.estado !== 'cancelado') {
-    const tiempoEstimado = personasAdelante * 20; // 20 min promedio por cliente
+    const tiempoEstimado = personasAdelante * 20;
 
     return (
       <div className="space-y-6">
@@ -187,6 +191,13 @@ function ClienteContent() {
               <span className="text-slate-400 font-medium">Barbero asignado:</span>
               <span className="font-bold text-slate-200">{turno.barbero_nombre || 'Por asignar'}</span>
             </div>
+
+            <button
+              onClick={cancelarTurno}
+              className="w-full py-3 text-xs font-bold text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-xl transition-all"
+            >
+              ❌ Cancelar mi turno
+            </button>
           </div>
         )}
 
@@ -199,21 +210,20 @@ function ClienteContent() {
         )}
 
         {turno.estado === 'finalizado' && (
-          <div className="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl text-center space-y-2">
+          <div className="bg-slate-800/80 border border-slate-700 p-6 rounded-2xl text-center space-y-4">
             <span className="text-3xl">🎉</span>
-            <h2 className="text-lg font-bold text-slate-200">¡Servicio Completado!</h2>
-            <p className="text-xs text-slate-400">Gracias por tu preferencia en Pégate Ahí.</p>
-          </div>
-        )}
+            <div>
+              <h2 className="text-lg font-bold text-slate-200">¡Servicio Completado!</h2>
+              <p className="text-xs text-slate-400">Gracias por tu preferencia en Pégate Ahí.</p>
+            </div>
 
-        {/* Botón para cancelar */}
-        {turno.estado === 'espera' && (
-          <button
-            onClick={cancelarTurno}
-            className="w-full py-3 text-xs font-bold text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-xl transition-all"
-          >
-            ❌ Cancelar mi turno
-          </button>
+            <button
+              onClick={volverAlInicio}
+              className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg active:scale-95"
+            >
+              🔄 Tomar un Nuevo Turno
+            </button>
+          </div>
         )}
       </div>
     );
