@@ -115,6 +115,21 @@ export default function BarberoView() {
     fetchTurnos();
   };
 
+  // NUEVA FUNCIÓN: Confirmar llegada presencial del cliente y detener contador
+  const confirmarLlegadaCliente = async () => {
+    if (!turnoActual) return;
+    
+    await supabase
+      .from('turnos')
+      .update({
+        modalidad_espera: 'local',
+        llamado_en: null,
+      })
+      .eq('id', turnoActual.id);
+
+    fetchTurnos();
+  };
+
   const pasarSiguientePorAusencia = async () => {
     if (!turnoActual) return;
     await supabase.from('turnos').update({ estado: 'ausente' }).eq('id', turnoActual.id);
@@ -134,7 +149,7 @@ export default function BarberoView() {
     <main className="min-h-screen bg-slate-950 text-white p-4 md:p-8">
       <div className="max-w-4xl mx-auto space-y-6">
         
-        {/* Header con Reloj Digital */}
+        {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div>
             <h1 className="text-2xl font-black text-amber-500 tracking-wide">PÉGATE AHÍ</h1>
@@ -153,7 +168,7 @@ export default function BarberoView() {
           </div>
         </div>
 
-        {/* MÉTRICAS SUPERIORES RESTAURADAS */}
+        {/* Métricas */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-center shadow-lg">
             <span className="text-xs uppercase tracking-wider text-slate-400 font-bold">En Espera</span>
@@ -166,13 +181,13 @@ export default function BarberoView() {
           </div>
         </div>
 
-        {/* CLIENTE ACTUAL EN SILLA / LLAMADO */}
+        {/* Cliente Actual en Silla / Llamado */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
           <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
             <h2 className="text-xs uppercase tracking-widest text-slate-400 font-bold">Cliente Actual en Silla / Llamado</h2>
             {turnoActual && (
               <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-bold rounded-md uppercase">
-                {turnoActual.modalidad_espera === 'diligencia' ? 'Esperando Llegada 🏃‍♂️' : 'Atendiendo ✂️'}
+                {turnoActual.modalidad_espera === 'diligencia' ? 'Esperando Llegada 🏃‍♂️' : 'En Silla ✂️'}
               </span>
             )}
           </div>
@@ -195,11 +210,10 @@ export default function BarberoView() {
                       ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300'
                       : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
                   }`}>
-                    {turnoActual.modalidad_espera === 'diligencia' ? '🏃‍♂️ Estaba de diligencia' : '💈 Estaba en el local'}
+                    {turnoActual.modalidad_espera === 'diligencia' ? '🏃‍♂️ Estaba de diligencia' : '💈 En el local'}
                   </span>
                 </div>
 
-                {/* Botón rápido WhatsApp si dejó teléfono */}
                 {turnoActual.cliente_telefono && (
                   <div className="mt-3">
                     <button
@@ -213,17 +227,28 @@ export default function BarberoView() {
                 )}
               </div>
 
-              {/* Temporizador de 30 minutos si el cliente estaba fuera */}
+              {/* Temporizador y Botón de Llegada Presencial */}
               {turnoActual.modalidad_espera === 'diligencia' && minutosRestantes !== null && (
-                <div className={`p-4 rounded-xl border text-center ${
+                <div className={`p-4 rounded-xl border text-center space-y-3 ${
                   minutosRestantes === 0
                     ? 'bg-rose-500/20 border-rose-500 text-rose-300 animate-pulse'
                     : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300'
                 }`}>
-                  <p className="text-xs font-bold uppercase tracking-wider">Tiempo límite para presentarse</p>
-                  <p className="text-3xl font-black font-mono mt-1">
-                    {minutosRestantes > 0 ? `${minutosRestantes} min` : '⏱️ ¡TIEMPO AGOTADO!'}
-                  </p>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider">Tiempo límite para presentarse</p>
+                    <p className="text-3xl font-black font-mono mt-1">
+                      {minutosRestantes > 0 ? `${minutosRestantes} min` : '⏱️ ¡TIEMPO AGOTADO!'}
+                    </p>
+                  </div>
+
+                  {/* BOTÓN PARA PARAR EL CONTADOR CUANDO EL CLIENTE LLEGA */}
+                  <button
+                    type="button"
+                    onClick={confirmarLlegadaCliente}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider rounded-lg shadow-md transition-all active:scale-95"
+                  >
+                    💈 Cliente Llegó al Local (Sentar en Silla)
+                  </button>
                 </div>
               )}
             </div>
@@ -233,7 +258,7 @@ export default function BarberoView() {
             </div>
           )}
 
-          {/* BOTONES DE ACCIÓN */}
+          {/* Botones de Acción principales */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             {!turnoActual ? (
               <button
@@ -269,7 +294,7 @@ export default function BarberoView() {
           </div>
         </div>
 
-        {/* LISTA DE ESPERA RESTAURADA COMPLETA */}
+        {/* Lista de Espera */}
         {colaEspera.length > 0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-3">
             <div className="flex justify-between items-center">
