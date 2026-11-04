@@ -44,7 +44,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [tiempoRestanteSegundos, setTiempoRestanteSegundos] = useState<number | null>(null);
   const [distanciaKm, setDistanciaKm] = useState<number | null>(null);
 
-  // Alarma sonora mediante Web Audio API
   const sonarAlarma = () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -154,7 +153,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     };
   }, [ticketParam, turno?.id, turno?.codigo_ticket]);
 
-  // Temporizador regresivo de 30 minutos (1800 segundos)
+  // Temporizador regresivo de 30 minutos
   useEffect(() => {
     if (turno && turno.estado === 'atendiendo' && turno.modalidad_espera === 'diligencia' && turno.llamado_en && !turno.cliente_llego) {
       const interval = setInterval(() => {
@@ -204,13 +203,27 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setRegistrando(false);
   };
 
+  // NUEVA FUNCIÓN: Cambiar modalidad de espera mientras está en la cola
+  const cambiarModalidadEnVivo = async (nuevaModalidad: 'local' | 'diligencia') => {
+    if (!turno) return;
+    setTurno({ ...turno, modalidad_espera: nuevaModalidad });
+
+    if (nuevaModalidad === 'diligencia') {
+      obtenerUbicacionGPS();
+    }
+
+    await supabase
+      .from('turnos')
+      .update({ modalidad_espera: nuevaModalidad, cliente_llego: nuevaModalidad === 'local' })
+      .eq('id', turno.id);
+  };
+
   const notificarLlegadaPresencial = async () => {
     if (!turno) return;
-    setTurno({ ...turno, cliente_llego: true });
+    setTurno({ ...turno, cliente_llego: true, modalidad_espera: 'local' });
     await supabase.from('turnos').update({ cliente_llego: true, modalidad_espera: 'local' }).eq('id', turno.id);
   };
 
-  // Limpieza inmediata al primer clic para tomar un nuevo turno
   const volverAlInicio = () => {
     setTurno(null);
     setNombre('');
@@ -263,12 +276,22 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           </span>
           <p className="text-5xl font-black text-amber-500 mt-1">{turno.codigo_ticket}</p>
           <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{turno.nombre_cliente}</p>
-          <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs rounded-full font-medium">
-            {turno.tipo_corte} (${turno.monto})
+          
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+            <span className="px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs rounded-full font-medium">
+              {turno.tipo_corte} (${turno.monto})
+            </span>
+            <span className={`px-3 py-1 border text-xs rounded-full font-medium ${
+              turno.modalidad_espera === 'diligencia'
+                ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+                : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+            }`}>
+              {turno.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera (Diligencia)' : '💈 En Barbería'}
+            </span>
           </div>
         </div>
 
-        {/* EN ESPERA */}
+        {/* EN ESPERA: CAMBIO DINÁMICO DE ESTADO (LOCAL <-> DILIGENCIA) */}
         {turno.estado === 'espera' && (
           <div className="space-y-4">
             <div className={`p-4 rounded-xl border space-y-2 ${
@@ -288,7 +311,34 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               </div>
             </div>
 
-            {distanciaKm !== null && (
+            {/* BOTÓN PARA NOTIFICAR AL BARBERO QUE VA A SALIR O QUE YA REGRESÓ */}
+            <div className={`p-4 rounded-xl border space-y-3 text-center ${
+              isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'
+            }`}>
+              <p className={`text-xs font-bold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                ¿Necesitas salir del local a hacer una diligencia?
+              </p>
+
+              {turno.modalidad_espera === 'local' ? (
+                <button
+                  type="button"
+                  onClick={() => cambiarModalidadEnVivo('diligencia')}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
+                >
+                  🏃‍♂️ Avisar que salgo a hacer diligencias (30 min)
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => cambiarModalidadEnVivo('local')}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
+                >
+                  💈 Avisar que ya regresé al local
+                </button>
+              )}
+            </div>
+
+            {distanciaKm !== null && turno.modalidad_espera === 'diligencia' && (
               <div className="p-3 bg-slate-800/40 border border-slate-700 rounded-xl text-center text-xs text-amber-400 font-semibold">
                 📍 Distancia actual a la barbería: ~{distanciaKm} km
               </div>
