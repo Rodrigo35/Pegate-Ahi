@@ -36,14 +36,12 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   }, []);
 
   const fetchTurnos = async () => {
-    // Cargar turnos activos (espera y atendiendo)
     const { data: activos, error: errorActivos } = await supabase
       .from('turnos')
       .select('*')
       .in('estado', ['espera', 'atendiendo'])
       .order('creado_en', { ascending: true });
 
-    // Cargar turnos finalizados hoy para métricas
     const inicioHoy = new Date();
     inicioHoy.setHours(0, 0, 0, 0);
 
@@ -81,10 +79,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const totalIngresos = turnosFinalizados.reduce((acc, t) => acc + (t.monto || 0), 0);
   const totalAtendidos = turnosFinalizados.length;
 
-  // Cálculo de tiempo promedio por servicio
   const tiempoPromedioMinutos = (() => {
     const serviciosConTiempo = turnosFinalizados.filter((t) => t.llamado_en && t.finalizado_en);
-    if (serviciosConTiempo.length === 0) return 15; // Valor estimado por defecto
+    if (serviciosConTiempo.length === 0) return 15;
     const totalMinutos = serviciosConTiempo.reduce((acc, t) => {
       const inicio = new Date(t.llamado_en!).getTime();
       const fin = new Date(t.finalizado_en!).getTime();
@@ -118,9 +115,13 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
+  // LLAMAR SIGUIENTE DANDO PRIORIDAD A LOS CLIENTES EN SALA DE ESPERA
   const llamarSiguiente = async () => {
     if (colaEspera.length === 0) return;
-    const siguiente = colaEspera[0];
+
+    // Buscar primero a quien está presente en el local
+    const clienteEnLocal = colaEspera.find((t) => t.modalidad_espera === 'local');
+    const siguiente = clienteEnLocal || colaEspera[0];
 
     await supabase
       .from('turnos')
@@ -130,7 +131,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       })
       .eq('id', siguiente.id);
 
-    if (siguiente.cliente_telefono) {
+    if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
       enviarWhatsApp(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
     }
 
@@ -147,7 +148,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     if (!turnoActual) return;
     await supabase.from('turnos').update({ estado: 'ausente' }).eq('id', turnoActual.id);
     if (colaEspera.length > 0) {
-      await supabase.from('turnos').update({ estado: 'atendiendo', llamado_en: new Date().toISOString() }).eq('id', colaEspera[0].id);
+      const clienteEnLocal = colaEspera.find((t) => t.modalidad_espera === 'local');
+      const siguiente = clienteEnLocal || colaEspera[0];
+      await supabase.from('turnos').update({ estado: 'atendiendo', llamado_en: new Date().toISOString() }).eq('id', siguiente.id);
     }
     fetchTurnos();
   };
