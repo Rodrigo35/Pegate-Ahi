@@ -75,7 +75,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const turnoActual = turnos.find((t) => t.estado === 'atendiendo');
   const colaEspera = turnos.filter((t) => t.estado === 'espera');
 
-  // CÁLCULOS DEL DASHBOARD DE NEGOCIO
+  // DASHBOARD DE NEGOCIO
   const totalIngresos = turnosFinalizados.reduce((acc, t) => acc + (t.monto || 0), 0);
   const totalAtendidos = turnosFinalizados.length;
 
@@ -115,11 +115,10 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  // LLAMAR SIGUIENTE DANDO PRIORIDAD A LOS CLIENTES EN SALA DE ESPERA
+  // LLAMAR SIGUIENTE DANDO PRIORIDAD A CLIENTES EN LOCAL
   const llamarSiguiente = async () => {
     if (colaEspera.length === 0) return;
 
-    // Buscar primero a quien está presente en el local
     const clienteEnLocal = colaEspera.find((t) => t.modalidad_espera === 'local');
     const siguiente = clienteEnLocal || colaEspera[0];
 
@@ -144,15 +143,41 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnos();
   };
 
+  // PASAR SIGUIENTE POR AUSENCIA SIN BORRAR LA COLA DE ESPERA
   const pasarSiguientePorAusencia = async () => {
     if (!turnoActual) return;
-    await supabase.from('turnos').update({ estado: 'ausente' }).eq('id', turnoActual.id);
-    if (colaEspera.length > 0) {
-      const clienteEnLocal = colaEspera.find((t) => t.modalidad_espera === 'local');
-      const siguiente = clienteEnLocal || colaEspera[0];
-      await supabase.from('turnos').update({ estado: 'atendiendo', llamado_en: new Date().toISOString() }).eq('id', siguiente.id);
+
+    // 1. Marcar el turno en silla como ausente
+    await supabase
+      .from('turnos')
+      .update({ estado: 'ausente' })
+      .eq('id', turnoActual.id);
+
+    // 2. Filtrar los turnos en espera restantes
+    const colaRestante = turnos.filter(
+      (t) => t.estado === 'espera' && t.id !== turnoActual.id
+    );
+
+    // 3. Si hay alguien esperando, llamar priorizando la modalidad presencial
+    if (colaRestante.length > 0) {
+      const clienteEnLocal = colaRestante.find((t) => t.modalidad_espera === 'local');
+      const siguiente = clienteEnLocal || colaRestante[0];
+
+      await supabase
+        .from('turnos')
+        .update({
+          estado: 'atendiendo',
+          llamado_en: new Date().toISOString(),
+        })
+        .eq('id', siguiente.id);
+
+      if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
+        enviarWhatsApp(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
+      }
     }
-    fetchTurnos();
+
+    // 4. Refrescar datos
+    await fetchTurnos();
   };
 
   const finalizarServicio = async () => {
@@ -170,7 +195,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
   return (
     <div className="space-y-6">
-      {/* Estado servidor */}
+      {/* Reloj Servidor */}
       <div className={`flex items-center justify-between p-4 rounded-2xl border ${
         isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
       }`}>
@@ -181,7 +206,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         <span className="text-sm font-mono font-bold text-amber-500">{horaActual}</span>
       </div>
 
-      {/* DASHBOARD DE NEGOCIO & MÉTRICAS DEL DÍA */}
+      {/* MÉTRICAS & DASHBOARD */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className={`border rounded-2xl p-4 text-center shadow-md ${
           isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
