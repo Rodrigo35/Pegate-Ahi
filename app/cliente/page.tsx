@@ -203,7 +203,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setRegistrando(false);
   };
 
-  // NUEVA FUNCIÓN: Cambiar modalidad de espera mientras está en la cola
   const cambiarModalidadEnVivo = async (nuevaModalidad: 'local' | 'diligencia') => {
     if (!turno) return;
     setTurno({ ...turno, modalidad_espera: nuevaModalidad });
@@ -291,7 +290,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           </div>
         </div>
 
-        {/* EN ESPERA: CAMBIO DINÁMICO DE ESTADO (LOCAL <-> DILIGENCIA) */}
+        {/* EN ESPERA */}
         {turno.estado === 'espera' && (
           <div className="space-y-4">
             <div className={`p-4 rounded-xl border space-y-2 ${
@@ -311,7 +310,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               </div>
             </div>
 
-            {/* BOTÓN PARA NOTIFICAR AL BARBERO QUE VA A SALIR O QUE YA REGRESÓ */}
             <div className={`p-4 rounded-xl border space-y-3 text-center ${
               isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'
             }`}>
