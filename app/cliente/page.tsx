@@ -44,7 +44,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [tiempoRestanteSegundos, setTiempoRestanteSegundos] = useState<number | null>(null);
   const [distanciaKm, setDistanciaKm] = useState<number | null>(null);
 
-  // Alarma sonora
+  // Alarma sonora mediante Web Audio API
   const sonarAlarma = () => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -154,7 +154,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     };
   }, [ticketParam, turno?.id, turno?.codigo_ticket]);
 
-  // Temporizador regresivo 30 min
+  // Temporizador regresivo de 30 minutos (1800 segundos)
   useEffect(() => {
     if (turno && turno.estado === 'atendiendo' && turno.modalidad_espera === 'diligencia' && turno.llamado_en && !turno.cliente_llego) {
       const interval = setInterval(() => {
@@ -210,11 +210,21 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     await supabase.from('turnos').update({ cliente_llego: true, modalidad_espera: 'local' }).eq('id', turno.id);
   };
 
+  // Limpieza inmediata al primer clic para tomar un nuevo turno
   const volverAlInicio = () => {
     setTurno(null);
     setNombre('');
     setTelefono('');
-    window.history.pushState({}, '', '/cliente');
+    window.location.href = '/cliente';
+  };
+
+  const cancelarTurno = async () => {
+    if (!turno) return;
+    const confirmar = confirm('¿Seguro que deseas cancelar tu turno en la cola?');
+    if (!confirmar) return;
+
+    await supabase.from('turnos').update({ estado: 'cancelado' }).eq('id', turno.id);
+    volverAlInicio();
   };
 
   const formatearTiempo = (seg: number) => {
@@ -227,9 +237,14 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return <div className="text-center py-10 text-slate-400 text-xs animate-pulse">Cargando datos...</div>;
   }
 
-  // --- MODO MONITOR ---
+  // --- MODO MONITOR DE TURNO ---
   if (turno && turno.estado !== 'cancelado') {
     const tiempoEstimado = personasAdelante * 20;
+
+    const porcentajeProgreso =
+      turno.estado === 'atendiendo' || turno.estado === 'finalizado'
+        ? 100
+        : Math.min(100, Math.max(10, Math.round(((totalInicialCola - personasAdelante) / totalInicialCola) * 100)));
 
     return (
       <div className="space-y-6">
@@ -256,6 +271,23 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         {/* EN ESPERA */}
         {turno.estado === 'espera' && (
           <div className="space-y-4">
+            <div className={`p-4 rounded-xl border space-y-2 ${
+              isDark ? 'bg-slate-800/60 border-slate-800' : 'bg-slate-100 border-slate-200'
+            }`}>
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>Progreso en Cola</span>
+                <span className="text-amber-500 font-mono">{porcentajeProgreso}%</span>
+              </div>
+              <div className={`w-full h-3 rounded-full overflow-hidden border p-0.5 ${
+                isDark ? 'bg-slate-900 border-slate-700/50' : 'bg-slate-200 border-slate-300'
+              }`}>
+                <div
+                  className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all duration-700 ease-out shadow-sm"
+                  style={{ width: `${porcentajeProgreso}%` }}
+                ></div>
+              </div>
+            </div>
+
             {distanciaKm !== null && (
               <div className="p-3 bg-slate-800/40 border border-slate-700 rounded-xl text-center text-xs text-amber-400 font-semibold">
                 📍 Distancia actual a la barbería: ~{distanciaKm} km
@@ -273,6 +305,13 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <p className="text-3xl font-black text-amber-500 mt-1">~ {tiempoEstimado} min</p>
               </div>
             </div>
+
+            <button
+              onClick={cancelarTurno}
+              className="w-full py-3 text-xs font-bold text-rose-500 hover:text-rose-600 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-xl transition-all"
+            >
+              ❌ Cancelar mi turno
+            </button>
           </div>
         )}
 
@@ -316,7 +355,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             <h2 className={`text-lg font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
               {turno.estado === 'finalizado' ? '¡Servicio Completado!' : '¡Tiempo Agotado!'}
             </h2>
-            <button onClick={volverAlInicio} className="w-full py-3.5 bg-amber-500 text-slate-950 font-black text-xs uppercase rounded-xl">
+            <button onClick={volverAlInicio} className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase rounded-xl transition-all active:scale-95">
               🔄 Tomar Nuevo Turno
             </button>
           </div>
@@ -325,7 +364,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     );
   }
 
-  // --- FORMULARIO CON SERVICIOS Y TELEFONO RESTAURADOS ---
+  // --- FORMULARIO REGISTRO INICIAL ---
   return (
     <form onSubmit={unirmeALaCola} className="space-y-5">
       <div className={`flex justify-between items-center text-xs px-4 py-2 rounded-xl border mb-2 ${
@@ -335,7 +374,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         <span className="font-mono font-bold text-amber-500 text-sm">{horaActual}</span>
       </div>
 
-      {/* Campo: Nombre */}
       <div>
         <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
           Tu Nombre
@@ -352,7 +390,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         />
       </div>
 
-      {/* Campo: Teléfono / WhatsApp RESTAURADO */}
       <div>
         <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
           Teléfono / WhatsApp (Opcional)
@@ -368,7 +405,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         />
       </div>
 
-      {/* Selector: Servicios y Precios RESTAURADO */}
       <div className="space-y-2">
         <label className={`block text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
           Selecciona tu servicio
@@ -397,7 +433,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* Modalidad de espera */}
       <div className="space-y-2">
         <label className={`block text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
           ¿Dónde esperarás tu turno?
