@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 💈 Pégate Ahí — Turnkey Barber & Clinic Smart Queue SaaS System
 
-## Getting Started
+> **Software as a Service (SaaS)** inteligente de gestión de colas presenciales y remotas en tiempo real, diseñado para barberías, centros de estética, clínicas y locales comerciales con sala de espera.
 
-First, run the development server:
+![Tech Stack](https://img.shields.io/badge/Stack-Next.js%2014%20%7C%20Supabase%20%7C%20TailwindCSS-amber)
+![License](https://img.shields.io/badge/License-Commercial%20Ready-emerald)
+![Status](https://img.shields.io/badge/Status-Production%20Ready-blue)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+---
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🌟 Características Principales (Key Features)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 📱 Para el Cliente
+- **Turnos Dinámicos & Monitoreo en Tiempo Real:** Interfaz web ultrarrápida sin necesidad de instalar apps nativas.
+- **Doble Modalidad de Espera (Local vs. Diligencia):** Permite al cliente esperar en el local o salir a hacer diligencias fuera por 30 minutos.
+- **Geolocalización GPS Dinámica:** Cálculo de distancia estimada en km desde la ubicación actual del cliente hasta el negocio.
+- **Notificaciones Web & Alarma Sonora:** Alerta en tiempo real mediante Web Audio API cuando el barbero llama al turno.
+- **Notificación por WhatsApp:** Enlace directo de un clic para reenviar recordatorios por WhatsApp.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### ✂️ Para el Barbero / Administrador
+- **Gestión Inteligente de Cola Presencial:** Algoritmo de prioridad que atiende automáticamente al cliente en la sala de espera sin cancelar ni eliminar a los clientes en diligencia.
+- **Dashboard de Métricas & Analítica en Vivo:**
+  - Total de ingresos brutos generados en el día ($).
+  - Conteo de clientes atendidos.
+  - Tiempo promedio exacto por servicio (calculado desde el llamado hasta la finalización).
+  - Número de clientes activos en cola de espera.
+- **Temporizador de Tolerancia (30 min):** Limpieza y reinicio automático si el barbero atiende a un cliente presencial mientras alguien está fuera.
+- **Tema Adaptativo Inteligente (Claro/Oscuro/Auto):** Cambia automáticamente según la hora del día o permite la conmutación manual.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 🚀 Teclado de Tecnología (Tech Stack)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Frontend:** Next.js 14 (App Router, React 18, TypeScript)
+- **Estilos & UI:** Tailwind CSS (Diseño responsive móvil-first, Dark/Light Mode)
+- **Base de Datos & Realtime:** Supabase (PostgreSQL, Realtime Subscriptions)
+- **Audio API:** Web Audio API (Sintetizador nativo de alarmas sin librerías pesadas)
+- **Deployment:** Vercel Ready (Optimizado para plan Hobby o Pro)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## ⚙️ Estructura de Configuración Rápida (`lib/config.ts`)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+El proyecto incluye un archivo central de configuración desacoplado para personalizar cualquier negocio en 2 minutos sin tocar el código fuente:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```typescript
+export const APP_CONFIG = {
+  nombreNegocio: 'PÉGATE AHÍ',
+  subtitulo: 'Barbería & Queue System',
+  monedaSimbolo: '$',
+  ubicacionLocal: { latitud: 10.998, longitud: -63.805 },
+  tiempoEstimadoPorClienteMin: 20,
+  tiempoLimiteDiligenciaMin: 30,
+  servicios: [
+    { id: 'corte_clasico', nombre: 'Corte clásico', precio: 10, icono: '✂️' },
+    { id: 'corte_barba', nombre: 'Corte + barba', precio: 15, icono: '💈' },
+    { id: 'barba', nombre: 'Barba', precio: 7, icono: '🧔' },
+  ],
+};
