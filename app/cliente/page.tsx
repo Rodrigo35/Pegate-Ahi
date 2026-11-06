@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
+import { APP_CONFIG } from '../../lib/config';
 
 interface TurnoCliente {
   id: string;
@@ -18,19 +19,13 @@ interface TurnoCliente {
   creado_en: string;
 }
 
-const SERVICIOS = [
-  { id: 'corte_clasico', nombre: 'Corte clásico', precio: 10, icono: '✂️' },
-  { id: 'corte_barba', nombre: 'Corte + barba', precio: 15, icono: '💈' },
-  { id: 'barba', nombre: 'Barba', precio: 7, icono: '🧔' },
-];
-
 function ClienteContent({ isDark }: { isDark: boolean }) {
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
 
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
-  const [servicioSeleccionado, setServicioSeleccionado] = useState(SERVICIOS[0]);
+  const [servicioSeleccionado, setServicioSeleccionado] = useState(APP_CONFIG.servicios[0]);
   const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
   const [registrando, setRegistrando] = useState(false);
 
@@ -77,8 +72,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const latBarberia = 10.998;
-          const lngBarberia = -63.805;
+          const latBarberia = APP_CONFIG.ubicacionLocal.latitud;
+          const lngBarberia = APP_CONFIG.ubicacionLocal.longitud;
           const latCliente = pos.coords.latitude;
           const lngCliente = pos.coords.longitude;
 
@@ -153,14 +148,15 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     };
   }, [ticketParam, turno?.id, turno?.codigo_ticket]);
 
-  // Temporizador regresivo de 30 minutos
+  // Temporizador regresivo dinámico desde APP_CONFIG
   useEffect(() => {
     if (turno && turno.estado === 'atendiendo' && turno.modalidad_espera === 'diligencia' && turno.llamado_en && !turno.cliente_llego) {
       const interval = setInterval(() => {
         const horaLlamado = new Date(turno.llamado_en!).getTime();
         const ahora = new Date().getTime();
         const segundosTranscurridos = Math.floor((ahora - horaLlamado) / 1000);
-        const restante = 1800 - segundosTranscurridos;
+        const limiteSegundos = APP_CONFIG.tiempoLimiteDiligenciaMin * 60;
+        const restante = limiteSegundos - segundosTranscurridos;
 
         setTiempoRestanteSegundos(restante > 0 ? restante : 0);
       }, 1000);
@@ -251,7 +247,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
   // --- MODO MONITOR DE TURNO ---
   if (turno && turno.estado !== 'cancelado') {
-    const tiempoEstimado = personasAdelante * 20;
+    const tiempoEstimado = personasAdelante * APP_CONFIG.tiempoEstimadoPorClienteMin;
 
     const porcentajeProgreso =
       turno.estado === 'atendiendo' || turno.estado === 'finalizado'
@@ -278,7 +274,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           
           <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
             <span className="px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs rounded-full font-medium">
-              {turno.tipo_corte} (${turno.monto})
+              {turno.tipo_corte} ({APP_CONFIG.monedaSimbolo}{turno.monto})
             </span>
             <span className={`px-3 py-1 border text-xs rounded-full font-medium ${
               turno.modalidad_espera === 'diligencia'
@@ -323,7 +319,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   onClick={() => cambiarModalidadEnVivo('diligencia')}
                   className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
                 >
-                  🏃‍♂️ Avisar que salgo a hacer diligencias (30 min)
+                  🏃‍♂️ Avisar que salgo a hacer diligencias ({APP_CONFIG.tiempoLimiteDiligenciaMin} min)
                 </button>
               ) : (
                 <button
@@ -458,7 +454,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           Selecciona tu servicio
         </label>
         <div className="grid grid-cols-1 gap-2.5">
-          {SERVICIOS.map((srv) => {
+          {APP_CONFIG.servicios.map((srv) => {
             const selected = servicioSeleccionado.id === srv.id;
             return (
               <div
@@ -474,7 +470,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   <span className="text-xl">{srv.icono}</span>
                   <span className="font-bold text-sm">{srv.nombre}</span>
                 </div>
-                <span className="font-extrabold text-sm">${srv.precio}</span>
+                <span className="font-extrabold text-sm">{APP_CONFIG.monedaSimbolo}{srv.precio}</span>
               </div>
             );
           })}
@@ -517,7 +513,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             <span className="text-lg">🏃‍♂️</span>
             <div className="mt-2">
               <p className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>Hacer Diligencias</p>
-              <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>30 min (GPS)</p>
+              <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)</p>
             </div>
           </button>
         </div>
@@ -554,9 +550,9 @@ export default function ClienteView() {
       }`}>
         <header className="flex items-center justify-between mb-6 pb-4 border-b border-slate-700/20">
           <div>
-            <h1 className="text-2xl font-black text-amber-500 tracking-wide">PÉGATE AHÍ</h1>
+            <h1 className="text-2xl font-black text-amber-500 tracking-wide">{APP_CONFIG.nombreNegocio}</h1>
             <p className={`text-[10px] uppercase tracking-widest font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-              Barbería & Queue System
+              {APP_CONFIG.subtitulo}
             </p>
           </div>
 
