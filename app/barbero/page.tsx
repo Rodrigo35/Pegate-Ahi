@@ -91,22 +91,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     return Math.round(totalMinutos / serviciosConTiempo.length);
   })();
 
-  // Temporizador dinámico según APP_CONFIG.tiempoLimiteDiligenciaMin
-  useEffect(() => {
-    if (turnoActual && turnoActual.modalidad_espera === 'diligencia' && turnoActual.llamado_en) {
-      const interval = setInterval(() => {
-        const horaLlamado = new Date(turnoActual.llamado_en!).getTime();
-        const ahora = new Date().getTime();
-        const transcurridoMin = Math.floor((ahora - horaLlamado) / 60000);
-        const restante = APP_CONFIG.tiempoLimiteDiligenciaMin - transcurridoMin;
-        setMinutosRestantes(restante > 0 ? restante : 0);
-      }, 1000);
-      return () => clearInterval(interval);
-    } else {
-      setMinutosRestantes(null);
-    }
-  }, [turnoActual]);
-
   const enviarWhatsApp = (telefono: string, nombre: string, ticket: string) => {
     let numLimpio = telefono.replace(/\D/g, '');
     if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
@@ -116,6 +100,67 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
+  // DESPLAZAR AUTOMÁTICAMENTE AL CLIENTE CUANDO EXPIRA SU TIEMPO
+  const desplazarPorTiempoAgotado = async (turnoExpirado: Turno) => {
+    // 1. Regresar el turno expirado a la cola de espera y limpiar temporizador
+    await supabase
+      .from('turnos')
+      .update({
+        estado: 'espera',
+        llamado_en: null,
+      })
+      .eq('id', turnoExpirado.id);
+
+    // 2. Filtrar los clientes en espera restantes (excluyendo el recién expirado)
+    const colaRestante = turnos.filter(
+      (t) => t.estado === 'espera' && t.id !== turnoExpirado.id
+    );
+
+    // 3. Llamar al siguiente cliente dando prioridad al presencial en el local
+    if (colaRestante.length > 0) {
+      const clienteEnLocal = colaRestante.find((t) => t.modalidad_espera === 'local');
+      const siguiente = clienteEnLocal || colaRestante[0];
+
+      await supabase
+        .from('turnos')
+        .update({
+          estado: 'atendiendo',
+          llamado_en: new Date().toISOString(),
+        })
+        .eq('id', siguiente.id);
+
+      if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
+        enviarWhatsApp(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
+      }
+    }
+
+    await fetchTurnos();
+  };
+
+  // TEMPORIZADOR DE 30 MINUTOS CON EXPIRACIÓN AUTOMÁTICA
+  useEffect(() => {
+    if (turnoActual && turnoActual.modalidad_espera === 'diligencia' && turnoActual.llamado_en) {
+      const interval = setInterval(() => {
+        const horaLlamado = new Date(turnoActual.llamado_en!).getTime();
+        const ahora = new Date().getTime();
+        const transcurridoMin = Math.floor((ahora - horaLlamado) / 60000);
+        const restante = APP_CONFIG.tiempoLimiteDiligenciaMin - transcurridoMin;
+
+        if (restante <= 0) {
+          clearInterval(interval);
+          desplazarPorTiempoAgotado(turnoActual);
+        } else {
+          setMinutosRestantes(restante);
+        }
+      }, 1000);
+
+      return () => clearInterval(interval);
+    } else {
+      setMinutosRestantes(null);
+    }
+  }, [turnoActual]);
+
+  // LLAMAR SIGUIENTE CLIENTE MANUALMENTE
   const llamarSiguiente = async () => {
     if (colaEspera.length === 0) return;
 
