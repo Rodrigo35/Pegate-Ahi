@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
+import { APP_CONFIG } from '../../lib/config';
 
 interface Turno {
   id: string;
@@ -81,7 +82,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
   const tiempoPromedioMinutos = (() => {
     const serviciosConTiempo = turnosFinalizados.filter((t) => t.llamado_en && t.finalizado_en);
-    if (serviciosConTiempo.length === 0) return 15;
+    if (serviciosConTiempo.length === 0) return APP_CONFIG.tiempoEstimadoPorClienteMin;
     const totalMinutos = serviciosConTiempo.reduce((acc, t) => {
       const inicio = new Date(t.llamado_en!).getTime();
       const fin = new Date(t.finalizado_en!).getTime();
@@ -90,14 +91,14 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     return Math.round(totalMinutos / serviciosConTiempo.length);
   })();
 
-  // Temporizador de 30 minutos solo activo si el turno actual llamado tiene fecha de llamada
+  // Temporizador dinámico según APP_CONFIG.tiempoLimiteDiligenciaMin
   useEffect(() => {
     if (turnoActual && turnoActual.modalidad_espera === 'diligencia' && turnoActual.llamado_en) {
       const interval = setInterval(() => {
         const horaLlamado = new Date(turnoActual.llamado_en!).getTime();
         const ahora = new Date().getTime();
         const transcurridoMin = Math.floor((ahora - horaLlamado) / 60000);
-        const restante = 30 - transcurridoMin;
+        const restante = APP_CONFIG.tiempoLimiteDiligenciaMin - transcurridoMin;
         setMinutosRestantes(restante > 0 ? restante : 0);
       }, 1000);
       return () => clearInterval(interval);
@@ -110,12 +111,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     let numLimpio = telefono.replace(/\D/g, '');
     if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
     const mensaje = encodeURIComponent(
-      `¡Hola ${nombre}! ✂️ Tu turno ${ticket} ha sido llamado en Pégate Ahí. Dispones de 30 minutos para llegar al local.`
+      `¡Hola ${nombre}! ✂️ Tu turno ${ticket} ha sido llamado en ${APP_CONFIG.nombreNegocio}. Dispones de ${APP_CONFIG.tiempoLimiteDiligenciaMin} minutos para llegar al local.`
     );
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  // LLAMAR SIGUIENTE: ATIENDE PRESENCIAL Y QUITA EL CONTADOR SI HABÍA ALGUIEN FUERA LLAMADO
   const llamarSiguiente = async () => {
     if (colaEspera.length === 0) return;
 
@@ -124,7 +124,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         .from('turnos')
         .update({
           estado: 'espera',
-          llamado_en: null, // Limpia el contador de 30 min en Supabase
+          llamado_en: null,
         })
         .eq('id', turnoActual.id);
     }
@@ -217,7 +217,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
         }`}>
           <span className="text-[10px] uppercase font-bold text-slate-400">Ingresos Hoy</span>
-          <p className="text-2xl font-black text-emerald-500 mt-1">${totalIngresos}</p>
+          <p className="text-2xl font-black text-emerald-500 mt-1">{APP_CONFIG.monedaSimbolo}{totalIngresos}</p>
         </div>
 
         <div className={`border rounded-2xl p-4 text-center shadow-md ${
@@ -273,7 +273,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             
             <div className="flex flex-wrap items-center justify-center gap-2">
               <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-500 text-sm font-semibold">
-                ✂️ {turnoActual.tipo_corte || 'Corte clásico'} (${turnoActual.monto || 10})
+                ✂️ {turnoActual.tipo_corte || 'Corte clásico'} ({APP_CONFIG.monedaSimbolo}{turnoActual.monto || 10})
               </span>
             </div>
 
@@ -369,7 +369,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   }`}>
                     {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 En local'}
                   </span>
-                  <span className="font-bold text-amber-500">${item.monto || 10}</span>
+                  <span className="font-bold text-amber-500">{APP_CONFIG.monedaSimbolo}{item.monto || 10}</span>
                 </div>
               </div>
             ))}
@@ -401,7 +401,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
                 <div className="flex items-center gap-3">
                   <span className="text-[10px] text-slate-400">{item.tipo_corte}</span>
-                  <span className="font-black text-emerald-500">${item.monto}</span>
+                  <span className="font-black text-emerald-500">{APP_CONFIG.monedaSimbolo}{item.monto}</span>
                 </div>
               </div>
             ))}
@@ -430,7 +430,7 @@ export default function BarberoView() {
       <div className="max-w-4xl mx-auto space-y-6">
         <header className="flex items-center justify-between border-b border-slate-700/20 pb-4">
           <div>
-            <h1 className="text-2xl font-black text-amber-500 tracking-wide">PÉGATE AHÍ</h1>
+            <h1 className="text-2xl font-black text-amber-500 tracking-wide">{APP_CONFIG.nombreNegocio}</h1>
             <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Control de Barbería & Turnos</p>
           </div>
 
