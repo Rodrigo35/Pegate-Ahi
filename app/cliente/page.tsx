@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient'; // Ajusta la ruta a tu cliente de Supabase
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 
 interface Turno {
   id: string;
@@ -16,9 +16,49 @@ export default function ClientePage() {
   const [miTurno, setMiTurno] = useState<Turno | null>(null);
   const [turnosDelante, setTurnosDelante] = useState<number>(0);
   const [cargando, setCargando] = useState<boolean>(true);
+  const [mostrarModal, setMostrarModal] = useState<boolean>(false);
+  const [mensajeModal, setMensajeModal] = useState<string>('');
 
-  // Reemplaza esto con la lógica con la que guardas/obtienes el ID del turno del cliente (localStorage, query param, etc.)
+  const estadoAnterior = useRef<string | null>(null);
+
   const clienteTurnoId = typeof window !== 'undefined' ? localStorage.getItem('mi_turno_id') : null;
+
+  // FUNCIÓN PARA REPRODUCIR SONIDO DE ALERTA (Web Audio API - Sin archivos externos)
+  const reproducirSonidoAlerta = () => {
+    try {
+      const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
+      if (!AudioContext) return;
+      
+      const ctx = new AudioContext();
+      
+      // Dos tonos tipo "ding-dong"
+      const now = ctx.currentTime;
+      
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(587.33, now); // D5
+      gain1.gain.setValueAtTime(0.3, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start(now);
+      osc1.stop(now + 0.4);
+
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(880, now + 0.2); // A5
+      gain2.gain.setValueAtTime(0.4, now + 0.2);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.start(now + 0.2);
+      osc2.stop(now + 0.8);
+    } catch (e) {
+      console.log('Error al reproducir audio:', e);
+    }
+  };
 
   const fetchEstadoTurno = async () => {
     if (!clienteTurnoId) {
@@ -27,7 +67,6 @@ export default function ClientePage() {
     }
 
     try {
-      // 1. Obtener la información del turno del cliente actual
       const { data: turno, error: errorTurno } = await supabase
         .from('queue')
         .select('*')
@@ -35,9 +74,28 @@ export default function ClientePage() {
         .single();
 
       if (errorTurno) throw errorTurno;
+
+      // DETECTAR CAMBIO DE ESTADO PARA NOTIFICACIÓN Y MODAL
+      if (turno) {
+        if (estadoAnterior.current && estadoAnterior.current !== turno.status) {
+          // Si pasa al sillón de atención
+          if (turno.status === 'in_service') {
+            reproducirSonidoAlerta();
+            setMensajeModal('¡Es tu turno! Pasa al sillón de atención ✂️');
+            setMostrarModal(true);
+          } 
+          // Si fue movido al final por estar en tiempo de gracia
+          else if (turno.status === 'waiting' && estadoAnterior.current === 'grace_period') {
+            reproducirSonidoAlerta();
+            setMensajeModal('Tu turno ha sido enviado al final de la cola por no estar presente.');
+            setMostrarModal(true);
+          }
+        }
+        estadoAnterior.current = turno.status;
+      }
+
       setMiTurno(turno);
 
-      // 2. Si el cliente está esperando, contar cuántos turnos activos hay por delante de él
       if (turno && (turno.status === 'waiting' || turno.status === 'grace_period')) {
         const { count, error: errorCount } = await supabase
           .from('queue')
@@ -59,18 +117,12 @@ export default function ClientePage() {
   useEffect(() => {
     fetchEstadoTurno();
 
-    // SUSCRIPCIÓN REALTIME: Escucha cualquier actualización en la tabla queue
     const channel = supabase
       .channel('cliente-realtime')
       .on(
         'postgres_changes',
-        {
-          event: '*', // Escucha INSERT, UPDATE y DELETE
-          schema: 'public',
-          table: 'queue',
-        },
+        { event: '*', schema: 'public', table: 'queue' },
         () => {
-          // Recargar el turno y la posición actual en la cola automáticamente
           fetchEstadoTurno();
         }
       )
@@ -101,19 +153,35 @@ export default function ClientePage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-between p-6">
+    <main className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-between p-6 relative">
+      {/* VENTANA EMERGENTE (MODAL) */}
+      {mostrarModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 border-2 border-emerald-500 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl space-y-4">
+            <div className="text-5xl animate-bounce">🔔</div>
+            <h3 className="text-2xl font-black text-white">¡Atención!</h3>
+            <p className="text-slate-200 font-medium text-base">{mensajeModal}</p>
+            <button
+              onClick={() => setMostrarModal(false)}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black py-3 rounded-xl transition-all shadow-lg active:scale-95"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* CABECERA */}
       <header className="w-full max-w-md text-center pt-4">
         <h1 className="text-xl font-extrabold tracking-wider uppercase text-emerald-400">Pégate Ahí</h1>
         <p className="text-xs text-slate-400 mt-1">Tu turno en tiempo real</p>
       </header>
 
-      {/* CONTENIDO PRINCIPAL SEGÚN EL ESTADO */}
+      {/* CONTENIDO PRINCIPAL */}
       <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl text-center my-auto">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Cliente</p>
         <h2 className="text-3xl font-black text-white mb-6">{miTurno.client_name}</h2>
 
-        {/* ESTADO: EN EL SILLÓN */}
         {miTurno.status === 'in_service' && (
           <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6">
             <span className="text-4xl">✂️</span>
@@ -122,7 +190,6 @@ export default function ClientePage() {
           </div>
         )}
 
-        {/* ESTADO: EN ESPERA */}
         {miTurno.status === 'waiting' && (
           <div className="space-y-4">
             <div className="bg-slate-950 rounded-2xl p-5 border border-slate-800">
@@ -145,7 +212,6 @@ export default function ClientePage() {
           </div>
         )}
 
-        {/* ESTADO: EN DILIGENCIAS / GRACE PERIOD */}
         {miTurno.status === 'grace_period' && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6">
             <span className="text-4xl">⏳</span>
@@ -156,7 +222,6 @@ export default function ClientePage() {
           </div>
         )}
 
-        {/* ESTADO: COMPLETADO */}
         {miTurno.status === 'completed' && (
           <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-6">
             <span className="text-4xl">✅</span>
@@ -166,7 +231,6 @@ export default function ClientePage() {
         )}
       </div>
 
-      {/* FOOTER */}
       <footer className="w-full max-w-md text-center text-xs text-slate-500 pb-2">
         La pantalla se actualiza en tiempo real automáticamente.
       </footer>
