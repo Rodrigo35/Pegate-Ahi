@@ -100,9 +100,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  // DESPLAZAR AUTOMÁTICAMENTE AL CLIENTE CUANDO EXPIRA SU TIEMPO
+  // DESPLAZAR AUTOMÁTICAMENTE AL CLIENTE CUANDO EXPIRA SU TIEMPO (ENVÍA AL FINAL DE LA COLA)
   const desplazarPorTiempoAgotado = async (turnoExpirado: Turno) => {
-    // 1. Regresar el turno expirado a la cola de espera con fecha actualizada para ir al final
+    // 1. Regresar el turno expirado a 'espera' actualizando creado_en para enviarlo al final de la cola
     await supabase
       .from('turnos')
       .update({
@@ -112,7 +112,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       })
       .eq('id', turnoExpirado.id);
 
-    // 2. Filtrar los clientes en espera restantes
+    // 2. Filtrar los clientes en espera restantes (excluyendo el recién expirado)
     const colaRestante = turnos.filter(
       (t) => t.estado === 'espera' && t.id !== turnoExpirado.id
     );
@@ -200,7 +200,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnos();
   };
 
-  // BOTÓN ROJO CORREGIDO: Manda al cliente de vuelta a 'espera' (al final de la cola) y pasa al siguiente
+  // BOTÓN ROJO: Manda al cliente de vuelta a 'espera' (al final de la cola) y pasa al siguiente
   const pasarSiguientePorAusencia = async () => {
     if (!turnoActual) return;
 
