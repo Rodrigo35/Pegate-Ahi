@@ -1,234 +1,589 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { supabase } from '../../lib/supabase';
+import { APP_CONFIG } from '../../lib/config';
 
-interface Turno {
+interface TurnoCliente {
   id: string;
-  store_id: string;
-  client_name: string;
-  position: number;
-  status: 'waiting' | 'in_service' | 'completed' | 'cancelled' | 'grace_period';
-  estimated_wait_minutes?: number;
+  codigo_ticket: string;
+  nombre_cliente: string;
+  cliente_telefono?: string;
+  tipo_corte: string;
+  monto: number;
+  modalidad_espera?: 'local' | 'diligencia';
+  estado: 'espera' | 'atendiendo' | 'finalizado' | 'cancelado' | 'ausente';
+  llamado_en?: string;
+  cliente_llego?: boolean;
+  creado_en: string;
 }
 
-export default function ClientePage() {
-  const [miTurno, setMiTurno] = useState<Turno | null>(null);
-  const [turnosDelante, setTurnosDelante] = useState<number>(0);
-  const [cargando, setCargando] = useState<boolean>(true);
-  const [mostrarModal, setMostrarModal] = useState<boolean>(false);
-  const [mensajeModal, setMensajeModal] = useState<string>('');
+function ClienteContent({ isDark }: { isDark: boolean }) {
+  const searchParams = useSearchParams();
+  const ticketParam = searchParams.get('ticket') || searchParams.get('id');
 
-  const estadoAnterior = useRef<string | null>(null);
+  const [nombre, setNombre] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [servicioSeleccionado, setServicioSeleccionado] = useState(APP_CONFIG.servicios[0]);
+  const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
+  const [registrando, setRegistrando] = useState(false);
 
-  const clienteTurnoId = typeof window !== 'undefined' ? localStorage.getItem('mi_turno_id') : null;
+  const [turno, setTurno] = useState<TurnoCliente | null>(null);
+  const [personasAdelante, setPersonasAdelante] = useState<number>(0);
+  const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  // REPRODUCIR SONIDO DE ALERTA (Web Audio API)
-  const reproducirSonidoAlerta = () => {
+  // GPS y Reloj
+  const [horaActual, setHoraActual] = useState<string>('');
+  const [tiempoRestanteSegundos, setTiempoRestanteSegundos] = useState<number | null>(null);
+  const [distanciaKm, setDistanciaKm] = useState<number | null>(null);
+
+  const sonarAlarma = () => {
     try {
-      const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
-      if (!AudioContext) return;
-      
-      const ctx = new AudioContext();
-      const now = ctx.currentTime;
-      
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(587.33, now); // D5
-      gain1.gain.setValueAtTime(0.3, now);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(now);
-      osc1.stop(now + 0.4);
-
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(880, now + 0.2); // A5
-      gain2.gain.setValueAtTime(0.4, now + 0.2);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(now + 0.2);
-      osc2.stop(now + 0.8);
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.8);
     } catch (e) {
-      console.log('Error al reproducir audio:', e);
-    }
-  };
-
-  const fetchEstadoTurno = async () => {
-    if (!clienteTurnoId) {
-      setCargando(false);
-      return;
-    }
-
-    try {
-      const { data: turno, error: errorTurno } = await supabase
-        .from('queue')
-        .select('*')
-        .eq('id', clienteTurnoId)
-        .single();
-
-      if (errorTurno) throw errorTurno;
-
-      // NOTIFICACIONES Y MODAL SEGÚN CAMBIO DE ESTADO
-      if (turno) {
-        if (estadoAnterior.current && estadoAnterior.current !== turno.status) {
-          if (turno.status === 'in_service') {
-            reproducirSonidoAlerta();
-            setMensajeModal('¡Es tu turno! Pasa al sillón de atención ✂️');
-            setMostrarModal(true);
-          } else if (turno.status === 'waiting' && estadoAnterior.current === 'grace_period') {
-            reproducirSonidoAlerta();
-            setMensajeModal('Tu turno ha sido reubicado al final de la cola por no estar presente.');
-            setMostrarModal(true);
-          }
-        }
-        estadoAnterior.current = turno.status;
-      }
-
-      setMiTurno(turno);
-
-      if (turno && (turno.status === 'waiting' || turno.status === 'grace_period')) {
-        const { count, error: errorCount } = await supabase
-          .from('queue')
-          .select('*', { count: 'exact', head: true })
-          .in('status', ['waiting', 'in_service', 'grace_period'])
-          .lt('position', turno.position);
-
-        if (!errorCount) {
-          setTurnosDelante(count || 0);
-        }
-      }
-    } catch (err) {
-      console.error('Error al obtener el turno del cliente:', err);
-    } finally {
-      setCargando(false);
+      console.log('Audio no interactuado aún');
     }
   };
 
   useEffect(() => {
-    fetchEstadoTurno();
+    const actualizarHora = () => {
+      const ahora = new Date();
+      setHoraActual(ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+    };
+    actualizarHora();
+    const interval = setInterval(actualizarHora, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const obtenerUbicacionGPS = () => {
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const latBarberia = APP_CONFIG.ubicacionLocal.latitud;
+          const lngBarberia = APP_CONFIG.ubicacionLocal.longitud;
+          const latCliente = pos.coords.latitude;
+          const lngCliente = pos.coords.longitude;
+
+          const R = 6371;
+          const dLat = ((latCliente - latBarberia) * Math.PI) / 180;
+          const dLng = ((lngCliente - lngBarberia) * Math.PI) / 180;
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((latBarberia * Math.PI) / 180) *
+              Math.cos((latCliente * Math.PI) / 180) *
+              Math.sin(dLng / 2) *
+              Math.sin(dLng / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          const dist = R * c;
+          setDistanciaKm(parseFloat(dist.toFixed(1)));
+        },
+        () => console.log('Ubicación no obtenida')
+      );
+    }
+  };
+
+  const cargarTurnoYPosicion = async (codigoOId: string) => {
+    let query = supabase.from('turnos').select('*');
+    if (codigoOId.includes('-')) {
+      query = query.eq('codigo_ticket', codigoOId.toUpperCase());
+    } else {
+      query = query.eq('id', codigoOId);
+    }
+
+    const { data: miTurno, error } = await query.single();
+
+    if (!error && miTurno) {
+      if (turno && turno.estado === 'espera' && miTurno.estado === 'atendiendo') {
+        sonarAlarma();
+      }
+
+      setTurno(miTurno as TurnoCliente);
+
+      if (miTurno.estado === 'espera') {
+        const { count } = await supabase
+          .from('turnos')
+          .select('*', { count: 'exact', head: true })
+          .eq('estado', 'espera')
+          .lt('creado_en', miTurno.creado_en);
+
+        const delante = count || 0;
+        setPersonasAdelante(delante);
+
+        if (delante >= totalInicialCola) {
+          setTotalInicialCola(delante + 1);
+        }
+      }
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    const idBusqueda = ticketParam || turno?.id || turno?.codigo_ticket;
+    if (idBusqueda) cargarTurnoYPosicion(idBusqueda);
+    else setLoading(false);
 
     const channel = supabase
-      .channel('cliente-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'queue' },
-        () => {
-          fetchEstadoTurno();
-        }
-      )
+      .channel('cliente_realtime_cola')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {
+        const actualId = ticketParam || turno?.id || turno?.codigo_ticket;
+        if (actualId) cargarTurnoYPosicion(actualId);
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [clienteTurnoId]);
+  }, [ticketParam, turno?.id, turno?.codigo_ticket]);
 
-  if (cargando) {
-    return (
-      <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
-        <p className="text-slate-400 animate-pulse font-medium">Actualizando estado del turno...</p>
-      </main>
-    );
+  // Temporizador regresivo dinámico desde APP_CONFIG
+  useEffect(() => {
+    if (turno && turno.estado === 'atendiendo' && turno.modalidad_espera === 'diligencia' && turno.llamado_en && !turno.cliente_llego) {
+      const interval = setInterval(() => {
+        const horaLlamado = new Date(turno.llamado_en!).getTime();
+        const ahora = new Date().getTime();
+        const segundosTranscurridos = Math.floor((ahora - horaLlamado) / 1000);
+        const limiteSegundos = APP_CONFIG.tiempoLimiteDiligenciaMin * 60;
+        const restante = limiteSegundos - segundosTranscurridos;
+
+        setTiempoRestanteSegundos(restante > 0 ? restante : 0);
+      }, 1000);
+
+      return () => clearInterval(interval);
+    } else {
+      setTiempoRestanteSegundos(null);
+    }
+  }, [turno]);
+
+  const unirmeALaCola = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nombre.trim()) return;
+
+    setRegistrando(true);
+    const numero = Math.floor(Math.random() * 900) + 100;
+    const codigo = `B-${numero}`;
+
+    const { data, error } = await supabase
+      .from('turnos')
+      .insert([
+        {
+          codigo_ticket: codigo,
+          nombre_cliente: nombre,
+          cliente_telefono: telefono,
+          tipo_corte: servicioSeleccionado.nombre,
+          monto: servicioSeleccionado.precio,
+          modalidad_espera: modalidadEspera,
+          estado: 'espera',
+        },
+      ])
+      .select()
+      .single();
+
+    if (!error && data) {
+      setTurno(data as TurnoCliente);
+      window.history.pushState({}, '', `/cliente?ticket=${data.codigo_ticket}`);
+      cargarTurnoYPosicion(data.codigo_ticket);
+    }
+    setRegistrando(false);
+  };
+
+  const cambiarModalidadEnVivo = async (nuevaModalidad: 'local' | 'diligencia') => {
+    if (!turno) return;
+    setTurno({ ...turno, modalidad_espera: nuevaModalidad });
+
+    if (nuevaModalidad === 'diligencia') {
+      obtenerUbicacionGPS();
+    }
+
+    await supabase
+      .from('turnos')
+      .update({ modalidad_espera: nuevaModalidad, cliente_llego: nuevaModalidad === 'local' })
+      .eq('id', turno.id);
+  };
+
+  const notificarLlegadaPresencial = async () => {
+    if (!turno) return;
+    setTurno({ ...turno, cliente_llego: true, modalidad_espera: 'local' });
+    await supabase.from('turnos').update({ cliente_llego: true, modalidad_espera: 'local' }).eq('id', turno.id);
+  };
+
+  const volverAlInicio = () => {
+    setTurno(null);
+    setNombre('');
+    setTelefono('');
+    window.location.href = '/cliente';
+  };
+
+  const cancelarTurno = async () => {
+    if (!turno) return;
+    const confirmar = confirm('¿Seguro que deseas cancelar tu turno en la cola?');
+    if (!confirmar) return;
+
+    await supabase.from('turnos').update({ estado: 'cancelado' }).eq('id', turno.id);
+    volverAlInicio();
+  };
+
+  const formatearTiempo = (seg: number) => {
+    const mins = Math.floor(seg / 60);
+    const secs = seg % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  if (loading) {
+    return <div className="text-center py-10 text-slate-400 text-xs animate-pulse">Cargando datos...</div>;
   }
 
-  if (!miTurno) {
-    return (
-      <main className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
-        <h1 className="text-2xl font-bold mb-2">No tienes un turno activo</h1>
-        <p className="text-slate-400 text-sm max-w-xs">
-          Escanea el código QR en la barbería o solicita tu turno para comenzar.
-        </p>
-      </main>
-    );
-  }
+  // --- MODO MONITOR DE TURNO ---
+  if (turno && turno.estado !== 'cancelado') {
+    const tiempoEstimado = personasAdelante * APP_CONFIG.tiempoEstimadoPorClienteMin;
 
-  return (
-    <main className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-between p-6 relative">
-      {/* VENTANA EMERGENTE (MODAL) */}
-      {mostrarModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-slate-900 border-2 border-emerald-500 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl space-y-4">
-            <div className="text-5xl animate-bounce">🔔</div>
-            <h3 className="text-2xl font-black text-white">¡Atención!</h3>
-            <p className="text-slate-200 font-medium text-base">{mensajeModal}</p>
-            <button
-              onClick={() => setMostrarModal(false)}
-              className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black py-3 rounded-xl transition-all shadow-lg active:scale-95"
-            >
-              Entendido
-            </button>
+    const porcentajeProgreso =
+      turno.estado === 'atendiendo' || turno.estado === 'finalizado'
+        ? 100
+        : Math.min(100, Math.max(10, Math.round(((totalInicialCola - personasAdelante) / totalInicialCola) * 100)));
+
+    return (
+      <div className="space-y-6">
+        <div className={`flex justify-between items-center text-xs px-4 py-2 rounded-xl border ${
+          isDark ? 'text-slate-400 bg-slate-800/40 border-slate-800' : 'text-slate-600 bg-slate-100 border-slate-200'
+        }`}>
+          <span>Hora Actual:</span>
+          <span className="font-mono font-bold text-amber-500 text-sm">{horaActual}</span>
+        </div>
+
+        <div className={`p-6 rounded-2xl text-center shadow-lg border ${
+          isDark ? 'bg-slate-800/80 border-slate-700/60' : 'bg-amber-500/10 border-amber-500/30'
+        }`}>
+          <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            Tu Número de Turno
+          </span>
+          <p className="text-5xl font-black text-amber-500 mt-1">{turno.codigo_ticket}</p>
+          <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>{turno.nombre_cliente}</p>
+          
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+            <span className="px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs rounded-full font-medium">
+              {turno.tipo_corte} ({APP_CONFIG.monedaSimbolo}{turno.monto})
+            </span>
+            <span className={`px-3 py-1 border text-xs rounded-full font-medium ${
+              turno.modalidad_espera === 'diligencia'
+                ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+                : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+            }`}>
+              {turno.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera (Diligencia)' : '💈 En Barbería'}
+            </span>
           </div>
         </div>
-      )}
 
-      {/* CABECERA */}
-      <header className="w-full max-w-md text-center pt-4">
-        <h1 className="text-xl font-extrabold tracking-wider uppercase text-emerald-400">Pégate Ahí</h1>
-        <p className="text-xs text-slate-400 mt-1">Tu turno en tiempo real</p>
-      </header>
-
-      {/* CONTENIDO PRINCIPAL */}
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl text-center my-auto">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Cliente</p>
-        <h2 className="text-3xl font-black text-white mb-6">{miTurno.client_name}</h2>
-
-        {miTurno.status === 'in_service' && (
-          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6">
-            <span className="text-4xl">✂️</span>
-            <h3 className="text-xl font-black text-emerald-400 mt-2">¡Es tu turno!</h3>
-            <p className="text-sm text-slate-300 mt-1">Pasa al sillón de atención.</p>
-          </div>
-        )}
-
-        {miTurno.status === 'waiting' && (
+        {/* EN ESPERA */}
+        {turno.estado === 'espera' && (
           <div className="space-y-4">
-            <div className="bg-slate-950 rounded-2xl p-5 border border-slate-800">
-              <span className="text-xs text-slate-400 uppercase font-semibold">Tu posición en la cola</span>
-              <p className="text-5xl font-black text-white mt-1">#{miTurno.position}</p>
+            <div className={`p-4 rounded-xl border space-y-2 ${
+              isDark ? 'bg-slate-800/60 border-slate-800' : 'bg-slate-100 border-slate-200'
+            }`}>
+              <div className="flex justify-between items-center text-xs font-bold">
+                <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>Progreso en Cola</span>
+                <span className="text-amber-500 font-mono">{porcentajeProgreso}%</span>
+              </div>
+              <div className={`w-full h-3 rounded-full overflow-hidden border p-0.5 ${
+                isDark ? 'bg-slate-900 border-slate-700/50' : 'bg-slate-200 border-slate-300'
+              }`}>
+                <div
+                  className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all duration-700 ease-out shadow-sm"
+                  style={{ width: `${porcentajeProgreso}%` }}
+                ></div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-left">
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <p className="text-xs text-slate-400">Personas delante</p>
-                <p className="text-xl font-bold text-slate-200 mt-1">{turnosDelante}</p>
+            <div className={`p-4 rounded-xl border space-y-3 text-center ${
+              isDark ? 'bg-slate-900 border-slate-800' : 'bg-slate-50 border-slate-200'
+            }`}>
+              <p className={`text-xs font-bold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                ¿Necesitas salir del local a hacer una diligencia?
+              </p>
+
+              {turno.modalidad_espera === 'local' ? (
+                <button
+                  type="button"
+                  onClick={() => cambiarModalidadEnVivo('diligencia')}
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
+                >
+                  🏃‍♂️ Avisar que salgo a hacer diligencias ({APP_CONFIG.tiempoLimiteDiligenciaMin} min)
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => cambiarModalidadEnVivo('local')}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-95"
+                >
+                  💈 Avisar que ya regresé al local
+                </button>
+              )}
+            </div>
+
+            {distanciaKm !== null && turno.modalidad_espera === 'diligencia' && (
+              <div className="p-3 bg-slate-800/40 border border-slate-700 rounded-xl text-center text-xs text-amber-400 font-semibold">
+                📍 Distancia actual a la barbería: ~{distanciaKm} km
               </div>
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <p className="text-xs text-slate-400">Tiempo aprox.</p>
-                <p className="text-xl font-bold text-slate-200 mt-1">
-                  ~{turnosDelante * (miTurno.estimated_wait_minutes || 15)} min
-                </p>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className={`p-4 rounded-xl text-center border ${isDark ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
+                <span className={`text-[10px] uppercase font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Personas Delante</span>
+                <p className={`text-3xl font-black mt-1 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>{personasAdelante}</p>
+              </div>
+
+              <div className={`p-4 rounded-xl text-center border ${isDark ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
+                <span className={`text-[10px] uppercase font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Tiempo Estimado</span>
+                <p className="text-3xl font-black text-amber-500 mt-1">~ {tiempoEstimado} min</p>
               </div>
             </div>
+
+            <button
+              onClick={cancelarTurno}
+              className="w-full py-3 text-xs font-bold text-rose-500 hover:text-rose-600 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 rounded-xl transition-all"
+            >
+              ❌ Cancelar mi turno
+            </button>
           </div>
         )}
 
-        {miTurno.status === 'grace_period' && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6">
-            <span className="text-4xl">⏳</span>
-            <h3 className="text-lg font-bold text-amber-400 mt-2">En ventana de gracia</h3>
-            <p className="text-xs text-slate-300 mt-1">
-              Si no estás en la barbería cuando te llamen, pasarás al final de la cola.
-            </p>
+        {/* ATENDIENDO / LLAMADO */}
+        {turno.estado === 'atendiendo' && (
+          <div className="space-y-4">
+            {turno.cliente_llego ? (
+              <div className="bg-emerald-500/20 border-2 border-emerald-500 p-6 rounded-2xl text-center space-y-2">
+                <span className="text-3xl">💈</span>
+                <h2 className={`text-xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>¡TE HAS REPORTADO EN EL LOCAL!</h2>
+                <p className="text-xs text-emerald-400 font-medium">El barbero ya sabe que estás esperando en la silla.</p>
+              </div>
+            ) : turno.modalidad_espera === 'diligencia' && tiempoRestanteSegundos !== null ? (
+              <div className={`border-2 border-amber-500 p-6 rounded-2xl text-center space-y-4 shadow-2xl ${isDark ? 'bg-slate-900' : 'bg-amber-50'}`}>
+                <span className="text-4xl">🏃‍♂️</span>
+                <h2 className="text-xl font-black text-amber-500 uppercase">¡EL BARBERO TE HA LLAMADO!</h2>
+                
+                <div className={`p-5 rounded-xl text-center border ${isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'}`}>
+                  <span className="text-[10px] font-bold uppercase text-slate-400">Tiempo Restante para Llegar</span>
+                  <p className="text-5xl font-black font-mono text-amber-500 mt-1">{formatearTiempo(tiempoRestanteSegundos)}</p>
+                </div>
+
+                <button
+                  onClick={notificarLlegadaPresencial}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg animate-bounce"
+                >
+                  📍 ¡Ya llegué a la Barbería!
+                </button>
+              </div>
+            ) : (
+              <div className="bg-emerald-500/20 border-2 border-emerald-500 p-6 rounded-2xl text-center space-y-3">
+                <span className="text-3xl">✂️</span>
+                <h2 className={`text-2xl font-black ${isDark ? 'text-white' : 'text-slate-900'}`}>¡ES TU TURNO!</h2>
+              </div>
+            )}
           </div>
         )}
 
-        {miTurno.status === 'completed' && (
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-6">
-            <span className="text-4xl">✅</span>
-            <h3 className="text-xl font-bold text-blue-400 mt-2">Corte completado</h3>
-            <p className="text-sm text-slate-300 mt-1">¡Gracias por tu preferencia!</p>
+        {(turno.estado === 'finalizado' || turno.estado === 'ausente') && (
+          <div className={`border p-6 rounded-2xl text-center space-y-4 ${isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-100 border-slate-200'}`}>
+            <h2 className={`text-lg font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+              {turno.estado === 'finalizado' ? '¡Servicio Completado!' : '¡Tiempo Agotado!'}
+            </h2>
+            <button onClick={volverAlInicio} className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase rounded-xl transition-all active:scale-95">
+              🔄 Tomar Nuevo Turno
+            </button>
           </div>
         )}
       </div>
+    );
+  }
 
-      <footer className="w-full max-w-md text-center text-xs text-slate-500 pb-2">
-        La pantalla se actualiza en tiempo real automáticamente.
-      </footer>
+  // --- FORMULARIO REGISTRO INICIAL ---
+  return (
+    <form onSubmit={unirmeALaCola} className="space-y-5">
+      <div className={`flex justify-between items-center text-xs px-4 py-2 rounded-xl border mb-2 ${
+        isDark ? 'text-slate-400 bg-slate-800/40 border-slate-800' : 'text-slate-600 bg-slate-100 border-slate-200'
+      }`}>
+        <span>Hora Actual:</span>
+        <span className="font-mono font-bold text-amber-500 text-sm">{horaActual}</span>
+      </div>
+
+      <div>
+        <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+          Tu Nombre
+        </label>
+        <input
+          type="text"
+          required
+          placeholder="Ej: Carlos Pérez"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:border-amber-500 transition-all ${
+            isDark ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+          }`}
+        />
+      </div>
+
+      <div>
+        <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+          Teléfono / WhatsApp (Opcional)
+        </label>
+        <input
+          type="tel"
+          placeholder="Ej: 04141234567"
+          value={telefono}
+          onChange={(e) => setTelefono(e.target.value)}
+          className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:border-amber-500 transition-all ${
+            isDark ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+          }`}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <label className={`block text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+          Selecciona tu servicio
+        </label>
+        <div className="grid grid-cols-1 gap-2.5">
+          {APP_CONFIG.servicios.map((srv) => {
+            const selected = servicioSeleccionado.id === srv.id;
+            return (
+              <div
+                key={srv.id}
+                onClick={() => setServicioSeleccionado(srv)}
+                className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
+                  selected
+                    ? 'bg-amber-500/10 border-amber-500 text-amber-500 font-bold'
+                    : isDark ? 'bg-slate-800/40 border-slate-800 text-slate-300 hover:border-slate-700' : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{srv.icono}</span>
+                  <span className="font-bold text-sm">{srv.nombre}</span>
+                </div>
+                <span className="font-extrabold text-sm">{APP_CONFIG.monedaSimbolo}{srv.precio}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className={`block text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+          ¿Dónde esperarás tu turno?
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setModalidadEspera('local')}
+            className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+              modalidadEspera === 'local'
+                ? 'bg-amber-500/10 border-amber-500 text-amber-500 font-bold'
+                : isDark ? 'bg-slate-800/40 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
+            }`}
+          >
+            <span className="text-lg">💈</span>
+            <div className="mt-2">
+              <p className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>En el Local</p>
+              <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Espero en la barbería</p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setModalidadEspera('diligencia');
+              obtenerUbicacionGPS();
+            }}
+            className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+              modalidadEspera === 'diligencia'
+                ? 'bg-indigo-500/10 border-indigo-500 text-indigo-500 font-bold'
+                : isDark ? 'bg-slate-800/40 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
+            }`}
+          >
+            <span className="text-lg">🏃‍♂️</span>
+            <div className="mt-2">
+              <p className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>Hacer Diligencias</p>
+              <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <button
+        type="submit"
+        disabled={registrando}
+        className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm uppercase tracking-wider rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50"
+      >
+        {registrando ? 'Registrando...' : 'UNIRME A LA COLA'}
+      </button>
+    </form>
+  );
+}
+
+export default function ClienteView() {
+  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('auto');
+  const [esNoche, setEsNoche] = useState<boolean>(false);
+
+  useEffect(() => {
+    const hora = new Date().getHours();
+    setEsNoche(hora >= 19 || hora < 6);
+  }, []);
+
+  const isDark = modoTema === 'auto' ? esNoche : modoTema === 'dark';
+
+  return (
+    <main className={`min-h-screen flex flex-col items-center justify-center p-4 transition-colors duration-500 ${
+      isDark ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-900'
+    }`}>
+      <div className={`max-w-md w-full border rounded-3xl p-6 md:p-8 shadow-2xl ${
+        isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+      }`}>
+        <header className="flex items-center justify-between mb-6 pb-4 border-b border-slate-700/20">
+          <div>
+            <h1 className="text-2xl font-black text-amber-500 tracking-wide">{APP_CONFIG.nombreNegocio}</h1>
+            <p className={`text-[10px] uppercase tracking-widest font-bold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+              {APP_CONFIG.subtitulo}
+            </p>
+          </div>
+
+          <div className={`flex items-center gap-1 p-1 rounded-xl border text-xs font-semibold ${
+            isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-100 border-slate-300'
+          }`}>
+            <button
+              onClick={() => setModoTema('light')}
+              className={`p-1.5 rounded-lg transition-all ${modoTema === 'light' ? 'bg-amber-500 text-slate-950 font-bold' : isDark ? 'text-slate-400' : 'text-slate-600'}`}
+            >
+              ☀️
+            </button>
+            <button
+              onClick={() => setModoTema('dark')}
+              className={`p-1.5 rounded-lg transition-all ${modoTema === 'dark' ? 'bg-amber-500 text-slate-950 font-bold' : isDark ? 'text-slate-400' : 'text-slate-600'}`}
+            >
+              🌙
+            </button>
+            <button
+              onClick={() => setModoTema('auto')}
+              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${modoTema === 'auto' ? 'bg-amber-500 text-slate-950' : isDark ? 'text-slate-400' : 'text-slate-600'}`}
+            >
+              🔄 Auto
+            </button>
+          </div>
+        </header>
+
+        <Suspense fallback={<p className="text-center text-slate-500 text-xs">Cargando...</p>}>
+          <ClienteContent isDark={isDark} />
+        </Suspense>
+      </div>
     </main>
   );
 }
