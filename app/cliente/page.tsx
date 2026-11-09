@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/supabaseClient';
 
 interface Turno {
   id: string;
@@ -23,13 +23,15 @@ export default function ClientePage() {
 
   const clienteTurnoId = typeof window !== 'undefined' ? localStorage.getItem('mi_turno_id') : null;
 
-  // REPRODUCIR SONIDO DE ALERTA (Web Audio API)
+  // FUNCIÓN PARA REPRODUCIR SONIDO DE ALERTA (Web Audio API - Sin archivos externos)
   const reproducirSonidoAlerta = () => {
     try {
       const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
       if (!AudioContext) return;
       
       const ctx = new AudioContext();
+      
+      // Dos tonos tipo "ding-dong"
       const now = ctx.currentTime;
       
       const osc1 = ctx.createOscillator();
@@ -73,16 +75,19 @@ export default function ClientePage() {
 
       if (errorTurno) throw errorTurno;
 
-      // NOTIFICACIONES Y MODAL SEGÚN CAMBIO DE ESTADO
+      // DETECTAR CAMBIO DE ESTADO PARA NOTIFICACIÓN Y MODAL
       if (turno) {
         if (estadoAnterior.current && estadoAnterior.current !== turno.status) {
+          // Si pasa al sillón de atención
           if (turno.status === 'in_service') {
             reproducirSonidoAlerta();
             setMensajeModal('¡Es tu turno! Pasa al sillón de atención ✂️');
             setMostrarModal(true);
-          } else if (turno.status === 'waiting' && estadoAnterior.current === 'grace_period') {
+          } 
+          // Si fue movido al final por estar en tiempo de gracia
+          else if (turno.status === 'waiting' && estadoAnterior.current === 'grace_period') {
             reproducirSonidoAlerta();
-            setMensajeModal('Tu turno ha sido reubicado al final de la cola por no estar presente.');
+            setMensajeModal('Tu turno ha sido enviado al final de la cola por no estar presente.');
             setMostrarModal(true);
           }
         }
@@ -212,7 +217,7 @@ export default function ClientePage() {
             <span className="text-4xl">⏳</span>
             <h3 className="text-lg font-bold text-amber-400 mt-2">En ventana de gracia</h3>
             <p className="text-xs text-slate-300 mt-1">
-              Si no estás en la barbería cuando te llamen, pasarás al final de la cola.
+              Si no estás en la barbería cuando sea tu turno, pasarás al final de la cola.
             </p>
           </div>
         )}
