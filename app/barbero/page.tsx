@@ -102,16 +102,17 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
   // DESPLAZAR AUTOMÁTICAMENTE AL CLIENTE CUANDO EXPIRA SU TIEMPO
   const desplazarPorTiempoAgotado = async (turnoExpirado: Turno) => {
-    // 1. Regresar el turno expirado a la cola de espera y limpiar temporizador
+    // 1. Regresar el turno expirado a la cola de espera con fecha actualizada para ir al final
     await supabase
       .from('turnos')
       .update({
         estado: 'espera',
         llamado_en: null,
+        creado_en: new Date().toISOString()
       })
       .eq('id', turnoExpirado.id);
 
-    // 2. Filtrar los clientes en espera restantes (excluyendo el recién expirado)
+    // 2. Filtrar los clientes en espera restantes
     const colaRestante = turnos.filter(
       (t) => t.estado === 'espera' && t.id !== turnoExpirado.id
     );
@@ -170,6 +171,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         .update({
           estado: 'espera',
           llamado_en: null,
+          creado_en: new Date().toISOString()
         })
         .eq('id', turnoActual.id);
     }
@@ -198,18 +200,26 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnos();
   };
 
+  // BOTÓN ROJO CORREGIDO: Manda al cliente de vuelta a 'espera' (al final de la cola) y pasa al siguiente
   const pasarSiguientePorAusencia = async () => {
     if (!turnoActual) return;
 
+    // 1. Reubicar el turno actual de vuelta a 'espera' con timestamp actualizado para enviarlo al final de la cola
     await supabase
       .from('turnos')
-      .update({ estado: 'ausente' })
+      .update({
+        estado: 'espera',
+        llamado_en: null,
+        creado_en: new Date().toISOString()
+      })
       .eq('id', turnoActual.id);
 
+    // 2. Buscar en los que ya estaban en espera
     const colaRestante = turnos.filter(
       (t) => t.estado === 'espera' && t.id !== turnoActual.id
     );
 
+    // 3. Pasar al siguiente cliente priorizando al presencial en el local
     if (colaRestante.length > 0) {
       const clienteEnLocal = colaRestante.find((t) => t.modalidad_espera === 'local');
       const siguiente = clienteEnLocal || colaRestante[0];
