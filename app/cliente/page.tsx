@@ -1,129 +1,33 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 interface Turno {
   id: string;
   store_id: string;
   client_name: string;
+  client_phone?: string;
   position: number;
   status: 'waiting' | 'in_service' | 'completed' | 'cancelled' | 'grace_period';
-  estimated_wait_minutes?: number;
+  created_at?: string;
 }
 
-export default function ClientePage() {
-  const [miTurno, setMiTurno] = useState<Turno | null>(null);
-  const [turnosDelante, setTurnosDelante] = useState<number>(0);
+export default function BarberoPage() {
+  const [cola, setCola] = useState<Turno[]>([]);
   const [cargando, setCargando] = useState<boolean>(true);
-  const [mostrarModal, setMostrarModal] = useState<boolean>(false);
-  const [mensajeModal, setMensajeModal] = useState<string>('');
 
-  const estadoAnterior = useRef<string | null>(null);
-
-  const clienteTurnoId = typeof window !== 'undefined' ? localStorage.getItem('mi_turno_id') : null;
-
-  // FUNCIÓN PARA REPRODUCIR SONIDO DE ALERTA (Web Audio API - Sin archivos externos)
-  const reproducirSonidoAlerta = () => {
-    try {
-      const AudioContext = window.AudioContext || (window as unknown as { webkitAudioContext: typeof window.AudioContext }).webkitAudioContext;
-      if (!AudioContext) return;
-      
-      const ctx = new AudioContext();
-      
-      // Dos tonos tipo "ding-dong"
-      const now = ctx.currentTime;
-      
-      const osc1 = ctx.createOscillator();
-      const gain1 = ctx.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(587.33, now); // D5
-      gain1.gain.setValueAtTime(0.3, now);
-      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-      osc1.connect(gain1);
-      gain1.connect(ctx.destination);
-      osc1.start(now);
-      osc1.stop(now + 0.4);
-
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(880, now + 0.2); // A5
-      gain2.gain.setValueAtTime(0.4, now + 0.2);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.start(now + 0.2);
-      osc2.stop(now + 0.8);
-    } catch (e) {
-      console.log('Error al reproducir audio:', e);
-    }
-  };
-
-  const fetchEstadoTurno = async () => {
-    if (!clienteTurnoId) {
-      setCargando(false);
-      return;
-    }
-
-    try {
-      const { data: turno, error: errorTurno } = await supabase
-        .from('queue')
-        .select('*')
-        .eq('id', clienteTurnoId)
-        .single();
-
-      if (errorTurno) throw errorTurno;
-
-      // DETECTAR CAMBIO DE ESTADO PARA NOTIFICACIÓN Y MODAL
-      if (turno) {
-        if (estadoAnterior.current && estadoAnterior.current !== turno.status) {
-          // Si pasa al sillón de atención
-          if (turno.status === 'in_service') {
-            reproducirSonidoAlerta();
-            setMensajeModal('¡Es tu turno! Pasa al sillón de atención ✂️');
-            setMostrarModal(true);
-          } 
-          // Si fue movido al final por estar en tiempo de gracia
-          else if (turno.status === 'waiting' && estadoAnterior.current === 'grace_period') {
-            reproducirSonidoAlerta();
-            setMensajeModal('Tu turno ha sido enviado al final de la cola por no estar presente.');
-            setMostrarModal(true);
-          }
-        }
-        estadoAnterior.current = turno.status;
-      }
-
-      setMiTurno(turno);
-
-      if (turno && (turno.status === 'waiting' || turno.status === 'grace_period')) {
-        const { count, error: errorCount } = await supabase
-          .from('queue')
-          .select('*', { count: 'exact', head: true })
-          .in('status', ['waiting', 'in_service', 'grace_period'])
-          .lt('position', turno.position);
-
-        if (!errorCount) {
-          setTurnosDelante(count || 0);
-        }
-      }
-    } catch (err) {
-      console.error('Error al obtener el turno del cliente:', err);
-    } finally {
-      setCargando(false);
-    }
-  };
-
+  // Cargar cola inicial y suscribirse a cambios en tiempo real
   useEffect(() => {
-    fetchEstadoTurno();
+    fetchCola();
 
     const channel = supabase
-      .channel('cliente-realtime')
+      .channel('queue-realtime-barbero')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'queue' },
         () => {
-          fetchEstadoTurno();
+          fetchCola();
         }
       )
       .subscribe();
@@ -131,109 +35,204 @@ export default function ClientePage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [clienteTurnoId]);
+  }, []);
 
-  if (cargando) {
-    return (
-      <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
-        <p className="text-slate-400 animate-pulse font-medium">Actualizando estado del turno...</p>
-      </main>
-    );
-  }
+  const fetchCola = async () => {
+    setCargando(true);
+    const { data, error } = await supabase
+      .from('queue')
+      .select('*')
+      .in('status', ['waiting', 'in_service', 'grace_period'])
+      .order('position', { ascending: true });
 
-  if (!miTurno) {
-    return (
-      <main className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
-        <h1 className="text-2xl font-bold mb-2">No tienes un turno activo</h1>
-        <p className="text-slate-400 text-sm max-w-xs">
-          Escanea el código QR en la barbería o solicita tu turno para comenzar.
-        </p>
-      </main>
-    );
-  }
+    if (error) {
+      console.error('Error al obtener la cola:', error);
+    } else {
+      setCola(data || []);
+    }
+    setCargando(false);
+  };
+
+  // Identificar quién está en atención o en gracia en la vista actual
+  const clienteEnSillon = cola.find((t) => t.status === 'in_service');
+  const clienteEnGracia = cola.find((t) => t.status === 'grace_period');
+  const clienteActual = clienteEnSillon || clienteEnGracia || cola[0];
+
+  // FUNCIÓN CORREGIDA: Avanzar la cola reubicando al cliente en gracia al final
+  const handleSiguienteCliente = async () => {
+    try {
+      // 1. Obtener los datos frescos directamente de Supabase para evitar desfases de estado
+      const { data: queueData, error: fetchError } = await supabase
+        .from('queue')
+        .select('*')
+        .in('status', ['waiting', 'in_service', 'grace_period'])
+        .order('position', { ascending: true });
+
+      if (fetchError || !queueData || queueData.length === 0) return;
+
+      const enSillon = queueData.find((t) => t.status === 'in_service');
+      const enGracia = queueData.find((t) => t.status === 'grace_period');
+
+      // CASO A: Si hay alguien en el sillón, se completa su turno
+      if (enSillon) {
+        await supabase
+          .from('queue')
+          .update({
+            status: 'completed',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', enSillon.id);
+      }
+
+      // CASO B: Si el turno actual está en diligencias (grace_period), MOVER AL FINAL
+      if (enGracia) {
+        const maxPosition = queueData.reduce(
+          (max, item) => (item.position > max ? item.position : max),
+          0
+        );
+        const nuevaPosicion = maxPosition + 1;
+
+        // Cambia a 'waiting' (apaga contador de 30 min) y lo envía al final de la fila
+        await supabase
+          .from('queue')
+          .update({
+            position: nuevaPosicion,
+            status: 'waiting',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', enGracia.id);
+      }
+
+      // CASO C: Si no había enSillon ni enGracia pero hay un cliente en 'waiting' al frente
+      if (!enSillon && !enGracia && queueData.length > 0) {
+        const primeroEnEspera = queueData.find((t) => t.status === 'waiting');
+        if (primeroEnEspera) {
+          await supabase
+            .from('queue')
+            .update({
+              status: 'completed',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', primeroEnEspera.id);
+        }
+      }
+
+      // 2. PASAR AL SIGUIENTE CLIENTE DISPONIBLE AL SILLÓN ('in_service')
+      const siguientesDisponibles = queueData
+        .filter(
+          (t) =>
+            t.status === 'waiting' &&
+            t.id !== enGracia?.id // Excluye al que acabamos de mandar al final
+        )
+        .sort((a, b) => a.position - b.position);
+
+      if (siguientesDisponibles.length > 0) {
+        const siguienteTurno = siguientesDisponibles[0];
+        await supabase
+          .from('queue')
+          .update({
+            status: 'in_service',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', siguienteTurno.id);
+      }
+
+      // Recargar cola local
+      await fetchCola();
+    } catch (err) {
+      console.error('Error al procesar el siguiente cliente:', err);
+    }
+  };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-between p-6 relative">
-      {/* VENTANA EMERGENTE (MODAL) */}
-      {mostrarModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-slate-900 border-2 border-emerald-500 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl space-y-4">
-            <div className="text-5xl animate-bounce">🔔</div>
-            <h3 className="text-2xl font-black text-white">¡Atención!</h3>
-            <p className="text-slate-200 font-medium text-base">{mensajeModal}</p>
-            <button
-              onClick={() => setMostrarModal(false)}
-              className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black py-3 rounded-xl transition-all shadow-lg active:scale-95"
-            >
-              Entendido
-            </button>
+    <main className="min-h-screen bg-slate-950 text-white p-6 flex flex-col items-center">
+      <header className="w-full max-w-md text-center mb-6">
+        <h1 className="text-3xl font-black text-emerald-400">Pégate Ahí</h1>
+        <p className="text-xs text-slate-400 mt-1">Panel de Control del Barbero</p>
+      </header>
+
+      {cargando && cola.length === 0 ? (
+        <p className="text-slate-400 animate-pulse">Cargando cola en tiempo real...</p>
+      ) : (
+        <div className="w-full max-w-md bg-slate-900 rounded-3xl p-6 shadow-2xl border border-slate-800">
+          {/* TARJETA DEL CLIENTE EN ATENCIÓN O GRACIA */}
+          <div className="mb-6 text-center">
+            <span className="text-xs uppercase tracking-widest text-slate-400 font-bold">
+              Turno en Gestión
+            </span>
+
+            {clienteActual ? (
+              <div className="mt-3 p-5 bg-slate-950 rounded-2xl border border-slate-800">
+                <p className="text-2xl font-black text-white">
+                  {clienteActual.client_name}
+                </p>
+
+                <div className="mt-3 inline-block">
+                  {clienteActual.status === 'grace_period' && (
+                    <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                      ⏳ En diligencias (Tiempo de gracia)
+                    </span>
+                  )}
+                  {clienteActual.status === 'in_service' && (
+                    <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                      ✂️ En el sillón
+                    </span>
+                  )}
+                  {clienteActual.status === 'waiting' && (
+                    <span className="bg-blue-500/20 text-blue-400 border border-blue-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                      👤 Turno #{clienteActual.position}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 p-5 bg-slate-950 rounded-2xl border border-slate-800">
+                <p className="text-slate-500 font-medium">No hay clientes en la cola.</p>
+              </div>
+            )}
+          </div>
+
+          {/* BOTÓN PRINCIPAL */}
+          <button
+            onClick={handleSiguienteCliente}
+            disabled={!clienteActual}
+            className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black py-4 px-6 rounded-2xl text-lg transition-all shadow-lg active:scale-95"
+          >
+            Siguiente Cliente
+          </button>
+
+          {/* COLA DE ESPERA RESTANTE */}
+          <div className="mt-8">
+            <h2 className="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider">
+              En lista de espera ({cola.filter((t) => t.status === 'waiting').length})
+            </h2>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {cola
+                .filter((t) => t.status === 'waiting')
+                .map((turno) => (
+                  <div
+                    key={turno.id}
+                    className="flex justify-between items-center p-3 bg-slate-950 rounded-xl border border-slate-800/80"
+                  >
+                    <span className="font-semibold text-slate-200 text-sm">
+                      {turno.client_name}
+                    </span>
+                    <span className="text-xs bg-slate-800 text-emerald-400 font-bold px-2.5 py-1 rounded-lg">
+                      #{turno.position}
+                    </span>
+                  </div>
+                ))}
+
+              {cola.filter((t) => t.status === 'waiting').length === 0 && (
+                <p className="text-xs text-slate-600 text-center py-2">
+                  No hay nadie esperando en lista.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}
-
-      {/* CABECERA */}
-      <header className="w-full max-w-md text-center pt-4">
-        <h1 className="text-xl font-extrabold tracking-wider uppercase text-emerald-400">Pégate Ahí</h1>
-        <p className="text-xs text-slate-400 mt-1">Tu turno en tiempo real</p>
-      </header>
-
-      {/* CONTENIDO PRINCIPAL */}
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl text-center my-auto">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Cliente</p>
-        <h2 className="text-3xl font-black text-white mb-6">{miTurno.client_name}</h2>
-
-        {miTurno.status === 'in_service' && (
-          <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6">
-            <span className="text-4xl">✂️</span>
-            <h3 className="text-xl font-black text-emerald-400 mt-2">¡Es tu turno!</h3>
-            <p className="text-sm text-slate-300 mt-1">Pasa al sillón de atención.</p>
-          </div>
-        )}
-
-        {miTurno.status === 'waiting' && (
-          <div className="space-y-4">
-            <div className="bg-slate-950 rounded-2xl p-5 border border-slate-800">
-              <span className="text-xs text-slate-400 uppercase font-semibold">Tu posición en la cola</span>
-              <p className="text-5xl font-black text-white mt-1">#{miTurno.position}</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 text-left">
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <p className="text-xs text-slate-400">Personas delante</p>
-                <p className="text-xl font-bold text-slate-200 mt-1">{turnosDelante}</p>
-              </div>
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <p className="text-xs text-slate-400">Tiempo aprox.</p>
-                <p className="text-xl font-bold text-slate-200 mt-1">
-                  ~{turnosDelante * (miTurno.estimated_wait_minutes || 15)} min
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {miTurno.status === 'grace_period' && (
-          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6">
-            <span className="text-4xl">⏳</span>
-            <h3 className="text-lg font-bold text-amber-400 mt-2">En ventana de gracia</h3>
-            <p className="text-xs text-slate-300 mt-1">
-              Si no estás en la barbería cuando sea tu turno, pasarás al final de la cola.
-            </p>
-          </div>
-        )}
-
-        {miTurno.status === 'completed' && (
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-6">
-            <span className="text-4xl">✅</span>
-            <h3 className="text-xl font-bold text-blue-400 mt-2">Corte completado</h3>
-            <p className="text-sm text-slate-300 mt-1">¡Gracias por tu preferencia!</p>
-          </div>
-        )}
-      </div>
-
-      <footer className="w-full max-w-md text-center text-xs text-slate-500 pb-2">
-        La pantalla se actualiza en tiempo real automáticamente.
-      </footer>
     </main>
   );
 }
