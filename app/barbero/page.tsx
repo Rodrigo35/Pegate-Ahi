@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient'; // Ajusta la ruta a tu cliente de Supabase
+import { supabase } from '@/lib/supabase';// Ajusta la ruta a tu cliente de Supabase
 
 interface Turno {
   id: string;
