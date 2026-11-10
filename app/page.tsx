@@ -6,15 +6,15 @@ import { APP_CONFIG } from '../lib/config';
 
 export default function HomeHub() {
   const [clientUrl, setClientUrl] = useState<string>('');
+  const [currentYear, setCurrentYear] = useState<number | null>(null);
 
   useEffect(() => {
-    // Detecta la URL actual donde está desplegada la app (Vercel, localhost, etc.)
     if (typeof window !== 'undefined') {
       setClientUrl(`${window.location.origin}/cliente`);
     }
+    setCurrentYear(new Date().getFullYear());
   }, []);
 
-  // Genera el código QR de manera limpia mediante API de imagen rápida
   const qrCodeImageUrl = clientUrl
     ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(clientUrl)}`
     : '';
@@ -65,7 +65,7 @@ export default function HomeHub() {
           )}
         </div>
 
-        {/* Botón alternativo de acceso directo por si prueban en PC sin celular */}
+        {/* Botón alternativo de acceso directo */}
         <div className="pt-2">
           <Link
             href="/cliente"
@@ -76,9 +76,9 @@ export default function HomeHub() {
         </div>
       </section>
 
-      {/* Footer minimalista */}
+      {/* Footer minimalista sin llamada directa a Date() en SSG */}
       <footer className="text-center text-slate-600 text-xs py-4 border-t border-slate-900">
-        <p>© {new Date().getFullYear()} Pégate Ahí - Software SaaS de Turnos para Barberías</p>
+        <p>© {currentYear || 2026} Pégate Ahí - Software SaaS de Turnos para Barberías</p>
       </footer>
     </main>
   );
