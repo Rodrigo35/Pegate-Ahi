@@ -33,7 +33,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
 
-  // LISTA DE SERVICIOS Y TARIFAS SINCRONIZADA CON SUPABASE
   const [listaServicios, setListaServicios] = useState<ServicioOption[]>(
     APP_CONFIG.servicios
   );
@@ -83,22 +82,35 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return () => clearInterval(interval);
   }, []);
 
-  // CARGAR Y ESCUCHAR TARIFAS DESDE SUPABASE EN TIEMPO REAL
+  // CARGAR Y ESCUCHAR TARIFAS DESDE SUPABASE SIN DUPLICAR ELEMENTOS
   useEffect(() => {
     const fetchTarifas = async () => {
-      const { data } = await supabase.from('servicios_config').select('*');
+      const { data } = await supabase
+        .from('servicios_config')
+        .select('*')
+        .order('id', { ascending: true });
+
       if (data && data.length > 0) {
-        const formateados: ServicioOption[] = data.map((s) => ({
-          id: s.id,
-          nombre: s.nombre,
-          precio: Number(s.precio),
-          icono: s.id === 'barba' ? '💈' : s.id === 'corte_barba' ? '✂️💈' : '✂️'
-        }));
+        const formateados: ServicioOption[] = data.map((s) => {
+          let icono = '✂️';
+          if (s.id === 'barba' || s.nombre.toLowerCase() === 'barba') {
+            icono = '💈';
+          } else if (s.id === 'corte_barba' || s.nombre.includes('+')) {
+            icono = '✂️💈';
+          }
+
+          return {
+            id: s.id,
+            nombre: s.nombre,
+            precio: Number(s.precio),
+            icono: icono
+          };
+        });
 
         setListaServicios(formateados);
         setServicioSeleccionado((prev) => {
-          const actualizado = formateados.find((f) => f.nombre === prev.nombre);
-          return actualizado || formateados[0];
+          const coincidencia = formateados.find((f) => f.nombre === prev.nombre);
+          return coincidencia || formateados[0];
         });
       }
     };
