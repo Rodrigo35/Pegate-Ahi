@@ -19,17 +19,28 @@ interface TurnoCliente {
   creado_en: string;
 }
 
+interface ServicioOption {
+  id: string;
+  nombre: string;
+  precio: number;
+  icono: string;
+}
+
 function ClienteContent({ isDark }: { isDark: boolean }) {
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
 
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
-  
-  // ESTADO DINÁMICO DE SERVICIOS (Obtiene tarifas actualizadas)
-  const [listaServicios, setListaServicios] = useState(APP_CONFIG.servicios);
-  const [servicioSeleccionado, setServicioSeleccionado] = useState(APP_CONFIG.servicios[0]);
-  
+
+  // LISTA DE SERVICIOS Y TARIFAS SINCRONIZADA CON SUPABASE
+  const [listaServicios, setListaServicios] = useState<ServicioOption[]>(
+    APP_CONFIG.servicios
+  );
+  const [servicioSeleccionado, setServicioSeleccionado] = useState<ServicioOption>(
+    APP_CONFIG.servicios[0]
+  );
+
   const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
   const [registrando, setRegistrando] = useState(false);
 
@@ -70,6 +81,40 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     actualizarHora();
     const interval = setInterval(actualizarHora, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  // CARGAR Y ESCUCHAR TARIFAS DESDE SUPABASE EN TIEMPO REAL
+  useEffect(() => {
+    const fetchTarifas = async () => {
+      const { data } = await supabase.from('servicios_config').select('*');
+      if (data && data.length > 0) {
+        const formateados: ServicioOption[] = data.map((s) => ({
+          id: s.id,
+          nombre: s.nombre,
+          precio: Number(s.precio),
+          icono: s.id === 'barba' ? '💈' : s.id === 'corte_barba' ? '✂️💈' : '✂️'
+        }));
+
+        setListaServicios(formateados);
+        setServicioSeleccionado((prev) => {
+          const actualizado = formateados.find((f) => f.nombre === prev.nombre);
+          return actualizado || formateados[0];
+        });
+      }
+    };
+
+    fetchTarifas();
+
+    const channel = supabase
+      .channel('cliente_tarifas_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'servicios_config' }, () => {
+        fetchTarifas();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const obtenerUbicacionGPS = () => {
@@ -152,7 +197,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     };
   }, [ticketParam, turno?.id, turno?.codigo_ticket]);
 
-  // Temporizador regresivo dinámico desde APP_CONFIG
+  // Temporizador regresivo de tiempo límite
   useEffect(() => {
     if (turno && turno.estado === 'atendiendo' && turno.modalidad_espera === 'diligencia' && turno.llamado_en && !turno.cliente_llego) {
       const interval = setInterval(() => {
@@ -459,7 +504,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         </label>
         <div className="grid grid-cols-1 gap-2.5">
           {listaServicios.map((srv) => {
-            const selected = servicioSeleccionado.id === srv.id;
+            const selected = servicioSeleccionado.nombre === srv.nombre;
             return (
               <div
                 key={srv.id}
