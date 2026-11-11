@@ -19,6 +19,12 @@ interface Turno {
   creado_en: string;
 }
 
+const SERVICIOS_DEFAULT = [
+  { nombre: 'Corte', precio: 10 },
+  { nombre: 'Corte + Barba', precio: 15 },
+  { nombre: 'Barba', precio: 8 },
+];
+
 function BarberoContent({ isDark }: { isDark: boolean }) {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [turnosFinalizados, setTurnosFinalizados] = useState<Turno[]>([]);
@@ -26,9 +32,12 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [horaActual, setHoraActual] = useState<string>('');
   const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
 
-  // ESTADO PARA EDICIÓN DINÁMICA DEL PRECIO DEL SERVICIO
+  // ESTADOS DE TIPO DE SERVICIO Y PRECIO
+  const [tipoServicio, setTipoServicio] = useState<string>('Corte');
   const [precioServicio, setPrecioServicio] = useState<number>(10);
-  const [editandoPrecio, setEditandoPrecio] = useState<boolean>(false);
+  const [editandoServicio, setEditandoServicio] = useState<boolean>(false);
+
+  const [nuevoTipoInput, setNuevoTipoInput] = useState<string>('Corte');
   const [nuevoPrecioInput, setNuevoPrecioInput] = useState<string>('10');
 
   useEffect(() => {
@@ -105,16 +114,24 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  // MANEJAR GUARDADO DEL NUEVO PRECIO
-  const guardarNuevoPrecio = () => {
-    const valor = parseFloat(nuevoPrecioInput);
-    if (!isNaN(valor) && valor >= 0) {
-      setPrecioServicio(valor);
-      setEditandoPrecio(false);
+  const handleTipoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const seleccionado = e.target.value;
+    setNuevoTipoInput(seleccionado);
+    const servicioEncontrado = SERVICIOS_DEFAULT.find((s) => s.nombre === seleccionado);
+    if (servicioEncontrado) {
+      setNuevoPrecioInput(servicioEncontrado.precio.toString());
     }
   };
 
-  // DESPLAZAR AUTOMÁTICAMENTE AL CLIENTE CUANDO EXPIRA SU TIEMPO
+  const guardarNuevoServicio = () => {
+    const valorPrecio = parseFloat(nuevoPrecioInput);
+    if (!isNaN(valorPrecio) && valorPrecio >= 0) {
+      setTipoServicio(nuevoTipoInput);
+      setPrecioServicio(valorPrecio);
+      setEditandoServicio(false);
+    }
+  };
+
   const desplazarPorTiempoAgotado = async (turnoExpirado: Turno) => {
     await supabase
       .from('turnos')
@@ -149,7 +166,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     await fetchTurnos();
   };
 
-  // TEMPORIZADOR DE DILIGENCIA
   useEffect(() => {
     if (turnoActual && turnoActual.modalidad_espera === 'diligencia' && turnoActual.llamado_en) {
       const interval = setInterval(() => {
@@ -253,7 +269,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .update({
         estado: 'finalizado',
         finalizado_en: new Date().toISOString(),
-        monto: turnoActual.monto || precioServicio
+        monto: turnoActual.monto || precioServicio,
+        tipo_corte: turnoActual.tipo_corte || tipoServicio
       })
       .eq('id', turnoActual.id);
 
@@ -273,41 +290,60 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         <span className="text-sm font-mono font-bold text-amber-500">{horaActual}</span>
       </div>
 
-      {/* EDITOR RÁPIDO DE PRECIO DE SERVICIO */}
-      <div className={`flex items-center justify-between p-4 rounded-2xl border shadow-sm ${
+      {/* EDITOR DE SERVICIO Y PRECIO */}
+      <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-4 rounded-2xl border shadow-sm ${
         isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
       }`}>
         <div>
           <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">
-            Tarifa de Servicio
+            Servicio Activo & Tarifa
           </span>
-          {editandoPrecio ? (
-            <div className="flex items-center gap-1 mt-1">
-              <span className="text-xl font-bold text-emerald-500">{APP_CONFIG.monedaSimbolo}</span>
-              <input
-                type="number"
-                step="0.5"
-                value={nuevoPrecioInput}
-                onChange={(e) => setNuevoPrecioInput(e.target.value)}
-                className={`w-24 px-2 py-1 text-lg font-bold border rounded-lg focus:outline-none ${
-                  isDark ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-100 border-slate-300 text-emerald-600'
+
+          {editandoServicio ? (
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <select
+                value={nuevoTipoInput}
+                onChange={handleTipoChange}
+                className={`px-3 py-1.5 text-xs font-bold border rounded-lg focus:outline-none ${
+                  isDark ? 'bg-slate-800 border-slate-700 text-amber-400' : 'bg-slate-100 border-slate-300 text-amber-600'
                 }`}
-                autoFocus
-              />
+              >
+                <option value="Corte">✂️ Corte</option>
+                <option value="Corte + Barba">✂️💈 Corte + Barba</option>
+                <option value="Barba">💈 Barba</option>
+              </select>
+
+              <div className="flex items-center gap-1">
+                <span className="text-lg font-bold text-emerald-500">{APP_CONFIG.monedaSimbolo}</span>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={nuevoPrecioInput}
+                  onChange={(e) => setNuevoPrecioInput(e.target.value)}
+                  className={`w-20 px-2 py-1 text-sm font-bold border rounded-lg focus:outline-none ${
+                    isDark ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-100 border-slate-300 text-emerald-600'
+                  }`}
+                />
+              </div>
             </div>
           ) : (
-            <p className="text-2xl font-black text-emerald-500 mt-0.5">
-              {APP_CONFIG.monedaSimbolo}{precioServicio}
-            </p>
+            <div className="flex items-center gap-3 mt-1">
+              <span className="text-sm font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                ✂️ {tipoServicio}
+              </span>
+              <p className="text-2xl font-black text-emerald-500">
+                {APP_CONFIG.monedaSimbolo}{precioServicio}
+              </p>
+            </div>
           )}
         </div>
 
         <div>
-          {editandoPrecio ? (
+          {editandoServicio ? (
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setEditandoPrecio(false)}
+                onClick={() => setEditandoServicio(false)}
                 className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                   isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
                 }`}
@@ -316,7 +352,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
               </button>
               <button
                 type="button"
-                onClick={guardarNuevoPrecio}
+                onClick={guardarNuevoServicio}
                 className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md transition-all active:scale-95"
               >
                 Guardar
@@ -326,8 +362,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             <button
               type="button"
               onClick={() => {
+                setNuevoTipoInput(tipoServicio);
                 setNuevoPrecioInput(precioServicio.toString());
-                setEditandoPrecio(true);
+                setEditandoServicio(true);
               }}
               className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 ${
                 isDark 
@@ -335,7 +372,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   : 'bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20'
               }`}
             >
-              ✏️ Editar Precio
+              ✏️ Editar Servicio
             </button>
           )}
         </div>
@@ -403,7 +440,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             
             <div className="flex flex-wrap items-center justify-center gap-2">
               <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-500 text-sm font-semibold">
-                ✂️ {turnoActual.tipo_corte || 'Corte clásico'} ({APP_CONFIG.monedaSimbolo}{turnoActual.monto || precioServicio})
+                ✂️ {turnoActual.tipo_corte || tipoServicio} ({APP_CONFIG.monedaSimbolo}{turnoActual.monto || precioServicio})
               </span>
             </div>
 
