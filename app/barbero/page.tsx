@@ -26,6 +26,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [horaActual, setHoraActual] = useState<string>('');
   const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
 
+  // ESTADO PARA EDICIÓN DINÁMICA DEL PRECIO DEL SERVICIO
+  const [precioServicio, setPrecioServicio] = useState<number>(10);
+  const [editandoPrecio, setEditandoPrecio] = useState<boolean>(false);
+  const [nuevoPrecioInput, setNuevoPrecioInput] = useState<string>('10');
+
   useEffect(() => {
     const actualizarHora = () => {
       const ahora = new Date();
@@ -100,9 +105,17 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  // DESPLAZAR AUTOMÁTICAMENTE AL CLIENTE CUANDO EXPIRA SU TIEMPO (ENVÍA AL FINAL DE LA COLA)
+  // MANEJAR GUARDADO DEL NUEVO PRECIO
+  const guardarNuevoPrecio = () => {
+    const valor = parseFloat(nuevoPrecioInput);
+    if (!isNaN(valor) && valor >= 0) {
+      setPrecioServicio(valor);
+      setEditandoPrecio(false);
+    }
+  };
+
+  // DESPLAZAR AUTOMÁTICAMENTE AL CLIENTE CUANDO EXPIRA SU TIEMPO
   const desplazarPorTiempoAgotado = async (turnoExpirado: Turno) => {
-    // 1. Regresar el turno expirado a 'espera' actualizando creado_en para enviarlo al final de la cola
     await supabase
       .from('turnos')
       .update({
@@ -112,12 +125,10 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       })
       .eq('id', turnoExpirado.id);
 
-    // 2. Filtrar los clientes en espera restantes (excluyendo el recién expirado)
     const colaRestante = turnos.filter(
       (t) => t.estado === 'espera' && t.id !== turnoExpirado.id
     );
 
-    // 3. Llamar al siguiente cliente dando prioridad al presencial en el local
     if (colaRestante.length > 0) {
       const clienteEnLocal = colaRestante.find((t) => t.modalidad_espera === 'local');
       const siguiente = clienteEnLocal || colaRestante[0];
@@ -138,7 +149,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     await fetchTurnos();
   };
 
-  // TEMPORIZADOR DE 30 MINUTOS CON EXPIRACIÓN AUTOMÁTICA
+  // TEMPORIZADOR DE DILIGENCIA
   useEffect(() => {
     if (turnoActual && turnoActual.modalidad_espera === 'diligencia' && turnoActual.llamado_en) {
       const interval = setInterval(() => {
@@ -161,7 +172,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     }
   }, [turnoActual]);
 
-  // LLAMAR SIGUIENTE CLIENTE MANUALMENTE
   const llamarSiguiente = async () => {
     if (colaEspera.length === 0) return;
 
@@ -200,11 +210,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnos();
   };
 
-  // BOTÓN ROJO: Manda al cliente de vuelta a 'espera' (al final de la cola) y pasa al siguiente
   const pasarSiguientePorAusencia = async () => {
     if (!turnoActual) return;
 
-    // 1. Reubicar el turno actual de vuelta a 'espera' con timestamp actualizado para enviarlo al final de la cola
     await supabase
       .from('turnos')
       .update({
@@ -214,12 +222,10 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       })
       .eq('id', turnoActual.id);
 
-    // 2. Buscar en los que ya estaban en espera
     const colaRestante = turnos.filter(
       (t) => t.estado === 'espera' && t.id !== turnoActual.id
     );
 
-    // 3. Pasar al siguiente cliente priorizando al presencial en el local
     if (colaRestante.length > 0) {
       const clienteEnLocal = colaRestante.find((t) => t.modalidad_espera === 'local');
       const siguiente = clienteEnLocal || colaRestante[0];
@@ -247,6 +253,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .update({
         estado: 'finalizado',
         finalizado_en: new Date().toISOString(),
+        monto: turnoActual.monto || precioServicio
       })
       .eq('id', turnoActual.id);
 
@@ -264,6 +271,74 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           En Línea
         </span>
         <span className="text-sm font-mono font-bold text-amber-500">{horaActual}</span>
+      </div>
+
+      {/* EDITOR RÁPIDO DE PRECIO DE SERVICIO */}
+      <div className={`flex items-center justify-between p-4 rounded-2xl border shadow-sm ${
+        isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+      }`}>
+        <div>
+          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">
+            Tarifa de Servicio
+          </span>
+          {editandoPrecio ? (
+            <div className="flex items-center gap-1 mt-1">
+              <span className="text-xl font-bold text-emerald-500">{APP_CONFIG.monedaSimbolo}</span>
+              <input
+                type="number"
+                step="0.5"
+                value={nuevoPrecioInput}
+                onChange={(e) => setNuevoPrecioInput(e.target.value)}
+                className={`w-24 px-2 py-1 text-lg font-bold border rounded-lg focus:outline-none ${
+                  isDark ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-100 border-slate-300 text-emerald-600'
+                }`}
+                autoFocus
+              />
+            </div>
+          ) : (
+            <p className="text-2xl font-black text-emerald-500 mt-0.5">
+              {APP_CONFIG.monedaSimbolo}{precioServicio}
+            </p>
+          )}
+        </div>
+
+        <div>
+          {editandoPrecio ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setEditandoPrecio(false)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={guardarNuevoPrecio}
+                className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md transition-all active:scale-95"
+              >
+                Guardar
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setNuevoPrecioInput(precioServicio.toString());
+                setEditandoPrecio(true);
+              }}
+              className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 ${
+                isDark 
+                  ? 'bg-slate-800/80 border-slate-700 text-amber-400 hover:bg-slate-800' 
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20'
+              }`}
+            >
+              ✏️ Editar Precio
+            </button>
+          )}
+        </div>
       </div>
 
       {/* DASHBOARD DE NEGOCIO */}
@@ -328,7 +403,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             
             <div className="flex flex-wrap items-center justify-center gap-2">
               <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-500 text-sm font-semibold">
-                ✂️ {turnoActual.tipo_corte || 'Corte clásico'} ({APP_CONFIG.monedaSimbolo}{turnoActual.monto || 10})
+                ✂️ {turnoActual.tipo_corte || 'Corte clásico'} ({APP_CONFIG.monedaSimbolo}{turnoActual.monto || precioServicio})
               </span>
             </div>
 
@@ -424,7 +499,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   }`}>
                     {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 En local'}
                   </span>
-                  <span className="font-bold text-amber-500">{APP_CONFIG.monedaSimbolo}{item.monto || 10}</span>
+                  <span className="font-bold text-amber-500">{APP_CONFIG.monedaSimbolo}{item.monto || precioServicio}</span>
                 </div>
               </div>
             ))}
