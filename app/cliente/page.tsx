@@ -9,7 +9,7 @@ interface TurnoCliente {
   id: string;
   codigo_ticket: string;
   nombre_cliente: string;
-  cliente_telefono?: string;
+  cliente_telefono: string;
   tipo_corte: string;
   monto: number;
   modalidad_espera?: 'local' | 'diligencia';
@@ -23,7 +23,7 @@ interface CitaCliente {
   id: string;
   codigo_ticket: string;
   nombre_cliente: string;
-  cliente_telefono?: string;
+  cliente_telefono: string;
   tipo_corte: string;
   monto: number;
   fecha: string;
@@ -103,7 +103,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return () => clearInterval(interval);
   }, []);
 
-  // CARGAR Y ESCUCHAR TARIFAS DESDE SUPABASE (ANTI-DUPLICADOS)
+  // CARGAR TARIFAS DESDE SUPABASE
   useEffect(() => {
     const fetchTarifas = async () => {
       const { data } = await supabase
@@ -284,10 +284,10 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     }
   }, [turno]);
 
-  // UNIRME A LA COLA HOY
+  // UNIRME A LA COLA HOY (Teléfono Obligatorio)
   const unirmeALaCola = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombre.trim()) return;
+    if (!nombre.trim() || !telefono.trim()) return;
 
     setRegistrando(true);
     const numero = Math.floor(Math.random() * 900) + 100;
@@ -317,10 +317,10 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setRegistrando(false);
   };
 
-  // AGENDAR CITA CON FECHA Y HORA
+  // AGENDAR CITA CON FECHA Y HORA (Teléfono Obligatorio)
   const agendarCita = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombre.trim() || !horaCitaSeleccionada) return;
+    if (!nombre.trim() || !telefono.trim() || !horaCitaSeleccionada) return;
 
     setRegistrando(true);
     const numero = Math.floor(Math.random() * 900) + 100;
@@ -423,6 +423,10 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             <div className="flex justify-between text-slate-300">
               <span>Hora:</span>
               <span className="font-bold text-amber-400">{citaConfirmada.hora_inicio.substring(0, 5)} hrs</span>
+            </div>
+            <div className="flex justify-between text-slate-300">
+              <span>WhatsApp:</span>
+              <span className="font-bold text-emerald-400">{citaConfirmada.cliente_telefono}</span>
             </div>
             <div className="flex justify-between text-slate-300">
               <span>Servicio:</span>
@@ -639,7 +643,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       <form onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita} className="space-y-5">
         <div>
           <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-            Tu Nombre
+            Tu Nombre <span className="text-rose-500">*</span>
           </label>
           <input
             type="text"
@@ -655,10 +659,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
         <div>
           <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-            Teléfono / WhatsApp (Opcional)
+            Teléfono / WhatsApp <span className="text-rose-500">*</span>
           </label>
           <input
             type="tel"
+            required
             placeholder="Ej: 04141234567"
             value={telefono}
             onChange={(e) => setTelefono(e.target.value)}
@@ -795,7 +800,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
         <button
           type="submit"
-          disabled={registrando || (modoRegistro === 'cita' && !horaCitaSeleccionada)}
+          disabled={registrando || !nombre.trim() || !telefono.trim() || (modoRegistro === 'cita' && !horaCitaSeleccionada)}
           className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm uppercase tracking-wider rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50"
         >
           {registrando
