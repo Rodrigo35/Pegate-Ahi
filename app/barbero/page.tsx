@@ -19,20 +19,103 @@ interface Turno {
   creado_en: string;
 }
 
+interface Cita {
+  id: string;
+  codigo_ticket: string;
+  nombre_cliente: string;
+  cliente_telefono?: string;
+  tipo_corte: string;
+  monto: number;
+  fecha: string;
+  hora_inicio: string;
+  estado: string;
+}
+
 const SERVICIOS_DEFAULT = [
   { nombre: 'Corte clásico', precio: 10 },
   { nombre: 'Corte + barba', precio: 15 },
   { nombre: 'Barba', precio: 7 },
 ];
 
+// COMPONENTE PARA CONFIGURAR BLOQUES DE HORARIO CON UN TOQUE
+function GestorHorariosBarbero({ isDark }: { isDark: boolean }) {
+  const [diaSeleccionado, setDiaSeleccionado] = useState<number>(new Date().getDay() || 1);
+  const [bloques, setBloques] = useState<any[]>([]);
+
+  const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+  const cargarBloques = async () => {
+    const { data } = await supabase
+      .from('horarios_disponibles')
+      .select('*')
+      .eq('dia_semana', diaSeleccionado)
+      .order('hora_inicio', { ascending: true });
+    if (data) setBloques(data);
+  };
+
+  useEffect(() => {
+    cargarBloques();
+  }, [diaSeleccionado]);
+
+  // Alternar disponibilidad con UN TOQUE (toggle)
+  const toggleBloque = async (id: string, estadoActual: boolean) => {
+    setBloques(bloques.map((b) => (b.id === id ? { ...b, activo: !estadoActual } : b)));
+    await supabase
+      .from('horarios_disponibles')
+      .update({ activo: !estadoActual })
+      .eq('id', id);
+  };
+
+  return (
+    <div className={`p-5 rounded-2xl border space-y-4 shadow-xl ${
+      isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+    }`}>
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs uppercase tracking-wider font-bold text-slate-400">
+          ⚙️ Activar / Desactivar Bloques de Citas
+        </h3>
+        <select
+          value={diaSeleccionado}
+          onChange={(e) => setDiaSeleccionado(Number(e.target.value))}
+          className={`px-3 py-1.5 text-xs font-bold border rounded-lg focus:outline-none ${
+            isDark ? 'bg-slate-800 text-amber-400 border-slate-700' : 'bg-slate-100 text-slate-800 border-slate-300'
+          }`}
+        >
+          {diasNombres.map((d, idx) => (
+            <option key={idx} value={idx}>{d}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+        {bloques.map((bloque) => (
+          <button
+            key={bloque.id}
+            type="button"
+            onClick={() => toggleBloque(bloque.id, bloque.activo)}
+            className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all text-center ${
+              bloque.activo
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30 shadow-sm'
+                : 'bg-slate-800/20 text-slate-500 border-slate-800 hover:bg-slate-800/40 line-through'
+            }`}
+          >
+            {bloque.hora_inicio.substring(0, 5)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function BarberoContent({ isDark }: { isDark: boolean }) {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [turnosFinalizados, setTurnosFinalizados] = useState<Turno[]>([]);
+  const [citasDelDia, setCitasDelDia] = useState<Cita[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [horaActual, setHoraActual] = useState<string>('');
   const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
 
-  // ESTADOS DE TIPO DE SERVICIO Y PRECIO
+  // SERVICIO Y TARIFA
   const [tipoServicio, setTipoServicio] = useState<string>('Corte clásico');
   const [precioServicio, setPrecioServicio] = useState<number>(10);
   const [editandoServicio, setEditandoServicio] = useState<boolean>(false);
@@ -50,7 +133,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Cargar tarifa persistida desde Supabase
   useEffect(() => {
     const cargarPreciosBase = async () => {
       const { data } = await supabase.from('servicios_config').select('*');
@@ -62,8 +144,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     cargarPreciosBase();
   }, [tipoServicio]);
 
-  const fetchTurnos = async () => {
-    const { data: activos, error: errorActivos } = await supabase
+  const fetchTurnosYCitas = async () => {
+    const { data: activos } = await supabase
       .from('turnos')
       .select('*')
       .in('estado', ['espera', 'atendiendo'])
@@ -72,37 +154,54 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     const inicioHoy = new Date();
     inicioHoy.setHours(0, 0, 0, 0);
 
-    const { data: finalizados, error: errorFinalizados } = await supabase
+    const { data: finalizados } = await supabase
       .from('turnos')
       .select('*')
       .eq('estado', 'finalizado')
       .gte('creado_en', inicioHoy.toISOString())
       .order('creado_en', { ascending: false });
 
-    if (!errorActivos && activos) setTurnos(activos as Turno[]);
-    if (!errorFinalizados && finalizados) setTurnosFinalizados(finalizados as Turno[]);
+    // Cargar Citas para el día de hoy
+    const fechaHoyStr = new Date().toISOString().split('T')[0];
+    const { data: citas } = await supabase
+      .from('citas')
+      .select('*')
+      .eq('fecha', fechaHoyStr)
+      .neq('estado', 'cancelada')
+      .order('hora_inicio', { ascending: true });
+
+    if (activos) setTurnos(activos as Turno[]);
+    if (finalizados) setTurnosFinalizados(finalizados as Turno[]);
+    if (citas) setCitasDelDia(citas as Cita[]);
 
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchTurnos();
-    const channel = supabase
-      .channel('barbero_channel')
+    fetchTurnosYCitas();
+    const channelTurnos = supabase
+      .channel('barbero_turnos')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {
-        fetchTurnos();
+        fetchTurnosYCitas();
+      })
+      .subscribe();
+
+    const channelCitas = supabase
+      .channel('barbero_citas')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'citas' }, () => {
+        fetchTurnosYCitas();
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channelTurnos);
+      supabase.removeChannel(channelCitas);
     };
   }, []);
 
   const turnoActual = turnos.find((t) => t.estado === 'atendiendo');
   const colaEspera = turnos.filter((t) => t.estado === 'espera');
 
-  // DASHBOARD DE NEGOCIO
   const totalIngresos = turnosFinalizados.reduce((acc, t) => acc + (t.monto || 0), 0);
   const totalAtendidos = turnosFinalizados.length;
 
@@ -117,11 +216,21 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     return Math.round(totalMinutos / serviciosConTiempo.length);
   })();
 
-  const enviarWhatsApp = (telefono: string, nombre: string, ticket: string) => {
+  const enviarWhatsAppTurno = (telefono: string, nombre: string, ticket: string) => {
     let numLimpio = telefono.replace(/\D/g, '');
     if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
     const mensaje = encodeURIComponent(
       `¡Hola ${nombre}! ✂️ Tu turno ${ticket} ha sido llamado en ${APP_CONFIG.nombreNegocio}. Dispones de ${APP_CONFIG.tiempoLimiteDiligenciaMin} minutos para llegar al local.`
+    );
+    window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
+  };
+
+  // NOTIFICACIÓN DE WHATSAPP PARA CONFIRMACIÓN DE CITA
+  const enviarWhatsAppCita = (telefono: string, nombre: string, ticket: string, hora: string) => {
+    let numLimpio = telefono.replace(/\D/g, '');
+    if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
+    const mensaje = encodeURIComponent(
+      `¡Hola ${nombre}! 📅 Te recordamos tu cita agendada (${ticket}) para hoy a las ${hora.substring(0, 5)} hrs en ${APP_CONFIG.nombreNegocio}. ¡Te esperamos!`
     );
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
@@ -146,7 +255,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     }
   };
 
-  // Guardar en un solo clic solucionando desincronización de estado
   const guardarNuevoServicio = async () => {
     const valorPrecio = parseFloat(nuevoPrecioInput);
     if (isNaN(valorPrecio) || valorPrecio < 0) return;
@@ -168,7 +276,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           monto: valorPrecio
         })
         .eq('id', turnoActual.id);
-      await fetchTurnos();
+      await fetchTurnosYCitas();
     }
 
     setTipoServicio(nuevoTipoInput);
@@ -203,11 +311,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         .eq('id', siguiente.id);
 
       if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
-        enviarWhatsApp(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
+        enviarWhatsAppTurno(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
       }
     }
 
-    await fetchTurnos();
+    await fetchTurnosYCitas();
   };
 
   useEffect(() => {
@@ -258,16 +366,16 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .eq('id', siguiente.id);
 
     if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
-      enviarWhatsApp(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
+      enviarWhatsAppTurno(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
     }
 
-    fetchTurnos();
+    fetchTurnosYCitas();
   };
 
   const confirmarLlegadaCliente = async () => {
     if (!turnoActual) return;
     await supabase.from('turnos').update({ modalidad_espera: 'local', llamado_en: null }).eq('id', turnoActual.id);
-    fetchTurnos();
+    fetchTurnosYCitas();
   };
 
   const pasarSiguientePorAusencia = async () => {
@@ -299,11 +407,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         .eq('id', siguiente.id);
 
       if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
-        enviarWhatsApp(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
+        enviarWhatsAppTurno(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
       }
     }
 
-    await fetchTurnos();
+    await fetchTurnosYCitas();
   };
 
   const finalizarServicio = async () => {
@@ -318,7 +426,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       })
       .eq('id', turnoActual.id);
 
-    fetchTurnos();
+    fetchTurnosYCitas();
   };
 
   return (
@@ -422,6 +530,55 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
+      {/* GESTOR DE HORARIOS DE CITAS */}
+      <GestorHorariosBarbero isDark={isDark} />
+
+      {/* SECCIÓN DE CITAS AGENDADAS PARA HOY */}
+      {citasDelDia.length > 0 && (
+        <div className={`border rounded-2xl p-5 shadow-xl space-y-3 ${
+          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+        }`}>
+          <div className="flex items-center justify-between border-b pb-2 border-slate-700/20">
+            <h3 className="text-xs uppercase tracking-wider text-amber-400 font-bold flex items-center gap-2">
+              📅 Citas Agendadas para Hoy ({citasDelDia.length})
+            </h3>
+          </div>
+
+          <div className="space-y-2 max-h-56 overflow-y-auto">
+            {citasDelDia.map((cita) => (
+              <div
+                key={cita.id}
+                className={`flex flex-col sm:flex-row items-start sm:items-center justify-between border p-3 rounded-xl gap-2 ${
+                  isDark ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold rounded-lg">
+                    {cita.hora_inicio.substring(0, 5)}
+                  </span>
+                  <div>
+                    <span className={`font-bold text-sm block ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {cita.nombre_cliente} ({cita.codigo_ticket})
+                    </span>
+                    <span className="text-[10px] text-slate-400">✂️ {cita.tipo_corte} - {APP_CONFIG.monedaSimbolo}{cita.monto}</span>
+                  </div>
+                </div>
+
+                {cita.cliente_telefono && (
+                  <button
+                    type="button"
+                    onClick={() => enviarWhatsAppCita(cita.cliente_telefono!, cita.nombre_cliente, cita.codigo_ticket, cita.hora_inicio)}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg shadow transition-all active:scale-95 flex items-center gap-1"
+                  >
+                    📲 Recordatorio WA
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* DASHBOARD DE NEGOCIO */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className={`border rounded-2xl p-4 text-center shadow-md ${
@@ -491,7 +648,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             {turnoActual.cliente_telefono && (
               <button
                 type="button"
-                onClick={() => enviarWhatsApp(turnoActual.cliente_telefono!, turnoActual.nombre_cliente, turnoActual.codigo_ticket)}
+                onClick={() => enviarWhatsAppTurno(turnoActual.cliente_telefono!, turnoActual.nombre_cliente, turnoActual.codigo_ticket)}
                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all active:scale-95"
               >
                 📲 Reenviar WhatsApp ({turnoActual.cliente_telefono})
@@ -642,7 +799,7 @@ export default function BarberoView() {
         <header className="flex items-center justify-between border-b border-slate-700/20 pb-4">
           <div>
             <h1 className="text-2xl font-black text-amber-500 tracking-wide">{APP_CONFIG.nombreNegocio}</h1>
-            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Control de Barbería & Turnos</p>
+            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Control de Barbería & Citas</p>
           </div>
 
           <div className={`flex items-center gap-1 p-1 rounded-xl border text-xs font-semibold ${
