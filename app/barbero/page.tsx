@@ -146,35 +146,34 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     }
   };
 
+  // Guardar en un solo clic solucionando desincronización de estado
   const guardarNuevoServicio = async () => {
     const valorPrecio = parseFloat(nuevoPrecioInput);
-    if (!isNaN(valorPrecio) && valorPrecio >= 0) {
-      setTipoServicio(nuevoTipoInput);
-      setPrecioServicio(valorPrecio);
+    if (isNaN(valorPrecio) || valorPrecio < 0) return;
 
-      let servicioId = 'corte_clasico';
-      if (nuevoTipoInput === 'Corte + barba') servicioId = 'corte_barba';
-      if (nuevoTipoInput === 'Barba') servicioId = 'barba';
+    let servicioId = 'corte_clasico';
+    if (nuevoTipoInput === 'Corte + barba') servicioId = 'corte_barba';
+    if (nuevoTipoInput === 'Barba') servicioId = 'barba';
 
-      // Actualizar ÚNICAMENTE el precio sin sobreescribir la columna nombre
+    await supabase
+      .from('servicios_config')
+      .update({ precio: valorPrecio })
+      .eq('id', servicioId);
+
+    if (turnoActual) {
       await supabase
-        .from('servicios_config')
-        .update({ precio: valorPrecio })
-        .eq('id', servicioId);
-
-      if (turnoActual) {
-        await supabase
-          .from('turnos')
-          .update({
-            tipo_corte: nuevoTipoInput,
-            monto: valorPrecio
-          })
-          .eq('id', turnoActual.id);
-        fetchTurnos();
-      }
-
-      setEditandoServicio(false);
+        .from('turnos')
+        .update({
+          tipo_corte: nuevoTipoInput,
+          monto: valorPrecio
+        })
+        .eq('id', turnoActual.id);
+      await fetchTurnos();
     }
+
+    setTipoServicio(nuevoTipoInput);
+    setPrecioServicio(valorPrecio);
+    setEditandoServicio(false);
   };
 
   const desplazarPorTiempoAgotado = async (turnoExpirado: Turno) => {
