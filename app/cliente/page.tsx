@@ -25,7 +25,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
+  
+  // ESTADO DINÁMICO DE SERVICIOS (Obtiene tarifas actualizadas)
+  const [listaServicios, setListaServicios] = useState(APP_CONFIG.servicios);
   const [servicioSeleccionado, setServicioSeleccionado] = useState(APP_CONFIG.servicios[0]);
+  
   const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
   const [registrando, setRegistrando] = useState(false);
 
@@ -454,7 +458,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           Selecciona tu servicio
         </label>
         <div className="grid grid-cols-1 gap-2.5">
-          {APP_CONFIG.servicios.map((srv) => {
+          {listaServicios.map((srv) => {
             const selected = servicioSeleccionado.id === srv.id;
             return (
               <div
