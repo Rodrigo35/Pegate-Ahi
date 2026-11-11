@@ -45,12 +45,10 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [horaActual, setHoraActual] = useState<string>('');
   const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
 
-  // ESTADOS DE GESTOR DE HORARIOS DE CITAS
   const [diaSeleccionado, setDiaSeleccionado] = useState<number>(1);
   const [bloques, setBloques] = useState<any[]>([]);
   const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-  // SERVICIO Y TARIFA
   const [tipoServicio, setTipoServicio] = useState<string>('Corte clásico');
   const [precioServicio, setPrecioServicio] = useState<number>(10);
   const [editandoServicio, setEditandoServicio] = useState<boolean>(false);
@@ -71,7 +69,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     return () => clearInterval(interval);
   }, []);
 
-  // CARGAR BLOQUES DE HORARIO SEGÚN EL DÍA SELECCIONADO
   useEffect(() => {
     const cargarBloques = async () => {
       const { data } = await supabase
@@ -84,7 +81,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     cargarBloques();
   }, [diaSeleccionado]);
 
-  // TOGGLE DE DISPONIBILIDAD CON UN TOQUE
   const toggleBloque = async (id: string, estadoActual: boolean) => {
     setBloques(bloques.map((b) => (b.id === id ? { ...b, activo: !estadoActual } : b)));
     await supabase
@@ -121,13 +117,13 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .gte('creado_en', inicioHoy.toISOString())
       .order('creado_en', { ascending: false });
 
-    // Traer citas de HOY Y DÍAS FUTUROS
     const fechaHoyStr = new Date().toISOString().split('T')[0];
     const { data: citas } = await supabase
       .from('citas')
       .select('*')
       .gte('fecha', fechaHoyStr)
       .neq('estado', 'cancelada')
+      .neq('estado', 'atendida')
       .order('fecha', { ascending: true })
       .order('hora_inicio', { ascending: true });
 
@@ -186,13 +182,40 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  const enviarWhatsAppCita = (telefono: string, nombre: string, ticket: string, fechaHora: string) => {
-    let numLimpio = telefono.replace(/\D/g, '');
+  // NOTIFICAR WA Y PASAR A COLA DE HOY SI LA CITA ES HOY
+  const procesarNotificacionCitaWA = async (cita: Cita, telefonoEspecifico?: string) => {
+    const telefonoFinal = telefonoEspecifico || cita.cliente_telefono;
+    if (!telefonoFinal) return;
+
+    let numLimpio = telefonoFinal.replace(/\D/g, '');
     if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
     const mensaje = encodeURIComponent(
-      `¡Hola ${nombre}! 📅 Te recordamos tu cita agendada (${ticket}) para el ${fechaHora} hrs en ${APP_CONFIG.nombreNegocio}. ¡Te esperamos!`
+      `¡Hola ${cita.nombre_cliente}! 📅 Te recordamos tu cita agendada (${cita.codigo_ticket}) para hoy a las ${cita.hora_inicio.substring(0, 5)} hrs en ${APP_CONFIG.nombreNegocio}. ¡Te esperamos!`
     );
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
+
+    const hoyStr = new Date().toISOString().split('T')[0];
+
+    // Si la cita corresponde al día de hoy, bajar a la lista de espera (turnos)
+    if (cita.fecha === hoyStr) {
+      await supabase.from('turnos').insert([
+        {
+          codigo_ticket: cita.codigo_ticket,
+          nombre_cliente: cita.nombre_cliente,
+          cliente_telefono: telefonoFinal,
+          tipo_corte: cita.tipo_corte,
+          monto: cita.monto,
+          modalidad_espera: 'local',
+          estado: 'espera',
+        },
+      ]);
+
+      await supabase.from('citas').update({ estado: 'atendida', cliente_telefono: telefonoFinal }).eq('id', cita.id);
+    } else if (telefonoEspecifico) {
+      await supabase.from('citas').update({ cliente_telefono: telefonoEspecifico }).eq('id', cita.id);
+    }
+
+    fetchTurnosYCitas();
   };
 
   const handleTipoChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -391,7 +414,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
   return (
     <div className="space-y-6">
-      {/* Reloj Servidor */}
       <div className={`flex items-center justify-between p-4 rounded-2xl border ${
         isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
       }`}>
@@ -402,7 +424,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         <span className="text-sm font-mono font-bold text-amber-500">{horaActual}</span>
       </div>
 
-      {/* EDITOR DE SERVICIO Y PRECIO */}
       <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-4 rounded-2xl border shadow-sm ${
         isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
       }`}>
@@ -490,7 +511,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* GESTOR DE BLOQUES DE HORARIOS */}
       <div className={`p-5 rounded-2xl border space-y-4 shadow-xl ${
         isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
       }`}>
@@ -529,7 +549,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* SECCIÓN DE CITAS AGENDADAS */}
       {citasDelDia.length > 0 && (
         <div className={`border rounded-2xl p-5 shadow-xl space-y-3 ${
           isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
@@ -544,12 +563,12 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             {citasDelDia.map((cita) => (
               <div
                 key={cita.id}
-                className={`flex flex-col sm:flex-row items-start sm:items-center justify-between border p-3 rounded-xl gap-2 ${
+                className={`flex flex-col sm:flex-row items-start sm:items-center justify-between border p-3.5 rounded-xl gap-3 ${
                   isDark ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-50 border-slate-200'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold rounded-lg flex flex-col items-center">
+                  <span className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold rounded-lg flex flex-col items-center">
                     <span className="text-[10px] text-slate-400">{cita.fecha}</span>
                     <span className="text-sm text-amber-400 font-black">{cita.hora_inicio.substring(0, 5)}</span>
                   </span>
@@ -557,31 +576,31 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                     <span className={`font-bold text-sm block ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       {cita.nombre_cliente} ({cita.codigo_ticket})
                     </span>
-                    <span className="text-[10px] text-slate-400">✂️ {cita.tipo_corte} - {APP_CONFIG.monedaSimbolo}{cita.monto}</span>
+                    <span className="text-xs text-slate-400 font-medium">
+                      ✂️ {cita.tipo_corte} - <span className="text-emerald-400 font-bold">{APP_CONFIG.monedaSimbolo}{cita.monto}</span>
+                    </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
                   {cita.cliente_telefono ? (
                     <button
                       type="button"
-                      onClick={() => enviarWhatsAppCita(cita.cliente_telefono!, cita.nombre_cliente, cita.codigo_ticket, `${cita.fecha} a las ${cita.hora_inicio.substring(0, 5)}`)}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg shadow transition-all active:scale-95 flex items-center gap-1"
+                      onClick={() => procesarNotificacionCitaWA(cita)}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition-all active:scale-95 flex items-center gap-1"
                     >
                       📲 Recordatorio WA
                     </button>
                   ) : (
                     <button
                       type="button"
-                      onClick={async () => {
-                        const num = prompt(`Ingresa el número de WhatsApp para ${cita.nombre_cliente}:`);
+                      onClick={() => {
+                        const num = prompt(`Ingresa el teléfono para ${cita.nombre_cliente}:`);
                         if (num) {
-                          await supabase.from('citas').update({ cliente_telefono: num }).eq('id', cita.id);
-                          enviarWhatsAppCita(num, cita.nombre_cliente, cita.codigo_ticket, `${cita.fecha} a las ${cita.hora_inicio.substring(0, 5)}`);
-                          fetchTurnosYCitas();
+                          procesarNotificacionCitaWA(cita, num);
                         }
                       }}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 font-bold text-[11px] rounded-lg transition-all flex items-center gap-1"
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1"
                     >
                       ➕ Añadir Tlf y Notificar
                     </button>
@@ -593,7 +612,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* DASHBOARD DE NEGOCIO */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className={`border rounded-2xl p-4 text-center shadow-md ${
           isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
@@ -624,7 +642,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* CLIENTE ACTUAL EN SILLA */}
       <div className={`border rounded-2xl p-6 shadow-2xl space-y-6 ${
         isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
       }`}>
@@ -719,7 +736,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* LISTA DE ESPERA */}
       {colaEspera.length > 0 && (
         <div className={`border rounded-2xl p-5 shadow-xl space-y-3 ${
           isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
@@ -759,7 +775,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* HISTORIAL DE ATENDIDOS HOY */}
       {turnosFinalizados.length > 0 && (
         <div className={`border rounded-2xl p-5 shadow-xl space-y-3 ${
           isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
