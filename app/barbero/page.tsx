@@ -50,6 +50,18 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     return () => clearInterval(interval);
   }, []);
 
+  // 1. Cargar tarifa persistida desde Supabase
+  useEffect(() => {
+    const cargarPreciosBase = async () => {
+      const { data } = await supabase.from('servicios_config').select('*');
+      if (data && data.length > 0) {
+        const servicioActual = data.find((s) => s.nombre === tipoServicio);
+        if (servicioActual) setPrecioServicio(Number(servicioActual.precio));
+      }
+    };
+    cargarPreciosBase();
+  }, [tipoServicio]);
+
   const fetchTurnos = async () => {
     const { data: activos, error: errorActivos } = await supabase
       .from('turnos')
@@ -114,22 +126,40 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  const handleTipoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleTipoChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const seleccionado = e.target.value;
     setNuevoTipoInput(seleccionado);
-    const servicioEncontrado = SERVICIOS_DEFAULT.find((s) => s.nombre === seleccionado);
-    if (servicioEncontrado) {
-      setNuevoPrecioInput(servicioEncontrado.precio.toString());
+
+    // Intentar leer el precio guardado en la BD para ese servicio
+    const { data } = await supabase.from('servicios_config').select('*').eq('nombre', seleccionado).single();
+    if (data) {
+      setNuevoPrecioInput(data.precio.toString());
+    } else {
+      const servicioEncontrado = SERVICIOS_DEFAULT.find((s) => s.nombre === seleccionado);
+      if (servicioEncontrado) {
+        setNuevoPrecioInput(servicioEncontrado.precio.toString());
+      }
     }
   };
 
+  // 2. Guardar nuevo precio en Supabase (Persistencia)
   const guardarNuevoServicio = async () => {
     const valorPrecio = parseFloat(nuevoPrecioInput);
     if (!isNaN(valorPrecio) && valorPrecio >= 0) {
       setTipoServicio(nuevoTipoInput);
       setPrecioServicio(valorPrecio);
 
-      // Si hay un turno activo en la silla, actualizamos directamente su servicio y monto en Supabase
+      let servicioId = 'corte_clasico';
+      if (nuevoTipoInput === 'Corte + barba') servicioId = 'corte_barba';
+      if (nuevoTipoInput === 'Barba') servicioId = 'barba';
+
+      // Actualizar la tarifa persistente en la BD
+      await supabase
+        .from('servicios_config')
+        .update({ precio: valorPrecio, nombre: nuevoTipoInput })
+        .eq('id', servicioId);
+
+      // Si hay un turno activo en la silla, se actualiza su monto al instante
       if (turnoActual) {
         await supabase
           .from('turnos')
