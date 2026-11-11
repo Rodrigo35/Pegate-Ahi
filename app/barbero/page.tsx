@@ -37,76 +37,6 @@ const SERVICIOS_DEFAULT = [
   { nombre: 'Barba', precio: 7 },
 ];
 
-// COMPONENTE PARA CONFIGURAR BLOQUES DE HORARIO CON UN TOQUE
-function GestorHorariosBarbero({ isDark }: { isDark: boolean }) {
-  const [diaSeleccionado, setDiaSeleccionado] = useState<number>(new Date().getDay() || 1);
-  const [bloques, setBloques] = useState<any[]>([]);
-
-  const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-
-  const cargarBloques = async () => {
-    const { data } = await supabase
-      .from('horarios_disponibles')
-      .select('*')
-      .eq('dia_semana', diaSeleccionado)
-      .order('hora_inicio', { ascending: true });
-    if (data) setBloques(data);
-  };
-
-  useEffect(() => {
-    cargarBloques();
-  }, [diaSeleccionado]);
-
-  // Alternar disponibilidad con UN TOQUE (toggle)
-  const toggleBloque = async (id: string, estadoActual: boolean) => {
-    setBloques(bloques.map((b) => (b.id === id ? { ...b, activo: !estadoActual } : b)));
-    await supabase
-      .from('horarios_disponibles')
-      .update({ activo: !estadoActual })
-      .eq('id', id);
-  };
-
-  return (
-    <div className={`p-5 rounded-2xl border space-y-4 shadow-xl ${
-      isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-    }`}>
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs uppercase tracking-wider font-bold text-slate-400">
-          ⚙️ Activar / Desactivar Bloques de Citas
-        </h3>
-        <select
-          value={diaSeleccionado}
-          onChange={(e) => setDiaSeleccionado(Number(e.target.value))}
-          className={`px-3 py-1.5 text-xs font-bold border rounded-lg focus:outline-none ${
-            isDark ? 'bg-slate-800 text-amber-400 border-slate-700' : 'bg-slate-100 text-slate-800 border-slate-300'
-          }`}
-        >
-          {diasNombres.map((d, idx) => (
-            <option key={idx} value={idx}>{d}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-        {bloques.map((bloque) => (
-          <button
-            key={bloque.id}
-            type="button"
-            onClick={() => toggleBloque(bloque.id, bloque.activo)}
-            className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all text-center ${
-              bloque.activo
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30 shadow-sm'
-                : 'bg-slate-800/20 text-slate-500 border-slate-800 hover:bg-slate-800/40 line-through'
-            }`}
-          >
-            {bloque.hora_inicio.substring(0, 5)}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function BarberoContent({ isDark }: { isDark: boolean }) {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [turnosFinalizados, setTurnosFinalizados] = useState<Turno[]>([]);
@@ -114,6 +44,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [horaActual, setHoraActual] = useState<string>('');
   const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
+
+  // ESTADOS DE GESTOR DE HORARIOS DE CITAS
+  const [diaSeleccionado, setDiaSeleccionado] = useState<number>(new Date().getDay() || 1);
+  const [bloques, setBloques] = useState<any[]>([]);
+  const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
   // SERVICIO Y TARIFA
   const [tipoServicio, setTipoServicio] = useState<string>('Corte clásico');
@@ -132,6 +67,28 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     const interval = setInterval(actualizarHora, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // CARGAR BLOQUES DE HORARIO SEGÚN EL DÍA SELECCIONADO
+  useEffect(() => {
+    const cargarBloques = async () => {
+      const { data } = await supabase
+        .from('horarios_disponibles')
+        .select('*')
+        .eq('dia_semana', diaSeleccionado)
+        .order('hora_inicio', { ascending: true });
+      if (data) setBloques(data);
+    };
+    cargarBloques();
+  }, [diaSeleccionado]);
+
+  // TOGGLE DE DISPONIBILIDAD CON UN TOQUE
+  const toggleBloque = async (id: string, estadoActual: boolean) => {
+    setBloques(bloques.map((b) => (b.id === id ? { ...b, activo: !estadoActual } : b)));
+    await supabase
+      .from('horarios_disponibles')
+      .update({ activo: !estadoActual })
+      .eq('id', id);
+  };
 
   useEffect(() => {
     const cargarPreciosBase = async () => {
@@ -161,7 +118,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .gte('creado_en', inicioHoy.toISOString())
       .order('creado_en', { ascending: false });
 
-    // Cargar Citas para el día de hoy
     const fechaHoyStr = new Date().toISOString().split('T')[0];
     const { data: citas } = await supabase
       .from('citas')
@@ -225,7 +181,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  // NOTIFICACIÓN DE WHATSAPP PARA CONFIRMACIÓN DE CITA
   const enviarWhatsAppCita = (telefono: string, nombre: string, ticket: string, hora: string) => {
     let numLimpio = telefono.replace(/\D/g, '');
     if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
@@ -530,8 +485,44 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* GESTOR DE HORARIOS DE CITAS */}
-      <GestorHorariosBarbero isDark={isDark} />
+      {/* GESTOR DE BLOQUES DE HORARIOS */}
+      <div className={`p-5 rounded-2xl border space-y-4 shadow-xl ${
+        isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+      }`}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs uppercase tracking-wider font-bold text-slate-400">
+            ⚙️ Activar / Desactivar Bloques de Citas
+          </h3>
+          <select
+            value={diaSeleccionado}
+            onChange={(e) => setDiaSeleccionado(Number(e.target.value))}
+            className={`px-3 py-1.5 text-xs font-bold border rounded-lg focus:outline-none ${
+              isDark ? 'bg-slate-800 text-amber-400 border-slate-700' : 'bg-slate-100 text-slate-800 border-slate-300'
+            }`}
+          >
+            {diasNombres.map((d, idx) => (
+              <option key={idx} value={idx}>{d}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+          {bloques.map((bloque) => (
+            <button
+              key={bloque.id}
+              type="button"
+              onClick={() => toggleBloque(bloque.id, bloque.activo)}
+              className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all text-center ${
+                bloque.activo
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30 shadow-sm'
+                  : 'bg-slate-800/20 text-slate-500 border-slate-800 hover:bg-slate-800/40 line-through'
+              }`}
+            >
+              {bloque.hora_inicio.substring(0, 5)}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* SECCIÓN DE CITAS AGENDADAS PARA HOY */}
       {citasDelDia.length > 0 && (
