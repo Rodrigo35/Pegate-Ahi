@@ -19,6 +19,18 @@ interface TurnoCliente {
   creado_en: string;
 }
 
+interface CitaCliente {
+  id: string;
+  codigo_ticket: string;
+  nombre_cliente: string;
+  cliente_telefono?: string;
+  tipo_corte: string;
+  monto: number;
+  fecha: string;
+  hora_inicio: string;
+  estado: string;
+}
+
 interface ServicioOption {
   id: string;
   nombre: string;
@@ -30,6 +42,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
 
+  // Modo de registro: 'cola' o 'cita'
+  const [modoRegistro, setModoRegistro] = useState<'cola' | 'cita'>('cola');
+
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
 
@@ -40,13 +55,19 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     APP_CONFIG.servicios[0]
   );
 
+  // Estados para Cola Presencial
   const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
   const [registrando, setRegistrando] = useState(false);
-
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
   const [personasAdelante, setPersonasAdelante] = useState<number>(0);
   const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Estados para Agendamiento de Citas
+  const [fechaCita, setFechaCita] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [bloquesDisponibles, setBloquesDisponibles] = useState<any[]>([]);
+  const [horaCitaSeleccionada, setHoraCitaSeleccionada] = useState<string>('');
+  const [citaConfirmada, setCitaConfirmada] = useState<CitaCliente | null>(null);
 
   // GPS y Reloj
   const [horaActual, setHoraActual] = useState<string>('');
@@ -82,7 +103,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return () => clearInterval(interval);
   }, []);
 
-  // CARGAR Y ESCUCHAR TARIFAS DESDE SUPABASE SIN DUPLICAR ELEMENTOS
+  // CARGAR Y ESCUCHAR TARIFAS DESDE SUPABASE (ANTI-DUPLICADOS)
   useEffect(() => {
     const fetchTarifas = async () => {
       const { data } = await supabase
@@ -91,21 +112,24 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         .order('id', { ascending: true });
 
       if (data && data.length > 0) {
-        const formateados: ServicioOption[] = data.map((s) => {
+        const unicosMap = new Map();
+        data.forEach((s) => {
           let icono = '✂️';
-          if (s.id === 'barba' || s.nombre.toLowerCase() === 'barba') {
+          if (s.id === 'barba' || (s.nombre.toLowerCase().includes('barba') && !s.nombre.includes('+'))) {
             icono = '💈';
           } else if (s.id === 'corte_barba' || s.nombre.includes('+')) {
             icono = '✂️💈';
           }
 
-          return {
+          unicosMap.set(s.nombre.toLowerCase().trim(), {
             id: s.id,
             nombre: s.nombre,
             precio: Number(s.precio),
             icono: icono
-          };
+          });
         });
+
+        const formateados: ServicioOption[] = Array.from(unicosMap.values());
 
         setListaServicios(formateados);
         setServicioSeleccionado((prev) => {
@@ -128,6 +152,38 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // CARGAR BLOQUES DE HORARIOS PARA CITAS
+  useEffect(() => {
+    if (modoRegistro !== 'cita') return;
+
+    const cargarHorarios = async () => {
+      const fechaObj = new Date(fechaCita + 'T00:00:00');
+      const diaSemana = fechaObj.getDay();
+
+      const { data: bloques } = await supabase
+        .from('horarios_disponibles')
+        .select('*')
+        .eq('dia_semana', diaSemana)
+        .eq('activo', true)
+        .order('hora_inicio', { ascending: true });
+
+      const { data: citasOcupadas } = await supabase
+        .from('citas')
+        .select('hora_inicio')
+        .eq('fecha', fechaCita)
+        .neq('estado', 'cancelada');
+
+      const horasOcupadas = new Set(citasOcupadas?.map((c) => c.hora_inicio));
+
+      if (bloques) {
+        const libres = bloques.filter((b) => !horasOcupadas.has(b.hora_inicio));
+        setBloquesDisponibles(libres);
+      }
+    };
+
+    cargarHorarios();
+  }, [fechaCita, modoRegistro]);
 
   const obtenerUbicacionGPS = () => {
     if ('geolocation' in navigator) {
@@ -228,6 +284,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     }
   }, [turno]);
 
+  // UNIRME A LA COLA HOY
   const unirmeALaCola = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre.trim()) return;
@@ -260,6 +317,38 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setRegistrando(false);
   };
 
+  // AGENDAR CITA CON FECHA Y HORA
+  const agendarCita = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nombre.trim() || !horaCitaSeleccionada) return;
+
+    setRegistrando(true);
+    const numero = Math.floor(Math.random() * 900) + 100;
+    const codigo = `C-${numero}`;
+
+    const { data, error } = await supabase
+      .from('citas')
+      .insert([
+        {
+          codigo_ticket: codigo,
+          nombre_cliente: nombre,
+          cliente_telefono: telefono,
+          tipo_corte: servicioSeleccionado.nombre,
+          monto: servicioSeleccionado.precio,
+          fecha: fechaCita,
+          hora_inicio: horaCitaSeleccionada,
+          estado: 'confirmada',
+        },
+      ])
+      .select()
+      .single();
+
+    if (!error && data) {
+      setCitaConfirmada(data as CitaCliente);
+    }
+    setRegistrando(false);
+  };
+
   const cambiarModalidadEnVivo = async (nuevaModalidad: 'local' | 'diligencia') => {
     if (!turno) return;
     setTurno({ ...turno, modalidad_espera: nuevaModalidad });
@@ -282,6 +371,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
   const volverAlInicio = () => {
     setTurno(null);
+    setCitaConfirmada(null);
     setNombre('');
     setTelefono('');
     window.location.href = '/cliente';
@@ -306,7 +396,52 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return <div className="text-center py-10 text-slate-400 text-xs animate-pulse">Cargando datos...</div>;
   }
 
-  // --- MODO MONITOR DE TURNO ---
+  // --- VISTA CITA CONFIRMADA ---
+  if (citaConfirmada) {
+    return (
+      <div className="space-y-6">
+        <div className={`p-6 rounded-2xl text-center shadow-lg border space-y-4 ${
+          isDark ? 'bg-slate-800/80 border-slate-700/60' : 'bg-emerald-500/10 border-emerald-500/30'
+        }`}>
+          <span className="text-4xl">📅</span>
+          <h2 className="text-xl font-black text-emerald-500 uppercase">¡CITA RESERVADA CON ÉXITO!</h2>
+          
+          <div className="space-y-1">
+            <span className={`text-[10px] font-bold uppercase tracking-widest ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              Código de Confirmación
+            </span>
+            <p className="text-5xl font-black text-amber-500">{citaConfirmada.codigo_ticket}</p>
+          </div>
+
+          <p className={`text-base font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{citaConfirmada.nombre_cliente}</p>
+          
+          <div className="p-4 rounded-xl border bg-slate-950/40 border-slate-800 space-y-2 text-xs">
+            <div className="flex justify-between text-slate-300">
+              <span>Fecha:</span>
+              <span className="font-bold text-amber-400">{citaConfirmada.fecha}</span>
+            </div>
+            <div className="flex justify-between text-slate-300">
+              <span>Hora:</span>
+              <span className="font-bold text-amber-400">{citaConfirmada.hora_inicio.substring(0, 5)} hrs</span>
+            </div>
+            <div className="flex justify-between text-slate-300">
+              <span>Servicio:</span>
+              <span className="font-bold text-emerald-400">{citaConfirmada.tipo_corte} ({APP_CONFIG.monedaSimbolo}{citaConfirmada.monto})</span>
+            </div>
+          </div>
+
+          <button
+            onClick={volverAlInicio}
+            className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase rounded-xl transition-all shadow-lg active:scale-95"
+          >
+            Aceptar / Volver al Inicio
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- MODO MONITOR DE TURNO EN COLA ---
   if (turno && turno.estado !== 'cancelado') {
     const tiempoEstimado = personasAdelante * APP_CONFIG.tiempoEstimadoPorClienteMin;
 
@@ -471,7 +606,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
   // --- FORMULARIO REGISTRO INICIAL ---
   return (
-    <form onSubmit={unirmeALaCola} className="space-y-5">
+    <div className="space-y-5">
       <div className={`flex justify-between items-center text-xs px-4 py-2 rounded-xl border mb-2 ${
         isDark ? 'text-slate-400 bg-slate-800/40 border-slate-800' : 'text-slate-600 bg-slate-100 border-slate-200'
       }`}>
@@ -479,115 +614,198 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         <span className="font-mono font-bold text-amber-500 text-sm">{horaActual}</span>
       </div>
 
-      <div>
-        <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-          Tu Nombre
-        </label>
-        <input
-          type="text"
-          required
-          placeholder="Ej: Carlos Pérez"
-          value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
-          className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:border-amber-500 transition-all ${
-            isDark ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+      {/* Pestañas para elegir Modo */}
+      <div className="grid grid-cols-2 gap-2 p-1 bg-slate-800/50 border border-slate-700/60 rounded-xl text-xs font-bold">
+        <button
+          type="button"
+          onClick={() => setModoRegistro('cola')}
+          className={`py-2.5 rounded-lg transition-all ${
+            modoRegistro === 'cola' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
           }`}
-        />
+        >
+          💈 Cola Presencial (Hoy)
+        </button>
+        <button
+          type="button"
+          onClick={() => setModoRegistro('cita')}
+          className={`py-2.5 rounded-lg transition-all ${
+            modoRegistro === 'cita' ? 'bg-amber-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          📅 Reservar Cita Previa
+        </button>
       </div>
 
-      <div>
-        <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-          Teléfono / WhatsApp (Opcional)
-        </label>
-        <input
-          type="tel"
-          placeholder="Ej: 04141234567"
-          value={telefono}
-          onChange={(e) => setTelefono(e.target.value)}
-          className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:border-amber-500 transition-all ${
-            isDark ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
-          }`}
-        />
-      </div>
+      <form onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita} className="space-y-5">
+        <div>
+          <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+            Tu Nombre
+          </label>
+          <input
+            type="text"
+            required
+            placeholder="Ej: Carlos Pérez"
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+            className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:border-amber-500 transition-all ${
+              isDark ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+            }`}
+          />
+        </div>
 
-      <div className="space-y-2">
-        <label className={`block text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-          Selecciona tu servicio
-        </label>
-        <div className="grid grid-cols-1 gap-2.5">
-          {listaServicios.map((srv) => {
-            const selected = servicioSeleccionado.nombre === srv.nombre;
-            return (
-              <div
-                key={srv.id}
-                onClick={() => setServicioSeleccionado(srv)}
-                className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
-                  selected
+        <div>
+          <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+            Teléfono / WhatsApp (Opcional)
+          </label>
+          <input
+            type="tel"
+            placeholder="Ej: 04141234567"
+            value={telefono}
+            onChange={(e) => setTelefono(e.target.value)}
+            className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:border-amber-500 transition-all ${
+              isDark ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+            }`}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className={`block text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+            Selecciona tu servicio
+          </label>
+          <div className="grid grid-cols-1 gap-2.5">
+            {listaServicios.map((srv) => {
+              const selected = servicioSeleccionado.nombre === srv.nombre;
+              return (
+                <div
+                  key={srv.id}
+                  onClick={() => setServicioSeleccionado(srv)}
+                  className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
+                    selected
+                      ? 'bg-amber-500/10 border-amber-500 text-amber-500 font-bold'
+                      : isDark ? 'bg-slate-800/40 border-slate-800 text-slate-300 hover:border-slate-700' : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{srv.icono}</span>
+                    <span className="font-bold text-sm">{srv.nombre}</span>
+                  </div>
+                  <span className="font-extrabold text-sm">{APP_CONFIG.monedaSimbolo}{srv.precio}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* MODO COLA PRESENCIAL */}
+        {modoRegistro === 'cola' && (
+          <div className="space-y-2">
+            <label className={`block text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+              ¿Dónde esperarás tu turno?
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setModalidadEspera('local')}
+                className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                  modalidadEspera === 'local'
                     ? 'bg-amber-500/10 border-amber-500 text-amber-500 font-bold'
-                    : isDark ? 'bg-slate-800/40 border-slate-800 text-slate-300 hover:border-slate-700' : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                    : isDark ? 'bg-slate-800/40 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-xl">{srv.icono}</span>
-                  <span className="font-bold text-sm">{srv.nombre}</span>
+                <span className="text-lg">💈</span>
+                <div className="mt-2">
+                  <p className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>En el Local</p>
+                  <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Espero en la barbería</p>
                 </div>
-                <span className="font-extrabold text-sm">{APP_CONFIG.monedaSimbolo}{srv.precio}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+              </button>
 
-      <div className="space-y-2">
-        <label className={`block text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-          ¿Dónde esperarás tu turno?
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setModalidadEspera('local')}
-            className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
-              modalidadEspera === 'local'
-                ? 'bg-amber-500/10 border-amber-500 text-amber-500 font-bold'
-                : isDark ? 'bg-slate-800/40 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
-            }`}
-          >
-            <span className="text-lg">💈</span>
-            <div className="mt-2">
-              <p className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>En el Local</p>
-              <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Espero en la barbería</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setModalidadEspera('diligencia');
+                  obtenerUbicacionGPS();
+                }}
+                className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                  modalidadEspera === 'diligencia'
+                    ? 'bg-indigo-500/10 border-indigo-500 text-indigo-500 font-bold'
+                    : isDark ? 'bg-slate-800/40 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
+                }`}
+              >
+                <span className="text-lg">🏃‍♂️</span>
+                <div className="mt-2">
+                  <p className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>Hacer Diligencias</p>
+                  <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)</p>
+                </div>
+              </button>
             </div>
-          </button>
+          </div>
+        )}
 
-          <button
-            type="button"
-            onClick={() => {
-              setModalidadEspera('diligencia');
-              obtenerUbicacionGPS();
-            }}
-            className={`p-3.5 rounded-xl border text-left flex flex-col justify-between transition-all ${
-              modalidadEspera === 'diligencia'
-                ? 'bg-indigo-500/10 border-indigo-500 text-indigo-500 font-bold'
-                : isDark ? 'bg-slate-800/40 border-slate-800 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
-            }`}
-          >
-            <span className="text-lg">🏃‍♂️</span>
-            <div className="mt-2">
-              <p className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>Hacer Diligencias</p>
-              <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)</p>
+        {/* MODO RESERVA DE CITA */}
+        {modoRegistro === 'cita' && (
+          <div className="space-y-4">
+            <div>
+              <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                Selecciona la Fecha
+              </label>
+              <input
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                value={fechaCita}
+                onChange={(e) => setFechaCita(e.target.value)}
+                className={`w-full px-4 py-3 rounded-xl border text-sm font-bold focus:outline-none focus:border-amber-500 ${
+                  isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
+                }`}
+              />
             </div>
-          </button>
-        </div>
-      </div>
 
-      <button
-        type="submit"
-        disabled={registrando}
-        className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm uppercase tracking-wider rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50"
-      >
-        {registrando ? 'Registrando...' : 'UNIRME A LA COLA'}
-      </button>
-    </form>
+            <div>
+              <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                Horarios Disponibles
+              </label>
+              {bloquesDisponibles.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-4 border border-dashed rounded-xl">
+                  No hay bloques disponibles para esta fecha.
+                </p>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                  {bloquesDisponibles.map((b) => {
+                    const horaText = b.hora_inicio.substring(0, 5);
+                    const selected = horaCitaSeleccionada === b.hora_inicio;
+                    return (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => setHoraCitaSeleccionada(b.hora_inicio)}
+                        className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all ${
+                          selected
+                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg'
+                            : isDark ? 'bg-slate-800 text-slate-200 border-slate-700 hover:border-amber-500/50' : 'bg-slate-100 text-slate-800 border-slate-200'
+                        }`}
+                      >
+                        📅 {horaText}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={registrando || (modoRegistro === 'cita' && !horaCitaSeleccionada)}
+          className="w-full py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm uppercase tracking-wider rounded-xl transition-all shadow-lg active:scale-95 disabled:opacity-50"
+        >
+          {registrando
+            ? 'Procesando...'
+            : modoRegistro === 'cola'
+            ? 'UNIRME A LA COLA'
+            : 'CONFIRMAR CITA PREVIA'}
+        </button>
+      </form>
+    </div>
   );
 }
 
