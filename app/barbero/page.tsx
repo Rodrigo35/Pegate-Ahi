@@ -156,6 +156,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       if (nuevoTipoInput === 'Corte + barba') servicioId = 'corte_barba';
       if (nuevoTipoInput === 'Barba') servicioId = 'barba';
 
+      // Actualizar ÚNICAMENTE el precio sin sobreescribir la columna nombre
       await supabase
         .from('servicios_config')
         .update({ precio: valorPrecio })
