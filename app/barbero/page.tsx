@@ -45,8 +45,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [horaActual, setHoraActual] = useState<string>('');
   const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
 
-  // ESTADOS DE GESTOR DE HORARIOS DE CITAS
-  const [diaSeleccionado, setDiaSeleccionado] = useState<number>(new Date().getDay() || 1);
+  // ESTADOS DE GESTOR DE HORARIOS DE CITAS (Inicializado estático para evitar error de Prerender)
+  const [diaSeleccionado, setDiaSeleccionado] = useState<number>(1);
   const [bloques, setBloques] = useState<any[]>([]);
   const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -59,6 +59,10 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [nuevoPrecioInput, setNuevoPrecioInput] = useState<string>('10');
 
   useEffect(() => {
+    // Sincronizar el día real de la semana únicamente en el cliente
+    const hoy = new Date().getDay();
+    setDiaSeleccionado(hoy === 0 ? 0 : hoy);
+
     const actualizarHora = () => {
       const ahora = new Date();
       setHoraActual(ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
