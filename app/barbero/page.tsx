@@ -45,7 +45,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [horaActual, setHoraActual] = useState<string>('');
   const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
 
-  // ESTADOS DE GESTOR DE HORARIOS DE CITAS (Inicializado estático para evitar error de Prerender)
+  // ESTADOS DE GESTOR DE HORARIOS DE CITAS
   const [diaSeleccionado, setDiaSeleccionado] = useState<number>(1);
   const [bloques, setBloques] = useState<any[]>([]);
   const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
@@ -59,7 +59,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [nuevoPrecioInput, setNuevoPrecioInput] = useState<string>('10');
 
   useEffect(() => {
-    // Sincronizar el día real de la semana únicamente en el cliente
     const hoy = new Date().getDay();
     setDiaSeleccionado(hoy === 0 ? 0 : hoy);
 
@@ -122,7 +121,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .gte('creado_en', inicioHoy.toISOString())
       .order('creado_en', { ascending: false });
 
-    // Traer citas de HOY Y DE DÍAS FUTUROS (gte = mayor o igual que la fecha actual)
+    // Traer citas de HOY Y DÍAS FUTUROS
     const fechaHoyStr = new Date().toISOString().split('T')[0];
     const { data: citas } = await supabase
       .from('citas')
@@ -187,11 +186,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  const enviarWhatsAppCita = (telefono: string, nombre: string, ticket: string, hora: string) => {
+  const enviarWhatsAppCita = (telefono: string, nombre: string, ticket: string, fechaHora: string) => {
     let numLimpio = telefono.replace(/\D/g, '');
     if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
     const mensaje = encodeURIComponent(
-      `¡Hola ${nombre}! 📅 Te recordamos tu cita agendada (${ticket}) para el ${hora} hrs en ${APP_CONFIG.nombreNegocio}. ¡Te esperamos!`
+      `¡Hola ${nombre}! 📅 Te recordamos tu cita agendada (${ticket}) para el ${fechaHora} hrs en ${APP_CONFIG.nombreNegocio}. ¡Te esperamos!`
     );
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
@@ -530,7 +529,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* SECCIÓN DE CITAS AGENDADAS (HOY Y PRÓXIMAS) */}
+      {/* SECCIÓN DE CITAS AGENDADAS */}
       {citasDelDia.length > 0 && (
         <div className={`border rounded-2xl p-5 shadow-xl space-y-3 ${
           isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
@@ -541,7 +540,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             </h3>
           </div>
 
-          <div className="space-y-2 max-h-56 overflow-y-auto">
+          <div className="space-y-2 max-h-64 overflow-y-auto">
             {citasDelDia.map((cita) => (
               <div
                 key={cita.id}
@@ -551,8 +550,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
               >
                 <div className="flex items-center gap-3">
                   <span className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold rounded-lg flex flex-col items-center">
-                    <span>{cita.fecha}</span>
-                    <span>{cita.hora_inicio.substring(0, 5)}</span>
+                    <span className="text-[10px] text-slate-400">{cita.fecha}</span>
+                    <span className="text-sm text-amber-400 font-black">{cita.hora_inicio.substring(0, 5)}</span>
                   </span>
                   <div>
                     <span className={`font-bold text-sm block ${isDark ? 'text-white' : 'text-slate-900'}`}>
@@ -562,15 +561,32 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   </div>
                 </div>
 
-                {cita.cliente_telefono && (
-                  <button
-                    type="button"
-                    onClick={() => enviarWhatsAppCita(cita.cliente_telefono!, cita.nombre_cliente, cita.codigo_ticket, `${cita.fecha} ${cita.hora_inicio.substring(0, 5)}`)}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg shadow transition-all active:scale-95 flex items-center gap-1"
-                  >
-                    📲 Recordatorio WA
-                  </button>
-                )}
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  {cita.cliente_telefono ? (
+                    <button
+                      type="button"
+                      onClick={() => enviarWhatsAppCita(cita.cliente_telefono!, cita.nombre_cliente, cita.codigo_ticket, `${cita.fecha} a las ${cita.hora_inicio.substring(0, 5)}`)}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg shadow transition-all active:scale-95 flex items-center gap-1"
+                    >
+                      📲 Recordatorio WA
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const num = prompt(`Ingresa el número de WhatsApp para ${cita.nombre_cliente}:`);
+                        if (num) {
+                          await supabase.from('citas').update({ cliente_telefono: num }).eq('id', cita.id);
+                          enviarWhatsAppCita(num, cita.nombre_cliente, cita.codigo_ticket, `${cita.fecha} a las ${cita.hora_inicio.substring(0, 5)}`);
+                          fetchTurnosYCitas();
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 font-bold text-[11px] rounded-lg transition-all flex items-center gap-1"
+                    >
+                      ➕ Añadir Tlf y Notificar
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
