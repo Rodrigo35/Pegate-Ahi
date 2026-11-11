@@ -42,7 +42,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
 
-  // Modo de registro: 'cola' o 'cita'
   const [modoRegistro, setModoRegistro] = useState<'cola' | 'cita'>('cola');
 
   const [nombre, setNombre] = useState('');
@@ -55,7 +54,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     APP_CONFIG.servicios[0]
   );
 
-  // Estados para Cola Presencial
   const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
   const [registrando, setRegistrando] = useState(false);
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
@@ -63,13 +61,18 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Estados para Agendamiento de Citas
-  const [fechaCita, setFechaCita] = useState<string>(new Date().toISOString().split('T')[0]);
+  // Fecha mínima: a partir de mañana
+  const mananaStr = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  })();
+
+  const [fechaCita, setFechaCita] = useState<string>(mananaStr);
   const [bloquesDisponibles, setBloquesDisponibles] = useState<any[]>([]);
   const [horaCitaSeleccionada, setHoraCitaSeleccionada] = useState<string>('');
   const [citaConfirmada, setCitaConfirmada] = useState<CitaCliente | null>(null);
 
-  // GPS y Reloj
   const [horaActual, setHoraActual] = useState<string>('');
   const [tiempoRestanteSegundos, setTiempoRestanteSegundos] = useState<number | null>(null);
   const [distanciaKm, setDistanciaKm] = useState<number | null>(null);
@@ -103,7 +106,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return () => clearInterval(interval);
   }, []);
 
-  // CARGAR TARIFAS DESDE SUPABASE
   useEffect(() => {
     const fetchTarifas = async () => {
       const { data } = await supabase
@@ -153,36 +155,49 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     };
   }, []);
 
-  // CARGAR BLOQUES DE HORARIOS PARA CITAS
+  const cargarHorarios = async () => {
+    const fechaObj = new Date(fechaCita + 'T00:00:00');
+    const diaSemana = fechaObj.getDay();
+
+    const { data: bloques } = await supabase
+      .from('horarios_disponibles')
+      .select('*')
+      .eq('dia_semana', diaSemana)
+      .eq('activo', true)
+      .order('hora_inicio', { ascending: true });
+
+    const { data: citasOcupadas } = await supabase
+      .from('citas')
+      .select('hora_inicio')
+      .eq('fecha', fechaCita)
+      .neq('estado', 'cancelada');
+
+    const horasOcupadas = new Set(citasOcupadas?.map((c) => c.hora_inicio));
+
+    if (bloques) {
+      const libres = bloques.filter((b) => !horasOcupadas.has(b.hora_inicio));
+      setBloquesDisponibles(libres);
+      if (horasOcupadas.has(horaCitaSeleccionada)) {
+        setHoraCitaSeleccionada('');
+      }
+    }
+  };
+
   useEffect(() => {
     if (modoRegistro !== 'cita') return;
 
-    const cargarHorarios = async () => {
-      const fechaObj = new Date(fechaCita + 'T00:00:00');
-      const diaSemana = fechaObj.getDay();
-
-      const { data: bloques } = await supabase
-        .from('horarios_disponibles')
-        .select('*')
-        .eq('dia_semana', diaSemana)
-        .eq('activo', true)
-        .order('hora_inicio', { ascending: true });
-
-      const { data: citasOcupadas } = await supabase
-        .from('citas')
-        .select('hora_inicio')
-        .eq('fecha', fechaCita)
-        .neq('estado', 'cancelada');
-
-      const horasOcupadas = new Set(citasOcupadas?.map((c) => c.hora_inicio));
-
-      if (bloques) {
-        const libres = bloques.filter((b) => !horasOcupadas.has(b.hora_inicio));
-        setBloquesDisponibles(libres);
-      }
-    };
-
     cargarHorarios();
+
+    const channelCitasCliente = supabase
+      .channel('cliente_bloques_citas')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'citas' }, () => {
+        cargarHorarios();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channelCitasCliente);
+    };
   }, [fechaCita, modoRegistro]);
 
   const obtenerUbicacionGPS = () => {
@@ -265,7 +280,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     };
   }, [ticketParam, turno?.id, turno?.codigo_ticket]);
 
-  // Temporizador regresivo de tiempo límite
   useEffect(() => {
     if (turno && turno.estado === 'atendiendo' && turno.modalidad_espera === 'diligencia' && turno.llamado_en && !turno.cliente_llego) {
       const interval = setInterval(() => {
@@ -284,7 +298,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     }
   }, [turno]);
 
-  // UNIRME A LA COLA HOY (Teléfono Obligatorio)
   const unirmeALaCola = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre.trim() || !telefono.trim()) return;
@@ -317,9 +330,15 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setRegistrando(false);
   };
 
-  // AGENDAR CITA CON FECHA Y HORA (Teléfono Obligatorio)
   const agendarCita = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    const hoyStr = new Date().toISOString().split('T')[0];
+    if (fechaCita <= hoyStr) {
+      alert('Las citas solo se pueden reservar a partir del día de mañana.');
+      return;
+    }
+
     if (!nombre.trim() || !telefono.trim() || !horaCitaSeleccionada) return;
 
     setRegistrando(true);
@@ -345,6 +364,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
     if (!error && data) {
       setCitaConfirmada(data as CitaCliente);
+      cargarHorarios();
     }
     setRegistrando(false);
   };
@@ -396,7 +416,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return <div className="text-center py-10 text-slate-400 text-xs animate-pulse">Cargando datos...</div>;
   }
 
-  // --- VISTA CITA CONFIRMADA ---
   if (citaConfirmada) {
     return (
       <div className="space-y-6">
@@ -445,7 +464,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     );
   }
 
-  // --- MODO MONITOR DE TURNO EN COLA ---
   if (turno && turno.estado !== 'cancelado') {
     const tiempoEstimado = personasAdelante * APP_CONFIG.tiempoEstimadoPorClienteMin;
 
@@ -486,7 +504,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           </div>
         </div>
 
-        {/* EN ESPERA */}
         {turno.estado === 'espera' && (
           <div className="space-y-4">
             <div className={`p-4 rounded-xl border space-y-2 ${
@@ -559,7 +576,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           </div>
         )}
 
-        {/* ATENDIENDO / LLAMADO */}
         {turno.estado === 'atendiendo' && (
           <div className="space-y-4">
             {turno.cliente_llego ? (
@@ -608,7 +624,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     );
   }
 
-  // --- FORMULARIO REGISTRO INICIAL ---
   return (
     <div className="space-y-5">
       <div className={`flex justify-between items-center text-xs px-4 py-2 rounded-xl border mb-2 ${
@@ -618,7 +633,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         <span className="font-mono font-bold text-amber-500 text-sm">{horaActual}</span>
       </div>
 
-      {/* Pestañas para elegir Modo */}
       <div className="grid grid-cols-2 gap-2 p-1 bg-slate-800/50 border border-slate-700/60 rounded-xl text-xs font-bold">
         <button
           type="button"
@@ -701,7 +715,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           </div>
         </div>
 
-        {/* MODO COLA PRESENCIAL */}
         {modoRegistro === 'cola' && (
           <div className="space-y-2">
             <label className={`block text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
@@ -746,16 +759,15 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           </div>
         )}
 
-        {/* MODO RESERVA DE CITA */}
         {modoRegistro === 'cita' && (
           <div className="space-y-4">
             <div>
               <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                Selecciona la Fecha
+                Selecciona la Fecha (A partir de mañana)
               </label>
               <input
                 type="date"
-                min={new Date().toISOString().split('T')[0]}
+                min={mananaStr}
                 value={fechaCita}
                 onChange={(e) => setFechaCita(e.target.value)}
                 className={`w-full px-4 py-3 rounded-xl border text-sm font-bold focus:outline-none focus:border-amber-500 ${
