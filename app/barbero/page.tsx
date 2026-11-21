@@ -37,6 +37,15 @@ const SERVICIOS_DEFAULT = [
   { nombre: 'Barba', precio: 7 },
 ];
 
+// Helper para obtener fecha YYYY-MM-DD en hora local (evita salto de día a las 8:00 PM UTC-4)
+const getFechaLocalStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 function BarberoContent({ isDark }: { isDark: boolean }) {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [turnosFinalizados, setTurnosFinalizados] = useState<Turno[]>([]);
@@ -117,7 +126,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .gte('creado_en', inicioHoy.toISOString())
       .order('creado_en', { ascending: false });
 
-    const fechaHoyStr = new Date().toISOString().split('T')[0];
+    const fechaHoyStr = getFechaLocalStr();
     const { data: citas } = await supabase
       .from('citas')
       .select('*')
@@ -187,17 +196,19 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     const telefonoFinal = telefonoEspecifico || cita.cliente_telefono;
     if (!telefonoFinal) return;
 
+    const hoyStr = getFechaLocalStr();
+    const esHoy = cita.fecha === hoyStr;
+    const textoCuando = esHoy ? 'hoy' : `el día ${cita.fecha}`;
+
     let numLimpio = telefonoFinal.replace(/\D/g, '');
     if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
     const mensaje = encodeURIComponent(
-      `¡Hola ${cita.nombre_cliente}! 📅 Te recordamos tu cita agendada (${cita.codigo_ticket}) para hoy a las ${cita.hora_inicio.substring(0, 5)} hrs en ${APP_CONFIG.nombreNegocio}. ¡Te esperamos!`
+      `¡Hola ${cita.nombre_cliente}! 📅 Te recordamos tu cita agendada (${cita.codigo_ticket}) para ${textoCuando} a las ${cita.hora_inicio.substring(0, 5)} hrs en ${APP_CONFIG.nombreNegocio}. ¡Te esperamos!`
     );
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
 
-    const hoyStr = new Date().toISOString().split('T')[0];
-
     // Si la cita corresponde al día de hoy, bajar a la lista de espera (turnos)
-    if (cita.fecha === hoyStr) {
+    if (esHoy) {
       await supabase.from('turnos').insert([
         {
           codigo_ticket: cita.codigo_ticket,
