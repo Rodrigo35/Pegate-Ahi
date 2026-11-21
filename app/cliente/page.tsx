@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import { APP_CONFIG } from '../../lib/config';
@@ -168,52 +168,79 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     };
   }, []);
 
-  const cargarHorarios = async () => {
+  const cargarHorarios = useCallback(async () => {
     if (!fechaCita) return;
     const fechaObj = new Date(fechaCita + 'T00:00:00');
     const diaSemana = fechaObj.getDay();
 
-    const { data: bloques } = await supabase
-      .from('horarios_disponibles')
-      .select('*')
-      .eq('dia_semana', diaSemana)
-      .eq('activo', true)
-      .order('hora_inicio', { ascending: true });
+    const [{ data: bloques }, { data: citasOcupadas }] = await Promise.all([
+      supabase
+        .from('horarios_disponibles')
+        .select('*')
+        .eq('dia_semana', diaSemana)
+        .eq('activo', true)
+        .order('hora_inicio', { ascending: true }),
+      supabase
+        .from('citas')
+        .select('hora_inicio')
+        .eq('fecha', fechaCita)
+        .neq('estado', 'cancelada'),
+    ]);
 
-    const { data: citasOcupadas } = await supabase
-      .from('citas')
-      .select('hora_inicio')
-      .eq('fecha', fechaCita)
-      .neq('estado', 'cancelada');
-
-    const horasOcupadas = new Set(citasOcupadas?.map((c) => c.hora_inicio));
+    const horasOcupadas = new Set(citasOcupadas?.map((c) => c.hora_inicio) || []);
 
     if (bloques) {
       const libres = bloques.filter((b) => !horasOcupadas.has(b.hora_inicio));
       setBloquesDisponibles(libres);
-      setHoraCitaSeleccionada((prevHora) => (horasOcupadas.has(prevHora) ? '' : prevHora));
+
+      // Si el barbero desactivó el bloque o alguien lo ocupó mientras estaba seleccionado, limpiar selección
+      setHoraCitaSeleccionada((prevHora) => {
+        if (!prevHora) return '';
+        const sigueDisponible = libres.some((b) => b.hora_inicio === prevHora);
+        return sigueDisponible ? prevHora : '';
+      });
     }
-  };
+  }, [fechaCita]);
 
   useEffect(() => {
-    if (modoRegistro !== 'cita') return;
+    if (modoRegistro !== 'cita' || !fechaCita) return;
 
     cargarHorarios();
 
+    const diaSemana = new Date(fechaCita + 'T00:00:00').getDay();
+
     const channelCitasCliente = supabase
-      .channel('cliente_bloques_citas')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'citas' }, () => {
-        cargarHorarios();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'horarios_disponibles' }, () => {
-        cargarHorarios();
-      })
+      .channel(`cliente_disponibilidad_${fechaCita}_${diaSemana}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'citas',
+          filter: `fecha=eq.${fechaCita}`,
+        },
+        () => {
+          cargarHorarios();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'horarios_disponibles',
+          filter: `dia_semana=eq.${diaSemana}`,
+        },
+        () => {
+          cargarHorarios();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channelCitasCliente);
     };
-  }, [fechaCita, modoRegistro]);
+  }, [fechaCita, modoRegistro, cargarHorarios]);
 
   const obtenerUbicacionGPS = () => {
     if ('geolocation' in navigator) {
