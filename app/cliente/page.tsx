@@ -34,6 +34,7 @@ interface CitaCliente {
 interface ServicioOption {
   id: string;
   nombre: string;
+  descripcion?: string; // Nuevo campo opcional
   precio: number;
   icono: string;
 }
@@ -61,7 +62,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Fecha mínima: a partir de mañana (calculada en hora local para evitar desfase UTC)
   const getMananaLocal = () => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -134,11 +134,14 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             icono = '💈';
           } else if (s.id === 'corte_barba' || s.nombre.includes('+')) {
             icono = '✂️💈';
+          } else if (s.nombre.toLowerCase().includes('ozono') || s.nombre.toLowerCase().includes('vapor')) {
+            icono = '🧖‍♂️';
           }
 
           unicosMap.set(s.nombre.toLowerCase().trim(), {
             id: s.id,
             nombre: s.nombre,
+            descripcion: s.descripcion || '', // Mapeamos la descripción desde Supabase
             precio: Number(s.precio),
             icono: icono
           });
@@ -193,7 +196,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       const libres = bloques.filter((b) => !horasOcupadas.has(b.hora_inicio));
       setBloquesDisponibles(libres);
 
-      // Si el barbero desactivó el bloque o alguien lo ocupó mientras estaba seleccionado, limpiar selección
       setHoraCitaSeleccionada((prevHora) => {
         if (!prevHora) return '';
         const sigueDisponible = libres.some((b) => b.hora_inicio === prevHora);
@@ -741,17 +743,36 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <div
                   key={srv.id}
                   onClick={() => setServicioSeleccionado(srv)}
-                  className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
+                  className={`flex items-start justify-between gap-3 p-4 rounded-xl border cursor-pointer transition-all ${
                     selected
-                      ? 'bg-amber-500/10 border-amber-500 text-amber-500 font-bold'
-                      : isDark ? 'bg-slate-800/40 border-slate-800 text-slate-300 hover:border-slate-700' : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                      ? 'bg-amber-500/10 border-amber-500'
+                      : isDark ? 'bg-slate-800/40 border-slate-800 hover:border-slate-700' : 'bg-slate-50 border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xl">{srv.icono}</span>
-                    <span className="font-bold text-sm">{srv.nombre}</span>
+                  <div className="flex items-start gap-3">
+                    <span className="text-xl mt-0.5">{srv.icono}</span>
+                    <div className="space-y-1">
+                      <p className={`font-bold text-sm leading-tight ${
+                        selected ? 'text-amber-500' : isDark ? 'text-slate-200' : 'text-slate-800'
+                      }`}>
+                        {srv.nombre}
+                      </p>
+                      {srv.descripcion && (
+                        <p className={`text-xs leading-relaxed font-normal ${
+                          selected
+                            ? isDark ? 'text-slate-300' : 'text-slate-700'
+                            : isDark ? 'text-slate-400' : 'text-slate-500'
+                        }`}>
+                          {srv.descripcion}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <span className="font-extrabold text-sm">{APP_CONFIG.monedaSimbolo}{srv.precio}</span>
+                  <span className={`font-extrabold text-sm shrink-0 ${
+                    selected ? 'text-amber-500' : isDark ? 'text-slate-200' : 'text-slate-800'
+                  }`}>
+                    {APP_CONFIG.monedaSimbolo}{srv.precio}
+                  </span>
                 </div>
               );
             })}
