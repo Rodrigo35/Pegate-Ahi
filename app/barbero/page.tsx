@@ -53,6 +53,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [horaActual, setHoraActual] = useState<string>('');
   const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
+  const [eliminandoCitaId, setEliminandoCitaId] = useState<string | null>(null);
 
   const [diaSeleccionado, setDiaSeleccionado] = useState<number>(1);
   const [bloques, setBloques] = useState<any[]>([]);
@@ -227,6 +228,31 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     }
 
     fetchTurnosYCitas();
+  };
+
+  // ELIMINAR / CANCELAR CITA DE LA AGENDA
+  const eliminarCita = async (cita: Cita) => {
+    const confirmar = window.confirm(
+      `¿Seguro que deseas eliminar la cita de ${cita.nombre_cliente} (${cita.fecha} a las ${cita.hora_inicio.substring(0, 5)})?`
+    );
+    if (!confirmar) return;
+
+    setEliminandoCitaId(cita.id);
+    try {
+      const { error } = await supabase
+        .from('citas')
+        .update({ estado: 'cancelada' })
+        .eq('id', cita.id);
+
+      if (error) throw error;
+
+      setCitasDelDia((prev) => prev.filter((c) => c.id !== cita.id));
+    } catch (err) {
+      console.error('Error al eliminar la cita:', err);
+      alert('No se pudo eliminar la cita. Intenta de nuevo.');
+    } finally {
+      setEliminandoCitaId(null);
+    }
   };
 
   const handleTipoChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -616,6 +642,20 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                       ➕ Añadir Tlf y Notificar
                     </button>
                   )}
+
+                  <button
+                    type="button"
+                    onClick={() => eliminarCita(cita)}
+                    disabled={eliminandoCitaId === cita.id}
+                    title="Eliminar cita"
+                    className={`px-3 py-1.5 font-bold text-xs rounded-xl border transition-all active:scale-95 flex items-center gap-1 disabled:opacity-50 ${
+                      isDark
+                        ? 'bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white border-rose-500/30'
+                        : 'bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border-rose-200'
+                    }`}
+                  >
+                    {eliminandoCitaId === cita.id ? '⏳...' : '🗑️ Eliminar'}
+                  </button>
                 </div>
               </div>
             ))}
