@@ -61,14 +61,26 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Fecha mínima: a partir de mañana
-  const mananaStr = (() => {
+  // Fecha mínima: a partir de mañana (calculada en hora local para evitar desfase UTC)
+  const getMananaLocal = () => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
-  })();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
-  const [fechaCita, setFechaCita] = useState<string>(mananaStr);
+  const getHoyLocal = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [mananaStr, setMananaStr] = useState<string>(getMananaLocal);
+  const [fechaCita, setFechaCita] = useState<string>(getMananaLocal);
   const [bloquesDisponibles, setBloquesDisponibles] = useState<any[]>([]);
   const [horaCitaSeleccionada, setHoraCitaSeleccionada] = useState<string>('');
   const [citaConfirmada, setCitaConfirmada] = useState<CitaCliente | null>(null);
@@ -100,6 +112,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     const actualizarHora = () => {
       const ahora = new Date();
       setHoraActual(ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setMananaStr(getMananaLocal());
     };
     actualizarHora();
     const interval = setInterval(actualizarHora, 1000);
@@ -156,6 +169,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   }, []);
 
   const cargarHorarios = async () => {
+    if (!fechaCita) return;
     const fechaObj = new Date(fechaCita + 'T00:00:00');
     const diaSemana = fechaObj.getDay();
 
@@ -177,9 +191,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     if (bloques) {
       const libres = bloques.filter((b) => !horasOcupadas.has(b.hora_inicio));
       setBloquesDisponibles(libres);
-      if (horasOcupadas.has(horaCitaSeleccionada)) {
-        setHoraCitaSeleccionada('');
-      }
+      setHoraCitaSeleccionada((prevHora) => (horasOcupadas.has(prevHora) ? '' : prevHora));
     }
   };
 
@@ -191,6 +203,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     const channelCitasCliente = supabase
       .channel('cliente_bloques_citas')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'citas' }, () => {
+        cargarHorarios();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'horarios_disponibles' }, () => {
         cargarHorarios();
       })
       .subscribe();
@@ -333,7 +348,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const agendarCita = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const hoyStr = new Date().toISOString().split('T')[0];
+    const hoyStr = getHoyLocal();
     if (fechaCita <= hoyStr) {
       alert('Las citas solo se pueden reservar a partir del día de mañana.');
       return;
@@ -394,6 +409,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setCitaConfirmada(null);
     setNombre('');
     setTelefono('');
+    setHoraCitaSeleccionada('');
     window.location.href = '/cliente';
   };
 
@@ -769,7 +785,10 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 type="date"
                 min={mananaStr}
                 value={fechaCita}
-                onChange={(e) => setFechaCita(e.target.value)}
+                onChange={(e) => {
+                  setFechaCita(e.target.value);
+                  setHoraCitaSeleccionada('');
+                }}
                 className={`w-full px-4 py-3 rounded-xl border text-sm font-bold focus:outline-none focus:border-amber-500 ${
                   isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-slate-300 text-slate-900'
                 }`}
