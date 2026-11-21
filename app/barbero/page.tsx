@@ -31,11 +31,12 @@ interface Cita {
   estado: string;
 }
 
-const SERVICIOS_DEFAULT = [
-  { nombre: 'Corte clásico', precio: 10 },
-  { nombre: 'Corte + barba', precio: 15 },
-  { nombre: 'Barba', precio: 7 },
-];
+interface ServicioConfig {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  precio: number;
+}
 
 // Helper para obtener fecha YYYY-MM-DD en hora local (evita salto de día a las 8:00 PM UTC-4)
 const getFechaLocalStr = () => {
@@ -59,12 +60,20 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [bloques, setBloques] = useState<any[]>([]);
   const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+  const [serviciosCatalogo, setServiciosCatalogo] = useState<ServicioConfig[]>([]);
   const [tipoServicio, setTipoServicio] = useState<string>('Corte clásico');
   const [precioServicio, setPrecioServicio] = useState<number>(10);
   const [editandoServicio, setEditandoServicio] = useState<boolean>(false);
+  const [creandoNuevoServicio, setCreandoNuevoServicio] = useState<boolean>(false);
 
   const [nuevoTipoInput, setNuevoTipoInput] = useState<string>('Corte clásico');
+  const [nuevaDescripcionInput, setNuevaDescripcionInput] = useState<string>('');
   const [nuevoPrecioInput, setNuevoPrecioInput] = useState<string>('10');
+
+  const [nombreServicioNuevo, setNombreServicioNuevo] = useState<string>('');
+  const [descripcionServicioNuevo, setDescripcionServicioNuevo] = useState<string>('');
+  const [precioServicioNuevo, setPrecioServicioNuevo] = useState<string>('');
+  const [guardandoCatalogo, setGuardandoCatalogo] = useState<boolean>(false);
 
   useEffect(() => {
     const hoy = new Date().getDay();
@@ -99,16 +108,32 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .eq('id', id);
   };
 
-  useEffect(() => {
-    const cargarPreciosBase = async () => {
-      const { data } = await supabase.from('servicios_config').select('*');
-      if (data && data.length > 0) {
-        const servicioActual = data.find((s) => s.nombre === tipoServicio);
-        if (servicioActual) setPrecioServicio(Number(servicioActual.precio));
+  const cargarServiciosCatalogo = async () => {
+    const { data } = await supabase
+      .from('servicios_config')
+      .select('*')
+      .order('nombre', { ascending: true });
+
+    if (data && data.length > 0) {
+      const formateados: ServicioConfig[] = data.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        descripcion: s.descripcion || '',
+        precio: Number(s.precio),
+      }));
+      setServiciosCatalogo(formateados);
+
+      const actual = formateados.find((s) => s.nombre === tipoServicio) || formateados[0];
+      if (actual) {
+        setTipoServicio(actual.nombre);
+        setPrecioServicio(actual.precio);
       }
-    };
-    cargarPreciosBase();
-  }, [tipoServicio]);
+    }
+  };
+
+  useEffect(() => {
+    cargarServiciosCatalogo();
+  }, []);
 
   const fetchTurnosYCitas = async () => {
     const { data: activos } = await supabase
@@ -255,23 +280,14 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     }
   };
 
-  const handleTipoChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleTipoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const seleccionado = e.target.value;
     setNuevoTipoInput(seleccionado);
 
-    const { data } = await supabase
-      .from('servicios_config')
-      .select('precio')
-      .eq('nombre', seleccionado)
-      .maybeSingle();
-
-    if (data) {
-      setNuevoPrecioInput(data.precio.toString());
-    } else {
-      const servicioEncontrado = SERVICIOS_DEFAULT.find((s) => s.nombre === seleccionado);
-      if (servicioEncontrado) {
-        setNuevoPrecioInput(servicioEncontrado.precio.toString());
-      }
+    const encontrado = serviciosCatalogo.find((s) => s.nombre === seleccionado);
+    if (encontrado) {
+      setNuevoPrecioInput(encontrado.precio.toString());
+      setNuevaDescripcionInput(encontrado.descripcion || '');
     }
   };
 
@@ -279,28 +295,87 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     const valorPrecio = parseFloat(nuevoPrecioInput);
     if (isNaN(valorPrecio) || valorPrecio < 0) return;
 
-    let servicioId = 'corte_clasico';
-    if (nuevoTipoInput === 'Corte + barba') servicioId = 'corte_barba';
-    if (nuevoTipoInput === 'Barba') servicioId = 'barba';
+    setGuardandoCatalogo(true);
+    const servicioObj = serviciosCatalogo.find((s) => s.nombre === nuevoTipoInput);
 
-    await supabase
-      .from('servicios_config')
-      .update({ precio: valorPrecio })
-      .eq('id', servicioId);
+    if (servicioObj) {
+      await supabase
+        .from('servicios_config')
+        .update({
+          precio: valorPrecio,
+          descripcion: nuevaDescripcionInput.trim(),
+        })
+        .eq('id', servicioObj.id);
+    }
 
     if (turnoActual) {
       await supabase
         .from('turnos')
         .update({
           tipo_corte: nuevoTipoInput,
-          monto: valorPrecio
+          monto: valorPrecio,
         })
         .eq('id', turnoActual.id);
       await fetchTurnosYCitas();
     }
 
+    await cargarServiciosCatalogo();
     setTipoServicio(nuevoTipoInput);
     setPrecioServicio(valorPrecio);
+    setEditandoServicio(false);
+    setGuardandoCatalogo(false);
+  };
+
+  const agregarServicioAlCatalogo = async () => {
+    const nombreLimpio = nombreServicioNuevo.trim();
+    const valorPrecio = parseFloat(precioServicioNuevo);
+    if (!nombreLimpio || isNaN(valorPrecio) || valorPrecio < 0) return;
+
+    setGuardandoCatalogo(true);
+    const nuevoId = nombreLimpio
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '');
+
+    const { error } = await supabase.from('servicios_config').insert([
+      {
+        id: nuevoId || `srv_${Date.now()}`,
+        nombre: nombreLimpio,
+        descripcion: descripcionServicioNuevo.trim(),
+        precio: valorPrecio,
+      },
+    ]);
+
+    if (!error) {
+      await cargarServiciosCatalogo();
+      setTipoServicio(nombreLimpio);
+      setPrecioServicio(valorPrecio);
+      setNuevoTipoInput(nombreLimpio);
+      setNuevaDescripcionInput(descripcionServicioNuevo.trim());
+      setNuevoPrecioInput(valorPrecio.toString());
+      setNombreServicioNuevo('');
+      setDescripcionServicioNuevo('');
+      setPrecioServicioNuevo('');
+      setCreandoNuevoServicio(false);
+      setEditandoServicio(false);
+    } else {
+      alert('No se pudo guardar el servicio. Verifica que no exista ya ese nombre o los permisos en Supabase.');
+    }
+    setGuardandoCatalogo(false);
+  };
+
+  const eliminarServicioDelCatalogo = async (servicio: ServicioConfig) => {
+    if (serviciosCatalogo.length <= 1) {
+      alert('Debe quedar al menos un servicio activo.');
+      return;
+    }
+    const confirmar = window.confirm(`¿Eliminar "${servicio.nombre}" del catálogo de servicios?`);
+    if (!confirmar) return;
+
+    await supabase.from('servicios_config').delete().eq('id', servicio.id);
+    await cargarServiciosCatalogo();
     setEditandoServicio(false);
   };
 
@@ -464,53 +539,148 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-4 rounded-2xl border shadow-sm ${
         isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
       }`}>
-        <div>
+        <div className="w-full sm:flex-1">
           <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">
             Servicio Activo & Tarifa
           </span>
 
-          {editandoServicio ? (
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              <select
-                value={nuevoTipoInput}
-                onChange={handleTipoChange}
-                className={`px-3 py-1.5 text-xs font-bold border rounded-lg focus:outline-none ${
-                  isDark ? 'bg-slate-800 border-slate-700 text-amber-400' : 'bg-slate-100 border-slate-300 text-amber-600'
-                }`}
-              >
-                <option value="Corte clásico">✂️ Corte clásico</option>
-                <option value="Corte + barba">✂️💈 Corte + barba</option>
-                <option value="Barba">💈 Barba</option>
-              </select>
-
-              <div className="flex items-center gap-1">
-                <span className="text-lg font-bold text-emerald-500">{APP_CONFIG.monedaSimbolo}</span>
+          {creandoNuevoServicio ? (
+            <div className="space-y-2 mt-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
-                  type="number"
-                  step="0.5"
-                  value={nuevoPrecioInput}
-                  onChange={(e) => setNuevoPrecioInput(e.target.value)}
-                  className={`w-20 px-2 py-1 text-sm font-bold border rounded-lg focus:outline-none ${
-                    isDark ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-100 border-slate-300 text-emerald-600'
+                  type="text"
+                  placeholder="Nombre (Ej: Corte + Cejas)"
+                  value={nombreServicioNuevo}
+                  onChange={(e) => setNombreServicioNuevo(e.target.value)}
+                  className={`px-3 py-1.5 text-xs font-bold border rounded-lg focus:outline-none ${
+                    isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'
                   }`}
                 />
+                <div className="flex items-center gap-1">
+                  <span className="text-lg font-bold text-emerald-500">{APP_CONFIG.monedaSimbolo}</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    placeholder="0.00"
+                    value={precioServicioNuevo}
+                    onChange={(e) => setPrecioServicioNuevo(e.target.value)}
+                    className={`w-20 px-2 py-1 text-sm font-bold border rounded-lg focus:outline-none ${
+                      isDark ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-100 border-slate-300 text-emerald-600'
+                    }`}
+                  />
+                </div>
               </div>
+              <input
+                type="text"
+                maxLength={90}
+                placeholder="Breve descripción (Ej: Incluye lavado, perfilado y navaja)"
+                value={descripcionServicioNuevo}
+                onChange={(e) => setDescripcionServicioNuevo(e.target.value)}
+                className={`w-full max-w-md px-3 py-1.5 text-xs border rounded-lg focus:outline-none ${
+                  isDark ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder-slate-500' : 'bg-slate-100 border-slate-300 text-slate-800 placeholder-slate-400'
+                }`}
+              />
+            </div>
+          ) : editandoServicio ? (
+            <div className="space-y-2 mt-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={nuevoTipoInput}
+                  onChange={handleTipoChange}
+                  className={`px-3 py-1.5 text-xs font-bold border rounded-lg focus:outline-none ${
+                    isDark ? 'bg-slate-800 border-slate-700 text-amber-400' : 'bg-slate-100 border-slate-300 text-amber-600'
+                  }`}
+                >
+                  {serviciosCatalogo.map((srv) => (
+                    <option key={srv.id} value={srv.nombre}>
+                      ✂️ {srv.nombre}
+                    </option>
+                  ))}
+                </select>
+
+                <div className="flex items-center gap-1">
+                  <span className="text-lg font-bold text-emerald-500">{APP_CONFIG.monedaSimbolo}</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={nuevoPrecioInput}
+                    onChange={(e) => setNuevoPrecioInput(e.target.value)}
+                    className={`w-20 px-2 py-1 text-sm font-bold border rounded-lg focus:outline-none ${
+                      isDark ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-100 border-slate-300 text-emerald-600'
+                    }`}
+                  />
+                </div>
+
+                {serviciosCatalogo.length > 1 && (
+                  <button
+                    type="button"
+                    title="Eliminar servicio seleccionado"
+                    onClick={() => {
+                      const srv = serviciosCatalogo.find((s) => s.nombre === nuevoTipoInput);
+                      if (srv) eliminarServicioDelCatalogo(srv);
+                    }}
+                    className="px-2.5 py-1.5 text-xs font-bold bg-rose-500/10 hover:bg-rose-600 text-rose-500 hover:text-white border border-rose-500/30 rounded-lg transition-all"
+                  >
+                    🗑️
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                maxLength={90}
+                placeholder="Breve descripción del servicio..."
+                value={nuevaDescripcionInput}
+                onChange={(e) => setNuevaDescripcionInput(e.target.value)}
+                className={`w-full max-w-md px-3 py-1.5 text-xs border rounded-lg focus:outline-none ${
+                  isDark ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder-slate-500' : 'bg-slate-100 border-slate-300 text-slate-800 placeholder-slate-400'
+                }`}
+              />
             </div>
           ) : (
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-sm font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
-                ✂️ {turnoActual?.tipo_corte || tipoServicio}
-              </span>
-              <p className="text-2xl font-black text-emerald-500">
-                {APP_CONFIG.monedaSimbolo}{turnoActual?.monto || precioServicio}
-              </p>
+            <div className="mt-1">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                  ✂️ {turnoActual?.tipo_corte || tipoServicio}
+                </span>
+                <p className="text-2xl font-black text-emerald-500">
+                  {APP_CONFIG.monedaSimbolo}{turnoActual?.monto || precioServicio}
+                </p>
+              </div>
+              {(() => {
+                const srvActual = serviciosCatalogo.find(
+                  (s) => s.nombre === (turnoActual?.tipo_corte || tipoServicio)
+                );
+                return srvActual?.descripcion ? (
+                  <p className="text-xs text-slate-400 mt-1">{srvActual.descripcion}</p>
+                ) : null;
+              })()}
             </div>
           )}
         </div>
 
-        <div>
-          {editandoServicio ? (
-            <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          {creandoNuevoServicio ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setCreandoNuevoServicio(false)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                }`}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={guardandoCatalogo || !nombreServicioNuevo.trim() || !precioServicioNuevo}
+                onClick={agregarServicioAlCatalogo}
+                className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50"
+              >
+                {guardandoCatalogo ? 'Guardando...' : 'Agregar'}
+              </button>
+            </>
+          ) : editandoServicio ? (
+            <>
               <button
                 type="button"
                 onClick={() => setEditandoServicio(false)}
@@ -522,28 +692,46 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
               </button>
               <button
                 type="button"
+                disabled={guardandoCatalogo}
                 onClick={guardarNuevoServicio}
-                className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md transition-all active:scale-95"
+                className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50"
               >
                 Guardar
               </button>
-            </div>
+            </>
           ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setNuevoTipoInput(turnoActual?.tipo_corte || tipoServicio);
-                setNuevoPrecioInput((turnoActual?.monto || precioServicio).toString());
-                setEditandoServicio(true);
-              }}
-              className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 ${
-                isDark 
-                  ? 'bg-slate-800/80 border-slate-700 text-amber-400 hover:bg-slate-800' 
-                  : 'bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20'
-              }`}
-            >
-              ✏️ Editar Servicio
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  setNombreServicioNuevo('');
+                  setDescripcionServicioNuevo('');
+                  setPrecioServicioNuevo('');
+                  setCreandoNuevoServicio(true);
+                }}
+                className="px-3 py-1.5 text-xs font-bold rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-all flex items-center gap-1"
+              >
+                ➕ Nuevo
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const nombreActual = turnoActual?.tipo_corte || tipoServicio;
+                  const srvObj = serviciosCatalogo.find((s) => s.nombre === nombreActual);
+                  setNuevoTipoInput(nombreActual);
+                  setNuevaDescripcionInput(srvObj?.descripcion || '');
+                  setNuevoPrecioInput((turnoActual?.monto || precioServicio).toString());
+                  setEditandoServicio(true);
+                }}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 ${
+                  isDark 
+                    ? 'bg-slate-800/80 border-slate-700 text-amber-400 hover:bg-slate-800' 
+                    : 'bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20'
+                }`}
+              >
+                ✏️ Editar Servicio
+              </button>
+            </>
           )}
         </div>
       </div>
