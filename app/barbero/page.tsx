@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 import { APP_CONFIG } from '../../lib/config';
 
@@ -51,9 +52,12 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [citasDelDia, setCitasDelDia] = useState<Cita[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [horaActual, setHoraActual] = useState<string>('');
+  const [hoyStr, setHoyStr] = useState<string>('');
   const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
 
-  const [tabActiva, setTabActiva] = useState<'silla' | 'citas' | 'horarios'>('silla');
+  const [tabActiva, setTabActiva] = useState<'silla' | 'citas' | 'qr' | 'horarios'>('silla');
+  const [clienteUrl, setClienteUrl] = useState<string>('');
+  const [copiadoUrl, setCopiadoUrl] = useState<boolean>(false);
 
   const [diaSeleccionado, setDiaSeleccionado] = useState<number>(1);
   const [bloques, setBloques] = useState<any[]>([]);
@@ -67,12 +71,18 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [nuevoPrecioInput, setNuevoPrecioInput] = useState<string>('10');
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setClienteUrl(`${window.location.origin}/cliente`);
+    }
+
+    setHoyStr(getFechaLocalStr());
     const hoy = new Date().getDay();
     setDiaSeleccionado(hoy === 0 ? 0 : hoy);
 
     const actualizarHora = () => {
       const ahora = new Date();
       setHoraActual(ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
+      setHoyStr(getFechaLocalStr());
     };
     actualizarHora();
     const interval = setInterval(actualizarHora, 1000);
@@ -166,6 +176,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     };
   }, []);
 
+  const citasDeHoy = hoyStr ? citasDelDia.filter((c) => c.fecha === hoyStr) : [];
+  const citasSiguientes = hoyStr ? citasDelDia.filter((c) => c.fecha > hoyStr) : citasDelDia;
+
   const turnoActual = turnos.find((t) => t.estado === 'atendiendo');
   const colaEspera = turnos.filter((t) => t.estado === 'espera');
 
@@ -196,8 +209,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     const telefonoFinal = telefonoEspecifico || cita.cliente_telefono;
     if (!telefonoFinal) return;
 
-    const hoyStr = getFechaLocalStr();
-    const esHoy = cita.fecha === hoyStr;
+    const fechaActual = getFechaLocalStr();
+    const esHoy = cita.fecha === fechaActual;
     const textoCuando = esHoy ? 'hoy' : `el día ${cita.fecha}`;
 
     let numLimpio = telefonoFinal.replace(/\D/g, '');
@@ -422,9 +435,24 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnosYCitas();
   };
 
+  const copiarEnlaceCliente = async () => {
+    if (!clienteUrl) return;
+    try {
+      await navigator.clipboard.writeText(clienteUrl);
+      setCopiadoUrl(true);
+      setTimeout(() => setCopiadoUrl(false), 2000);
+    } catch {
+      console.log('No se pudo copiar');
+    }
+  };
+
   const cardSurface = isDark
     ? 'bg-[#1D2229] border-[#2E353F] text-[#F4F3F1]'
     : 'bg-white border-[#E5E2DC] text-[#232931] shadow-[0_4px_20px_-4px_rgba(35,41,49,0.06)]';
+
+  const qrImageUrl = clienteUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&color=232931&bgcolor=FFFFFF&data=${encodeURIComponent(clienteUrl)}`
+    : '';
 
   return (
     <div className="space-y-4">
@@ -451,12 +479,12 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* Píldoras de Navegación (Estilo "All | Services | Price" de la imagen) */}
+      {/* Píldoras de Navegación */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
         <button
           type="button"
           onClick={() => setTabActiva('silla')}
-          className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+          className={`px-3 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
             tabActiva === 'silla'
               ? 'bg-[#232931] text-white shadow-xs'
               : isDark
@@ -464,12 +492,27 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
               : 'bg-white text-[#5C636E] border border-[#E5E2DC]'
           }`}
         >
-          Silla & Cola ({colaEspera.length})
+          Silla ({colaEspera.length})
         </button>
+
+        <button
+          type="button"
+          onClick={() => setTabActiva('qr')}
+          className={`px-3 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1 ${
+            tabActiva === 'qr'
+              ? 'bg-[#C47E52] text-white shadow-xs'
+              : isDark
+              ? 'bg-[#1D2229] text-[#C47E52] border border-[#C47E52]/30'
+              : 'bg-white text-[#C47E52] border border-[#C47E52]/40'
+          }`}
+        >
+          📷 QR Hoy
+        </button>
+
         <button
           type="button"
           onClick={() => setTabActiva('citas')}
-          className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+          className={`px-3 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
             tabActiva === 'citas'
               ? 'bg-[#232931] text-white shadow-xs'
               : isDark
@@ -479,10 +522,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         >
           Agenda ({citasDelDia.length})
         </button>
+
         <button
           type="button"
           onClick={() => setTabActiva('horarios')}
-          className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+          className={`px-3 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
             tabActiva === 'horarios'
               ? 'bg-[#232931] text-white shadow-xs'
               : isDark
@@ -497,7 +541,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       {/* --- TAB 1: SILLA & COLA EN VIVO --- */}
       {tabActiva === 'silla' && (
         <div className="space-y-4">
-          {/* Tarjeta Cliente en Silla (Estilo Barber Card con precio grande a la derecha) */}
           <div className={`p-5 rounded-3xl border space-y-4 ${cardSurface}`}>
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-bold uppercase tracking-wider text-[#8C8881]">
@@ -537,7 +580,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   </div>
                 </div>
 
-                {/* Edición rápida de servicio/tarifa */}
                 {editandoServicio ? (
                   <div className={`p-3 rounded-2xl space-y-2.5 ${isDark ? 'bg-[#15191E]' : 'bg-[#F4F3F1]'}`}>
                     <div className="flex gap-2">
@@ -621,25 +663,34 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                 )}
               </div>
             ) : (
-              <div className="py-6 text-center space-y-1">
+              <div className="py-5 text-center space-y-1">
                 <span className="text-3xl block">💺</span>
                 <p className="text-xs font-bold">Silla disponible</p>
-                <p className="text-[11px] text-[#8C8881]">Llama al siguiente cliente de la cola</p>
+                <p className="text-[11px] text-[#8C8881]">Llama al siguiente cliente o muestra el QR</p>
               </div>
             )}
 
-            {/* Botones principales de acción */}
             <div className="pt-1">
               {!turnoActual ? (
-                <button
-                  onClick={llamarSiguiente}
-                  disabled={colaEspera.length === 0}
-                  className={`w-full py-3.5 rounded-full font-bold text-xs tracking-wide transition-all shadow-md active:scale-95 disabled:opacity-40 ${
-                    isDark ? 'bg-[#C47E52] text-white' : 'bg-[#232931] text-white'
-                  }`}
-                >
-                  📢 Llamar Siguiente ({colaEspera.length})
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={llamarSiguiente}
+                    disabled={colaEspera.length === 0}
+                    className={`flex-1 py-3.5 rounded-full font-bold text-xs tracking-wide transition-all shadow-md active:scale-95 disabled:opacity-40 ${
+                      isDark ? 'bg-[#C47E52] text-white' : 'bg-[#232931] text-white'
+                    }`}
+                  >
+                    📢 Llamar ({colaEspera.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTabActiva('qr')}
+                    className="px-4 py-3.5 rounded-full border border-[#C47E52] text-[#C47E52] font-bold text-xs active:scale-95"
+                    title="Mostrar QR para turno de hoy"
+                  >
+                    📷 QR
+                  </button>
+                </div>
               ) : (
                 <div className="flex gap-2">
                   {turnoActual.modalidad_espera === 'diligencia' && (
@@ -661,19 +712,18 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             </div>
           </div>
 
-          {/* Lista de Espera estilo tarjetas de Barberos de la referencia */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-bold">Próximos en cola ({colaEspera.length})</span>
+              <span className="text-xs font-bold">Cola de hoy ({colaEspera.length})</span>
               <span className="text-[11px] text-[#8C8881]">Prom. ~{tiempoPromedioMinutos}m</span>
             </div>
 
             {colaEspera.length === 0 ? (
               <div className={`p-5 rounded-2xl border text-center text-xs text-[#8C8881] ${cardSurface}`}>
-                No hay clientes esperando en este momento.
+                No hay clientes esperando hoy.
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
+              <div className="space-y-2.5 max-h-60 overflow-y-auto pr-0.5">
                 {colaEspera.map((item, idx) => (
                   <div
                     key={item.id}
@@ -705,64 +755,188 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* --- TAB 2: AGENDA DE CITAS --- */}
-      {tabActiva === 'citas' && (
-        <div className="space-y-3">
-          <p className="text-xs font-bold px-1">Citas Agendadas ({citasDelDia.length})</p>
-          {citasDelDia.length === 0 ? (
-            <div className={`p-8 rounded-3xl border text-center text-xs text-[#8C8881] ${cardSurface}`}>
-              No hay citas agendadas pendientes.
-            </div>
-          ) : (
-            <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-0.5">
-              {citasDelDia.map((cita) => (
-                <div
-                  key={cita.id}
-                  className={`p-4 rounded-2xl border flex items-center justify-between gap-2 ${cardSurface}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="px-2.5 py-1.5 rounded-xl bg-[#C47E52]/15 text-center shrink-0">
-                      <span className="text-[9px] font-bold text-[#8C8881] block">{cita.fecha.slice(5)}</span>
-                      <span className="text-xs font-black text-[#C47E52]">{cita.hora_inicio.substring(0, 5)}</span>
-                    </div>
-                    <div>
-                      <p className="text-xs font-extrabold leading-tight">
-                        {cita.nombre_cliente} <span className="text-[#C47E52]">({cita.codigo_ticket})</span>
-                      </p>
-                      <p className="text-[11px] text-[#8C8881] mt-0.5">
-                        {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}{cita.monto}
-                      </p>
-                    </div>
-                  </div>
+      {/* --- TAB 2: CÓDIGO QR PARA TURNO DEL MISMO DÍA --- */}
+      {tabActiva === 'qr' && (
+        <div className={`p-6 rounded-3xl border text-center space-y-4 ${cardSurface}`}>
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#C47E52]">
+              Registro Rápido en Local
+            </span>
+            <h3 className="text-base font-black mt-0.5">Escanea para tomar tu turno hoy</h3>
+            <p className="text-[11px] text-[#8C8881] mt-1">
+              El cliente entra directo a la cola del día y sigue su turno en vivo desde su teléfono.
+            </p>
+          </div>
 
-                  {cita.cliente_telefono ? (
-                    <button
-                      type="button"
-                      onClick={() => procesarNotificacionCitaWA(cita)}
-                      className="px-3.5 py-2 rounded-full bg-[#232931] hover:bg-[#191E24] text-white font-bold text-[11px] shrink-0 active:scale-95"
-                    >
-                      📲 WA
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
-                        if (num) procesarNotificacionCitaWA(cita, num);
-                      }}
-                      className="px-3 py-2 rounded-full bg-[#C47E52] text-white font-bold text-[11px] shrink-0"
-                    >
-                      ➕ Tlf
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="bg-white p-4 rounded-3xl inline-block shadow-md border border-[#E5E2DC] mx-auto">
+            {qrImageUrl ? (
+              <img
+                src={qrImageUrl}
+                alt="QR Cola Barbería"
+                width={220}
+                height={220}
+                className="rounded-xl mx-auto"
+              />
+            ) : (
+              <div className="w-[220px] h-[220px] flex items-center justify-center text-xs text-slate-400">
+                Generando QR...
+              </div>
+            )}
+          </div>
+
+          <div className={`p-2.5 rounded-2xl text-[11px] font-mono truncate ${
+            isDark ? 'bg-[#15191E] text-[#8C8881]' : 'bg-[#F4F3F1] text-[#5C636E]'
+          }`}>
+            {clienteUrl}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={copiarEnlaceCliente}
+              className="flex-1 py-3 rounded-full border border-[#C47E52] text-[#C47E52] font-bold text-xs active:scale-95 transition-all"
+            >
+              {copiadoUrl ? '✅ Enlace Copiado' : '📋 Copiar Link'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTabActiva('silla')}
+              className={`flex-1 py-3 rounded-full font-bold text-xs active:scale-95 transition-all ${
+                isDark ? 'bg-[#C47E52] text-white' : 'bg-[#232931] text-white'
+              }`}
+            >
+              Volver a Silla
+            </button>
+          </div>
         </div>
       )}
 
-      {/* --- TAB 3: GESTOR DE HORARIOS --- */}
+      {/* --- TAB 3: AGENDA DE CITAS (HOY + DÍAS SIGUIENTES) --- */}
+      {tabActiva === 'citas' && (
+        <div className="space-y-4 max-h-[460px] overflow-y-auto pr-0.5">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-extrabold text-[#C47E52]">
+                📅 Citas de Hoy ({citasDeHoy.length})
+              </span>
+              <span className="text-[10px] text-[#8C8881]">Pasar a cola al llegar</span>
+            </div>
+
+            {citasDeHoy.length === 0 ? (
+              <div className={`p-4 rounded-2xl border text-center text-xs text-[#8C8881] ${cardSurface}`}>
+                Sin citas agendadas para hoy.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {citasDeHoy.map((cita) => (
+                  <div
+                    key={cita.id}
+                    className={`p-3.5 rounded-2xl border border-[#C47E52]/50 flex items-center justify-between gap-2 ${cardSurface}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="px-2.5 py-1.5 rounded-xl bg-[#C47E52] text-white text-center shrink-0">
+                        <span className="text-[9px] font-bold uppercase block">HOY</span>
+                        <span className="text-xs font-black">{cita.hora_inicio.substring(0, 5)}</span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-extrabold leading-tight">
+                          {cita.nombre_cliente} <span className="text-[#C47E52]">({cita.codigo_ticket})</span>
+                        </p>
+                        <p className="text-[11px] text-[#8C8881] mt-0.5">
+                          {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}{cita.monto}
+                        </p>
+                      </div>
+                    </div>
+
+                    {cita.cliente_telefono ? (
+                      <button
+                        type="button"
+                        onClick={() => procesarNotificacionCitaWA(cita)}
+                        className="px-3 py-2 rounded-full bg-[#232931] hover:bg-[#191E24] text-white font-bold text-[10px] shrink-0 active:scale-95"
+                        title="Notificar por WhatsApp y bajar a cola de hoy"
+                      >
+                        📲 Cola + WA
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
+                          if (num) procesarNotificacionCitaWA(cita, num);
+                        }}
+                        className="px-3 py-2 rounded-full bg-[#C47E52] text-white font-bold text-[10px] shrink-0"
+                      >
+                        ➕ Tlf
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-bold">
+                🗓️ Próximos Días ({citasSiguientes.length})
+              </span>
+            </div>
+
+            {citasSiguientes.length === 0 ? (
+              <div className={`p-4 rounded-2xl border text-center text-xs text-[#8C8881] ${cardSurface}`}>
+                No hay citas agendadas para los próximos días.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {citasSiguientes.map((cita) => (
+                  <div
+                    key={cita.id}
+                    className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 ${cardSurface}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="px-2.5 py-1.5 rounded-xl bg-[#C47E52]/15 text-center shrink-0">
+                        <span className="text-[9px] font-bold text-[#8C8881] block">{cita.fecha.slice(5)}</span>
+                        <span className="text-xs font-black text-[#C47E52]">{cita.hora_inicio.substring(0, 5)}</span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-extrabold leading-tight">
+                          {cita.nombre_cliente} <span className="text-[#C47E52]">({cita.codigo_ticket})</span>
+                        </p>
+                        <p className="text-[11px] text-[#8C8881] mt-0.5">
+                          {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}{cita.monto}
+                        </p>
+                      </div>
+                    </div>
+
+                    {cita.cliente_telefono ? (
+                      <button
+                        type="button"
+                        onClick={() => procesarNotificacionCitaWA(cita)}
+                        className="px-3 py-2 rounded-full bg-[#232931] hover:bg-[#191E24] text-white font-bold text-[10px] shrink-0 active:scale-95"
+                      >
+                        📲 WA
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
+                          if (num) procesarNotificacionCitaWA(cita, num);
+                        }}
+                        className="px-3 py-2 rounded-full bg-[#C47E52] text-white font-bold text-[10px] shrink-0"
+                      >
+                        ➕ Tlf
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* --- TAB 4: GESTOR DE HORARIOS --- */}
       {tabActiva === 'horarios' && (
         <div className={`p-5 rounded-3xl border space-y-4 ${cardSurface}`}>
           <div className="flex items-center justify-between">
@@ -828,20 +1002,18 @@ export default function BarberoView() {
             : 'bg-[#F4F3F1] border-white/60'
         }`}
       >
-        <header className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#C47E52] text-white flex items-center justify-center text-sm font-black shadow-xs">
-              💈
-            </div>
-            <div>
-              <h1 className="text-sm font-black tracking-tight uppercase leading-none">
-                {APP_CONFIG.nombreNegocio}
-              </h1>
-              <p className="text-[10px] text-[#8C8881] font-medium mt-0.5">
-                Control de Barbería
-              </p>
-            </div>
-          </div>
+        {/* Barra superior con botón Volver al Inicio */}
+        <div className="flex items-center justify-between mb-3">
+          <Link
+            href="/"
+            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border transition-all active:scale-95 ${
+              isDark
+                ? 'bg-[#1D2229] border-[#2E353F] text-[#D1D5DB] hover:border-[#C47E52] hover:text-[#C47E52]'
+                : 'bg-white border-[#E5E2DC] text-[#232931] hover:border-[#232931]'
+            }`}
+          >
+            <span>←</span> Inicio
+          </Link>
 
           <div
             className={`flex items-center gap-0.5 p-1 rounded-full border text-[10px] font-bold ${
@@ -876,6 +1048,20 @@ export default function BarberoView() {
             >
               Auto
             </button>
+          </div>
+        </div>
+
+        <header className="flex items-center gap-2.5 mb-5">
+          <div className="w-9 h-9 rounded-full bg-[#C47E52] text-white flex items-center justify-center text-sm font-black shadow-xs shrink-0">
+            💈
+          </div>
+          <div>
+            <h1 className="text-sm font-black tracking-tight uppercase leading-none">
+              {APP_CONFIG.nombreNegocio}
+            </h1>
+            <p className="text-[10px] text-[#8C8881] font-medium mt-0.5">
+              Control de Barbería
+            </p>
           </div>
         </header>
 
