@@ -23,33 +23,40 @@ export default function HomeHub() {
   const isDark = modoTema === 'auto' ? esNoche : modoTema === 'dark';
 
   const qrCodeImageUrl = clientUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(clientUrl)}`
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&margin=10&color=232931&bgcolor=FFFFFF&data=${encodeURIComponent(clientUrl)}`
     : '';
 
   return (
-    <main className={`min-h-screen flex flex-col justify-between p-6 md:p-10 font-sans transition-colors duration-500 ${
-      isDark ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-900'
-    }`}>
-      {/* Header superior con conmutador de tema y acceso para el Barbero */}
-      <header className="flex items-center justify-between max-w-4xl w-full mx-auto pb-6 border-b border-slate-700/20">
-        <div>
-          <h1 className="text-2xl font-black text-amber-500 tracking-wider">
-            {APP_CONFIG.nombreNegocio || 'PÉGATE AHÍ'}
-          </h1>
-          <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-            Sistema Inteligente de Control de Turnos
-          </p>
-        </div>
+    <main
+      className={`min-h-screen flex flex-col items-center justify-center p-3 sm:p-6 transition-colors duration-500 ${
+        isDark ? 'bg-[#0F1216] text-[#F4F3F1]' : 'bg-[#C47E52] text-[#232931]'
+      }`}
+    >
+      {/* Contenedor estilo pantalla de bienvenida de la referencia */}
+      <div
+        className={`w-full max-w-[410px] rounded-[36px] p-6 shadow-2xl border flex flex-col justify-between transition-colors duration-500 ${
+          isDark
+            ? 'bg-[#15191E] border-[#262C35]'
+            : 'bg-[#F4F3F1] border-white/60'
+        }`}
+      >
+        {/* Barra superior con conmutador de tema */}
+        <header className="flex items-center justify-between mb-6">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#C47E52]">
+            Pégate Ahí
+          </span>
 
-        <div className="flex items-center gap-3">
-          {/* Selector de Tema (Claro / Oscuro / Auto) */}
-          <div className={`flex items-center gap-1 p-1 rounded-xl border text-xs font-semibold ${
-            isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-200 border-slate-300'
-          }`}>
+          <div
+            className={`flex items-center gap-0.5 p-1 rounded-full border text-[10px] font-bold ${
+              isDark ? 'bg-[#1D2229] border-[#2E353F]' : 'bg-white border-[#E5E2DC]'
+            }`}
+          >
             <button
               type="button"
               onClick={() => setModoTema('light')}
-              className={`p-1.5 rounded-lg transition-all ${modoTema === 'light' ? 'bg-amber-500 text-slate-950 font-bold' : isDark ? 'text-slate-400' : 'text-slate-600'}`}
+              className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                modoTema === 'light' ? 'bg-[#232931] text-white' : 'text-[#8C8881]'
+              }`}
               title="Modo Claro"
             >
               ☀️
@@ -57,7 +64,9 @@ export default function HomeHub() {
             <button
               type="button"
               onClick={() => setModoTema('dark')}
-              className={`p-1.5 rounded-lg transition-all ${modoTema === 'dark' ? 'bg-amber-500 text-slate-950 font-bold' : isDark ? 'text-slate-400' : 'text-slate-600'}`}
+              className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                modoTema === 'dark' ? 'bg-[#C47E52] text-white' : 'text-[#8C8881]'
+              }`}
               title="Modo Oscuro"
             >
               🌙
@@ -65,76 +74,85 @@ export default function HomeHub() {
             <button
               type="button"
               onClick={() => setModoTema('auto')}
-              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${modoTema === 'auto' ? 'bg-amber-500 text-slate-950' : isDark ? 'text-slate-400' : 'text-slate-600'}`}
+              className={`px-2 h-6 rounded-full transition-all ${
+                modoTema === 'auto'
+                  ? isDark
+                    ? 'bg-[#C47E52] text-white'
+                    : 'bg-[#232931] text-white'
+                  : 'text-[#8C8881]'
+              }`}
               title="Modo Automático"
             >
-              🔄 Auto
+              Auto
             </button>
           </div>
+        </header>
 
-          <Link
-            href="/barbero"
-            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs rounded-xl border transition-all active:scale-95 shadow-md ${
-              isDark
-                ? 'bg-slate-800 hover:bg-slate-700 text-amber-400 border-slate-700'
-                : 'bg-white hover:bg-slate-50 text-slate-900 border-slate-300'
-            }`}
-          >
-            💈 Acceso Barbero
-          </Link>
-        </div>
-      </header>
-
-      {/* Contenido Central: QR para el Cliente */}
-      <section className="max-w-md w-full mx-auto my-auto text-center space-y-6 py-8">
-        <div className="space-y-2">
-          <span className="px-3 py-1 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-bold rounded-full uppercase">
-            Escanea para tomar tu turno
-          </span>
-          <h2 className={`text-3xl font-black ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-            ¿Listo para tu corte?
-          </h2>
-          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-            Escanea este código QR con la cámara de tu celular para ingresar a la fila virtual sin esperar de pie.
-          </p>
-        </div>
-
-        {/* Tarjeta del QR */}
-        <div className={`p-6 rounded-3xl shadow-2xl inline-block border-4 ${
-          isDark ? 'bg-white border-amber-500/30' : 'bg-white border-amber-500/40 shadow-slate-300'
-        }`}>
-          {qrCodeImageUrl ? (
-            <img
-              src={qrCodeImageUrl}
-              alt="Código QR para tomar turno"
-              className="w-56 h-56 mx-auto rounded-lg"
-            />
-          ) : (
-            <div className="w-56 h-56 bg-slate-200 animate-pulse rounded-lg flex items-center justify-center text-slate-500 text-xs font-bold">
-              Cargando QR...
+        {/* Identidad Central estilo "THE BARBER" de la 1ra pantalla */}
+        <section className="text-center space-y-5 my-2">
+          <div className="space-y-2">
+            <div className="w-20 h-20 rounded-full bg-[#C47E52] text-white flex items-center justify-center text-4xl mx-auto shadow-lg">
+              🧔🏻
             </div>
-          )}
-        </div>
+            <div className="pt-1">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.2em] text-[#C47E52]">
+                Barbería & Estilo
+              </p>
+              <h1 className="text-2xl font-black tracking-tight uppercase mt-0.5">
+                {APP_CONFIG.nombreNegocio || 'PÉGATE AHÍ'}
+              </h1>
+              <p className="text-xs text-[#8C8881] mt-1 max-w-[260px] mx-auto">
+                Escanea el código QR para entrar a la fila virtual sin esperar de pie.
+              </p>
+            </div>
+          </div>
 
-        {/* Botón alternativo de acceso directo */}
-        <div className="pt-2">
-          <Link
-            href="/cliente"
-            className={`inline-block text-xs underline transition-colors ${
-              isDark ? 'text-slate-400 hover:text-amber-400' : 'text-slate-600 hover:text-amber-600'
-            }`}
-          >
-            ¿Estás probando en una PC? Haz clic aquí para abrir la vista del cliente
-          </Link>
-        </div>
-      </section>
+          {/* Tarjeta limpia del QR */}
+          <div className="bg-white p-4 rounded-3xl inline-block shadow-md border border-[#E5E2DC]">
+            {qrCodeImageUrl ? (
+              <img
+                src={qrCodeImageUrl}
+                alt="Código QR para tomar turno"
+                className="w-44 h-44 mx-auto rounded-xl"
+              />
+            ) : (
+              <div className="w-44 h-44 bg-[#F4F3F1] animate-pulse rounded-xl flex items-center justify-center text-[#8C8881] text-xs font-bold">
+                Cargando QR...
+              </div>
+            )}
+          </div>
 
-      {/* Footer minimalista */}
-      <footer className={`text-center text-xs py-4 border-t ${
-        isDark ? 'text-slate-600 border-slate-900' : 'text-slate-400 border-slate-200'
-      }`}>
-        <p>© {currentYear || 2026} Pégate Ahí - Software SaaS de Turnos para Barberías</p>
-      </footer>
+          {/* Botones apilados estilo "Book Now" y "Login" */}
+          <div className="space-y-2.5 pt-2">
+            <Link
+              href="/cliente"
+              className={`block w-full py-3.5 rounded-full font-bold text-xs tracking-wide transition-all shadow-md active:scale-95 ${
+                isDark
+                  ? 'bg-[#C47E52] hover:bg-[#B36E43] text-white'
+                  : 'bg-[#232931] hover:bg-[#181C22] text-white'
+              }`}
+            >
+              ✂️ Tomar Turno / Reservar
+            </Link>
+
+            <Link
+              href="/barbero"
+              className={`block w-full py-3.5 rounded-full font-bold text-xs tracking-wide border transition-all active:scale-95 ${
+                isDark
+                  ? 'bg-transparent border-[#2E353F] text-[#F4F3F1] hover:border-[#C47E52]'
+                  : 'bg-transparent border-[#232931] text-[#232931] hover:bg-[#232931]/5'
+              }`}
+            >
+              💈 Acceso Barbero
+            </Link>
+          </div>
+        </section>
+
+        {/* Footer minimalista */}
+        <footer className="text-center text-[10px] text-[#8C8881] pt-6 mt-2">
+          <p>© {currentYear || 2026} Pégate Ahí · Turnos Inteligentes</p>
+        </footer>
+      </div>
     </main>
   );
 }
