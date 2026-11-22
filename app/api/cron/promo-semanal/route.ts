@@ -1,65 +1,104 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { APP_CONFIG } from '../../../../lib/config';
+
+export const dynamic = 'force-dynamic';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY! // Usar Service Role para lectura en servidor
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 export async function GET(req: Request) {
-  // 1. Validar que la petición venga del Cron autorizado
+  // 1. Seguridad: Vercel envía automáticamente este header con tu CRON_SECRET
   const authHeader = req.headers.get('authorization');
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
   }
 
-  // 2. Obtener servicios y tarifas actualizadas
-  const { data: servicios } = await supabase
-    .from('servicios_config')
-    .select('nombre, precio')
-    .order('id', { ascending: true });
+  try {
+    // 2. Obtener servicios y tarifas actuales
+    const { data: servicios, error: errServicios } = await supabase
+      .from('servicios_config')
+      .select('nombre, precio')
+      .order('id', { ascending: true });
 
-  const listaTexto = servicios
-    ?.map((s) => `✂️ *${s.nombre}*: $${s.precio}`)
-    .join('\n') || '';
-
-  // 3. Obtener teléfonos únicos de clientes (de turnos y citas)
-  const { data: turnos } = await supabase
-    .from('turnos')
-    .select('nombre_cliente, cliente_telefono')
-    .not('cliente_telefono', 'is', null);
-
-  const clientesUnicos = new Map<string, string>();
-  turnos?.forEach((t) => {
-    let tel = t.cliente_telefono.replace(/\D/g, '');
-    if (tel.startsWith('0')) tel = '58' + tel.substring(1);
-    if (tel.length >= 10 && !clientesUnicos.has(tel)) {
-      clientesUnicos.set(tel, t.nombre_cliente.split(' ')[0]);
+    if (errServicios || !servicios || servicios.length === 0) {
+      return NextResponse.json({ error: 'Sin servicios configurados' }, { status: 500 });
     }
-  });
 
-  // 4. Enviar mensaje vía Evolution API (o tu gateway WhatsApp)
-  let enviados = 0;
-  for (const [telefono, primerNombre] of clientesUnicos.entries()) {
-    const mensaje = `¡Hola ${primerNombre}! 👋💈\n\nEsta semana te esperamos en *Pégate Ahí* con nuestros servicios:\n\n${listaTexto}\n\n📲 Reserva tu cita o toma tu turno en vivo aquí:\nhttps://tu-dominio.vercel.app/cliente`;
+    const listaServiciosTexto = servicios
+      .map((s) => `✂️ *${s.nombre}*: ${APP_CONFIG.monedaSimbolo}${s.precio}`)
+      .join('\n');
 
-    await fetch(`${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: process.env.EVOLUTION_API_KEY!,
-      },
-      body: JSON.stringify({
-        number: telefono,
-        text: mensaje,
-      }),
+    // 3. Recopilar clientes únicos desde 'turnos' y 'citas'
+    const [{ data: turnos }, { data: citas }] = await Promise.all([
+      supabase
+        .from('turnos')
+        .select('nombre_cliente, cliente_telefono')
+        .not('cliente_telefono', 'is', null),
+      supabase
+        .from('citas')
+        .select('nombre_cliente, cliente_telefono')
+        .not('cliente_telefono', 'is', null),
+    ]);
+
+    const clientesUnicos = new Map<string, string>();
+    const todosLosRegistros = [...(turnos || []), ...(citas || [])];
+
+    for (const reg of todosLosRegistros) {
+      if (!reg.cliente_telefono) continue;
+      let tel = reg.cliente_telefono.replace(/\D/g, '');
+      if (tel.startsWith('0')) tel = '58' + tel.substring(1);
+
+      if (tel.length >= 10 && !clientesUnicos.has(tel)) {
+        const primerNombre = (reg.nombre_cliente || 'Cliente').trim().split(' ')[0];
+        clientesUnicos.set(tel, primerNombre);
+      }
+    }
+
+    if (clientesUnicos.size === 0) {
+      return NextResponse.json({ ok: true, mensaje: 'No hay clientes registrados aún', enviados: 0 });
+    }
+
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://pegate-ahi.vercel.app';
+
+    // 4. Envío mediante WhatsApp API (Evolution API / Gateway)
+    const promesasEnvio = Array.from(clientesUnicos.entries()).map(async ([telefono, nombre]) => {
+      const mensaje =
+        `¡Hola ${nombre}! 👋💈\n\n` +
+        `Arranca la semana con buen corte en *${APP_CONFIG.nombreNegocio}*.\n` +
+        `Nuestros servicios disponibles:\n\n` +
+        `${listaServiciosTexto}\n\n` +
+        `📲 Toma tu turno en vivo o agenda tu cita aquí:\n${appUrl}/cliente`;
+
+      const res = await fetch(
+        `${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: process.env.EVOLUTION_API_KEY!,
+          },
+          body: JSON.stringify({
+            number: telefono,
+            text: mensaje,
+          }),
+        }
+      );
+
+      return res.ok;
     });
 
-    enviados++;
-    await sleep(4000); // Pausa anti-ban de 4 segundos entre envíos
-  }
+    const resultados = await Promise.allSettled(promesasEnvio);
+    const enviados = resultados.filter((r) => r.status === 'fulfilled' && r.value).length;
 
-  return NextResponse.json({ ok: true, enviados });
+    return NextResponse.json({
+      ok: true,
+      totalClientes: clientesUnicos.size,
+      enviados,
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }
