@@ -56,13 +56,6 @@ const getHoyLocal = () => {
   return `${year}-${month}-${day}`;
 };
 
-// Colores vibrantes de las tarjetas de servicio de la imagen (Amarillo, Rojo, Turquesa)
-const BLOQUES_COLOR = [
-  { bg: 'bg-[#F5D042]', text: 'text-[#072742]', sub: 'text-[#072742]/80' },
-  { bg: 'bg-[#C62828]', text: 'text-white', sub: 'text-white/85' },
-  { bg: 'bg-[#37B9C5]', text: 'text-[#072742]', sub: 'text-[#072742]/80' },
-];
-
 function ClienteContent() {
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
@@ -86,9 +79,8 @@ function ClienteContent() {
   const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const [mananaStr, setMananaStr] = useState<string>('');
   const [fechaCita, setFechaCita] = useState<string>('');
-  const [diasProximos, setDiasProximos] = useState<{ fecha: string; diaCorto: string; numDia: string; mesNombre: string }[]>([]);
+  const [diasProximos, setDiasProximos] = useState<{ fecha: string; diaCorto: string; numDia: string }[]>([]);
   const [bloquesDisponibles, setBloquesDisponibles] = useState<any[]>([]);
   const [horaCitaSeleccionada, setHoraCitaSeleccionada] = useState<string>('');
   const [citaConfirmada, setCitaConfirmada] = useState<CitaCliente | null>(null);
@@ -118,14 +110,11 @@ function ClienteContent() {
 
   useEffect(() => {
     const mananaInit = getMananaLocal();
-    setMananaStr(mananaInit);
     setFechaCita((prev) => prev || mananaInit);
 
-    // Generar tira de 7 días futuros estilo calendario de la 3ra pantalla
-    const diasNombres = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
-    const mesesNombres = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+    const diasNombres = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const listaDias = [];
-    for (let i = 1; i <= 7; i++) {
+    for (let i = 1; i <= 6; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
       const y = d.getFullYear();
@@ -135,7 +124,6 @@ function ClienteContent() {
         fecha: `${y}-${m}-${day}`,
         diaCorto: diasNombres[d.getDay()],
         numDia: day,
-        mesNombre: mesesNombres[d.getMonth()],
       });
     }
     setDiasProximos(listaDias);
@@ -143,7 +131,6 @@ function ClienteContent() {
     const actualizarHora = () => {
       const ahora = new Date();
       setHoraActual(ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
-      setMananaStr(getMananaLocal());
     };
     actualizarHora();
     const interval = setInterval(actualizarHora, 1000);
@@ -162,7 +149,7 @@ function ClienteContent() {
         data.forEach((s) => {
           let icono = '✂️';
           if (s.id === 'barba' || (s.nombre.toLowerCase().includes('barba') && !s.nombre.includes('+'))) {
-            icono = '🧔🏻';
+            icono = '🪒';
           } else if (s.id === 'corte_barba' || s.nombre.includes('+')) {
             icono = '💈';
           }
@@ -458,13 +445,11 @@ function ClienteContent() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const mesActivoObj = diasProximos.find((d) => d.fecha === fechaCita) || diasProximos[0];
-
   if (loading) {
     return (
-      <div className="py-16 text-center space-y-2">
-        <div className="w-8 h-8 border-2 border-[#F5D042] border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-xs font-bold text-slate-300">Cargando tu turno...</p>
+      <div className="p-12 text-center space-y-2 bg-[#002664] text-white">
+        <div className="w-8 h-8 border-2 border-[#F2293A] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-xs font-bold">Cargando tu turno...</p>
       </div>
     );
   }
@@ -472,43 +457,41 @@ function ClienteContent() {
   // --- CITA CONFIRMADA ---
   if (citaConfirmada) {
     return (
-      <div className="space-y-4">
-        <div className="p-6 rounded-2xl bg-[#0B3559] border-2 border-[#F5D042] text-center space-y-4">
-          <div className="w-14 h-14 rounded-full bg-[#F5D042] text-[#072742] flex items-center justify-center text-2xl mx-auto font-black">
-            📅
-          </div>
-          <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-[#37B9C5]">
-              RESERVA CONFIRMADA
-            </p>
-            <h2 className="text-4xl font-black text-white mt-1">{citaConfirmada.codigo_ticket}</h2>
-            <p className="text-sm font-bold text-[#F5D042] mt-0.5">{citaConfirmada.nombre_cliente}</p>
-          </div>
-
-          <div className="p-4 rounded-xl bg-[#04182B] text-xs space-y-2 text-left">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Fecha:</span>
-              <span className="font-bold text-white">{citaConfirmada.fecha}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Hora:</span>
-              <span className="font-black text-[#37B9C5]">{citaConfirmada.hora_inicio.substring(0, 5)} hrs</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Servicio:</span>
-              <span className="font-extrabold text-[#F5D042]">
-                {citaConfirmada.tipo_corte} ({APP_CONFIG.monedaSimbolo}{citaConfirmada.monto})
-              </span>
-            </div>
-          </div>
-
-          <button
-            onClick={volverAlInicio}
-            className="w-full py-3.5 rounded-xl bg-[#C62828] hover:bg-[#B02020] text-white font-black text-xs uppercase tracking-wider shadow-lg active:scale-95"
-          >
-            VOLVER AL INICIO
-          </button>
+      <div className="p-6 bg-[#002664] text-white text-center space-y-4">
+        <div className="w-16 h-16 rounded-full bg-white border-4 border-[#F2293A] text-[#002664] flex items-center justify-center text-2xl mx-auto font-black">
+          📅
         </div>
+        <div>
+          <p className="text-[11px] font-black uppercase tracking-widest text-[#F2293A]">
+            Cita Confirmada
+          </p>
+          <h2 className="text-4xl font-black text-white mt-1">{citaConfirmada.codigo_ticket}</h2>
+          <p className="text-sm font-bold text-white/90 mt-0.5">{citaConfirmada.nombre_cliente}</p>
+        </div>
+
+        <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 text-xs space-y-2 text-left">
+          <div className="flex justify-between">
+            <span className="text-white/70">Fecha:</span>
+            <span className="font-bold text-white">{citaConfirmada.fecha}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-white/70">Hora:</span>
+            <span className="font-black text-[#F2293A]">{citaConfirmada.hora_inicio.substring(0, 5)} hrs</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-white/70">Servicio:</span>
+            <span className="font-extrabold text-white">
+              {citaConfirmada.tipo_corte} ({APP_CONFIG.monedaSimbolo}{citaConfirmada.monto})
+            </span>
+          </div>
+        </div>
+
+        <button
+          onClick={volverAlInicio}
+          className="w-full py-3.5 rounded-lg bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-xs uppercase tracking-wider shadow-lg active:scale-95"
+        >
+          Volver al Inicio
+        </button>
       </div>
     );
   }
@@ -522,207 +505,231 @@ function ClienteContent() {
         : Math.min(100, Math.max(12, Math.round(((totalInicialCola - personasAdelante) / totalInicialCola) * 100)));
 
     return (
-      <div className="space-y-4">
-        {/* Ticket en bloque Turquesa */}
-        <div className="p-4 rounded-2xl bg-[#37B9C5] text-[#072742] flex items-center justify-between shadow-lg">
+      <div>
+        {/* Cabecera Roja estilo 2da pantalla */}
+        <div
+          className="p-5 text-white flex items-center justify-between"
+          style={{
+            backgroundColor: '#F2293A',
+            backgroundImage:
+              'repeating-linear-gradient(to bottom, transparent, transparent 10px, rgba(0, 38, 100, 0.14) 10px, rgba(0, 38, 100, 0.14) 16px)',
+          }}
+        >
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-[#072742] text-[#F5D042] flex items-center justify-center text-lg font-black shrink-0">
+            <div className="w-12 h-12 rounded-full bg-white border-2 border-[#002664] text-[#002664] flex items-center justify-center text-base font-black shrink-0">
               {turno.codigo_ticket}
             </div>
             <div>
-              <span className="text-[10px] font-black uppercase tracking-wider block opacity-80">
-                TU TICKET · {horaActual}
+              <span className="text-[10px] font-black uppercase tracking-wider block text-white/90">
+                Tu Turno · {horaActual}
               </span>
               <h2 className="text-base font-black leading-tight">{turno.nombre_cliente}</h2>
-              <p className="text-xs font-bold">
+              <p className="text-xs font-bold text-white/95">
                 {turno.tipo_corte} · {APP_CONFIG.monedaSimbolo}{turno.monto}
               </p>
             </div>
           </div>
         </div>
 
-        {turno.estado === 'espera' && (
-          <div className="space-y-3.5">
-            <div className="p-4 rounded-2xl bg-[#0B3559] border border-[#144673] space-y-2">
-              <div className="flex justify-between text-xs font-extrabold">
-                <span className="text-white">PROGRESO DE FILA</span>
-                <span className="text-[#F5D042]">{porcentajeProgreso}%</span>
-              </div>
-              <div className="w-full h-3 rounded-full bg-[#04182B] overflow-hidden">
-                <div
-                  className="h-full bg-[#F5D042] rounded-full transition-all duration-700"
-                  style={{ width: `${porcentajeProgreso}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-4 rounded-2xl bg-[#F5D042] text-[#072742] text-center shadow-md">
-                <span className="text-[10px] font-black uppercase block">DELANTE DE TI</span>
-                <p className="text-3xl font-black mt-0.5">{personasAdelante}</p>
-                <span className="text-[10px] font-bold uppercase">clientes</span>
-              </div>
-              <div className="p-4 rounded-2xl bg-[#0B3559] border border-[#37B9C5]/40 text-center">
-                <span className="text-[10px] font-black uppercase text-[#37B9C5] block">ESPERA APROX.</span>
-                <p className="text-3xl font-black text-white mt-0.5">{tiempoEstimado}m</p>
-                <span className="text-[10px] text-slate-300 font-bold uppercase">estimados</span>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-[#0B3559] border border-[#144673] space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-slate-300">Modalidad:</span>
-                <span className="px-2.5 py-0.5 rounded bg-[#37B9C5] text-[#072742] font-black text-[10px] uppercase">
-                  {turno.modalidad_espera === 'diligencia' ? '🏃‍♂️ Diligencia' : '💈 En el local'}
-                </span>
-              </div>
-
-              {turno.modalidad_espera === 'local' ? (
-                <button
-                  type="button"
-                  onClick={() => cambiarModalidadEnVivo('diligencia')}
-                  className="w-full py-3 rounded-xl bg-[#04182B] hover:bg-[#08243E] border border-[#F5D042]/50 text-[#F5D042] font-extrabold text-xs uppercase tracking-wide"
-                >
-                  Salgo a diligencia ({APP_CONFIG.tiempoLimiteDiligenciaMin} min tolerancia)
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => cambiarModalidadEnVivo('local')}
-                  className="w-full py-3 rounded-xl bg-[#37B9C5] text-[#072742] font-black text-xs uppercase tracking-wide"
-                >
-                  Ya regresé a la barbería
-                </button>
-              )}
-
-              {distanciaKm !== null && turno.modalidad_espera === 'diligencia' && (
-                <p className="text-[11px] text-center text-slate-300">
-                  📍 Distancia al local: <strong className="text-[#F5D042]">~{distanciaKm} km</strong>
-                </p>
-              )}
-            </div>
-
-            <button
-              onClick={cancelarTurno}
-              className="w-full py-3 rounded-xl bg-[#C62828]/20 border border-[#C62828] text-[#FF8A80] hover:bg-[#C62828] hover:text-white font-black text-xs uppercase tracking-wider transition-all"
-            >
-              CANCELAR MI TURNO
-            </button>
-          </div>
-        )}
-
-        {turno.estado === 'atendiendo' && (
-          <div className="p-6 rounded-2xl bg-[#C62828] text-white text-center space-y-4 shadow-xl">
-            {turno.cliente_llego ? (
-              <>
-                <span className="text-4xl block">💈</span>
-                <h2 className="text-xl font-black uppercase">¡Ya estás reportado!</h2>
-                <p className="text-xs text-white/90">El barbero sabe que estás listo en el local.</p>
-              </>
-            ) : turno.modalidad_espera === 'diligencia' && tiempoRestanteSegundos !== null ? (
-              <>
-                <span className="text-4xl block">🏃‍♂️</span>
-                <h2 className="text-lg font-black uppercase">¡El barbero te está llamando!</h2>
-                <div className="py-3 px-5 rounded-xl bg-[#072742]">
-                  <span className="text-[10px] uppercase font-bold text-[#37B9C5] block">Tiempo para llegar</span>
-                  <p className="text-4xl font-black font-mono text-[#F5D042] mt-1">
-                    {formatearTiempo(tiempoRestanteSegundos)}
-                  </p>
+        {/* Cuerpo Azul Marino */}
+        <div className="p-5 bg-[#002664] text-white space-y-4">
+          {turno.estado === 'espera' && (
+            <>
+              <div className="p-3.5 rounded-xl bg-[#001B47] border border-white/15 space-y-2">
+                <div className="flex justify-between text-xs font-extrabold">
+                  <span>Progreso de fila</span>
+                  <span className="text-[#F2293A]">{porcentajeProgreso}%</span>
                 </div>
-                <button
-                  onClick={notificarLlegadaPresencial}
-                  className="w-full py-3.5 rounded-xl bg-[#F5D042] text-[#072742] font-black text-xs uppercase tracking-wider shadow-lg active:scale-95"
-                >
-                  📍 ¡YA LLEGUÉ AL LOCAL!
-                </button>
-              </>
-            ) : (
-              <>
-                <span className="text-4xl block">✂️</span>
-                <h2 className="text-2xl font-black uppercase">¡ES TU TURNO!</h2>
-                <p className="text-xs text-white/90">Pasa adelante, tu silla está lista.</p>
-              </>
-            )}
-          </div>
-        )}
+                <div className="w-full h-2.5 rounded-full bg-white/15 overflow-hidden">
+                  <div
+                    className="h-full bg-[#F2293A] rounded-full transition-all duration-700"
+                    style={{ width: `${porcentajeProgreso}%` }}
+                  />
+                </div>
+              </div>
 
-        {(turno.estado === 'finalizado' || turno.estado === 'ausente') && (
-          <div className="p-6 rounded-2xl bg-[#0B3559] border border-[#37B9C5]/40 text-center space-y-4">
-            <span className="text-3xl block">{turno.estado === 'finalizado' ? '✨' : '⏳'}</span>
-            <h2 className="text-lg font-black uppercase text-white">
-              {turno.estado === 'finalizado' ? '¡Gracias por tu visita!' : 'Tiempo agotado'}
-            </h2>
-            <button
-              onClick={volverAlInicio}
-              className="w-full py-3.5 rounded-xl bg-[#C62828] text-white font-black text-xs uppercase tracking-wider"
-            >
-              SOLICITAR NUEVO TURNO
-            </button>
-          </div>
-        )}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-4 rounded-xl bg-white text-[#002664] text-center shadow">
+                  <span className="text-[10px] font-black uppercase block">Delante de ti</span>
+                  <p className="text-3xl font-black text-[#F2293A] mt-0.5">{personasAdelante}</p>
+                  <span className="text-[10px] font-bold">clientes</span>
+                </div>
+                <div className="p-4 rounded-xl bg-[#001B47] border border-white/20 text-center">
+                  <span className="text-[10px] font-black uppercase text-white/75 block">Espera aprox.</span>
+                  <p className="text-3xl font-black text-white mt-0.5">{tiempoEstimado}m</p>
+                  <span className="text-[10px] text-white/70 font-bold">estimados</span>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-white/80">Modalidad de espera:</span>
+                  <span className="px-2.5 py-0.5 rounded bg-white text-[#002664] font-black text-[10px]">
+                    {turno.modalidad_espera === 'diligencia' ? '🏃‍♂️ Diligencia' : '💈 En el local'}
+                  </span>
+                </div>
+
+                {turno.modalidad_espera === 'local' ? (
+                  <button
+                    type="button"
+                    onClick={() => cambiarModalidadEnVivo('diligencia')}
+                    className="w-full py-2.5 rounded-lg bg-white text-[#002664] font-black text-xs"
+                  >
+                    Salgo a diligencia ({APP_CONFIG.tiempoLimiteDiligenciaMin} min tolerancia)
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => cambiarModalidadEnVivo('local')}
+                    className="w-full py-2.5 rounded-lg bg-[#F2293A] text-white font-black text-xs"
+                  >
+                    Ya regresé a la barbería
+                  </button>
+                )}
+
+                {distanciaKm !== null && turno.modalidad_espera === 'diligencia' && (
+                  <p className="text-[11px] text-center text-white/80">
+                    📍 Distancia al local: <strong>~{distanciaKm} km</strong>
+                  </p>
+                )}
+              </div>
+
+              <button
+                onClick={cancelarTurno}
+                className="w-full py-3 rounded-lg bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-xs uppercase tracking-wider transition-all"
+              >
+                Cancelar mi turno
+              </button>
+            </>
+          )}
+
+          {turno.estado === 'atendiendo' && (
+            <div className="p-6 rounded-xl bg-white text-[#002664] text-center space-y-4 shadow-xl">
+              {turno.cliente_llego ? (
+                <>
+                  <span className="text-4xl block">💈</span>
+                  <h2 className="text-xl font-black text-[#F2293A]">¡Ya estás reportado!</h2>
+                  <p className="text-xs font-bold">El barbero sabe que estás listo en el local.</p>
+                </>
+              ) : turno.modalidad_espera === 'diligencia' && tiempoRestanteSegundos !== null ? (
+                <>
+                  <span className="text-4xl block">🏃‍♂️</span>
+                  <h2 className="text-lg font-black text-[#F2293A]">¡El barbero te está llamando!</h2>
+                  <div className="py-3 px-5 rounded-xl bg-[#002664] text-white">
+                    <span className="text-[10px] uppercase font-bold block">Tiempo para llegar</span>
+                    <p className="text-4xl font-black font-mono mt-1">
+                      {formatearTiempo(tiempoRestanteSegundos)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={notificarLlegadaPresencial}
+                    className="w-full py-3.5 rounded-lg bg-[#F2293A] text-white font-black text-xs uppercase tracking-wider shadow-lg active:scale-95"
+                  >
+                    📍 ¡Ya llegué al local!
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="text-4xl block">✂️</span>
+                  <h2 className="text-2xl font-black text-[#F2293A]">¡Es tu turno!</h2>
+                  <p className="text-xs font-bold">Pasa adelante, tu silla está lista.</p>
+                </>
+              )}
+            </div>
+          )}
+
+          {(turno.estado === 'finalizado' || turno.estado === 'ausente') && (
+            <div className="p-6 rounded-xl bg-white text-[#002664] text-center space-y-4">
+              <span className="text-3xl block">{turno.estado === 'finalizado' ? '✨' : '⏳'}</span>
+              <h2 className="text-lg font-black">
+                {turno.estado === 'finalizado' ? '¡Gracias por tu visita!' : 'Tiempo agotado'}
+              </h2>
+              <button
+                onClick={volverAlInicio}
+                className="w-full py-3.5 rounded-lg bg-[#F2293A] text-white font-black text-xs uppercase tracking-wider"
+              >
+                Solicitar nuevo turno
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
-  // --- PANTALLA DE SELECCIÓN ESTILO "SERVICE" & "APPOINTMENT BOOKING" ---
+  // --- FORMULARIO ESTILO PANTALLAS 2 Y 3 ("Bienvenido" Rojo + "Servicios" y "Elige tu Horario" Azul Marino) ---
   return (
-    <div className="space-y-4">
-      {/* Switch Cola Hoy / Cita Previa */}
-      <div className="grid grid-cols-2 gap-2 bg-[#04182B] p-1.5 rounded-xl border border-[#143F66]">
-        <button
-          type="button"
-          onClick={() => setModoRegistro('cola')}
-          className={`py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-            modoRegistro === 'cola'
-              ? 'bg-[#C62828] text-white shadow'
-              : 'text-slate-300 hover:text-white'
-          }`}
-        >
-          ✂️ Cola Hoy
-        </button>
-        <button
-          type="button"
-          onClick={() => setModoRegistro('cita')}
-          className={`py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-            modoRegistro === 'cita'
-              ? 'bg-[#F5D042] text-[#072742] shadow'
-              : 'text-slate-300 hover:text-white'
-          }`}
-        >
-          📅 Cita Previa
-        </button>
+    <div>
+      {/* Sección Superior Roja estilo Pantalla 2 ("01 / Bienvenido") */}
+      <div
+        className="px-6 pt-3 pb-6 text-center text-white space-y-3"
+        style={{
+          backgroundColor: '#F2293A',
+          backgroundImage:
+            'repeating-linear-gradient(to bottom, transparent, transparent 10px, rgba(0, 38, 100, 0.14) 10px, rgba(0, 38, 100, 0.14) 16px)',
+        }}
+      >
+        <div>
+          <h2 className="text-2xl font-black tracking-tight">Bienvenido</h2>
+          <p className="text-xs font-extrabold text-[#002664] mt-0.5">
+            - {nombre.trim() || APP_CONFIG.nombreNegocio || 'Pégate Ahí'} -
+          </p>
+        </div>
+
+        {/* Selector Cola Hoy / Agendar Cita */}
+        <div className="grid grid-cols-2 gap-2 bg-[#002664] p-1 rounded-lg">
+          <button
+            type="button"
+            onClick={() => setModoRegistro('cola')}
+            className={`py-2 rounded-md text-xs font-black transition-all ${
+              modoRegistro === 'cola'
+                ? 'bg-white text-[#F2293A] shadow'
+                : 'text-white/80 hover:text-white'
+            }`}
+          >
+            ✂️ Turno Hoy
+          </button>
+          <button
+            type="button"
+            onClick={() => setModoRegistro('cita')}
+            className={`py-2 rounded-md text-xs font-black transition-all ${
+              modoRegistro === 'cita'
+                ? 'bg-white text-[#F2293A] shadow'
+                : 'text-white/80 hover:text-white'
+            }`}
+          >
+            📅 Agendar Cita
+          </button>
+        </div>
       </div>
 
-      <form onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita} className="space-y-4">
-        {/* Sección SERVICE con cuadros vibrantes Amarillo / Rojo / Turquesa como la 2da pantalla */}
+      {/* Sección Inferior Azul Marino estilo Pantallas 2 y 3 */}
+      <form
+        onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita}
+        className="p-6 bg-[#002664] text-white space-y-5"
+      >
+        {/* Cuadrícula de Servicios en tarjetas blancas como "Services" */}
         <div>
-          <div className="text-center mb-2.5">
-            <h2 className="text-lg font-black tracking-widest uppercase text-white">SERVICE</h2>
-            <p className="text-[11px] text-[#37B9C5] font-bold">
-              {servicioSeleccionado.nombre} · {APP_CONFIG.monedaSimbolo}{servicioSeleccionado.precio}
-            </p>
-          </div>
-
+          <h3 className="text-center text-lg font-black tracking-wide mb-3">Servicios</h3>
           <div className="grid grid-cols-3 gap-2.5">
-            {listaServicios.map((srv, idx) => {
-              const color = BLOQUES_COLOR[idx % BLOQUES_COLOR.length];
+            {listaServicios.map((srv) => {
               const selected = servicioSeleccionado.nombre === srv.nombre;
               return (
                 <button
                   type="button"
                   key={srv.id}
                   onClick={() => setServicioSeleccionado(srv)}
-                  className={`p-3 rounded-2xl flex flex-col items-center justify-center text-center transition-all ${color.bg} ${color.text} ${
+                  className={`p-3 rounded-lg bg-white text-[#002664] flex flex-col items-center justify-center text-center transition-all ${
                     selected
-                      ? 'ring-4 ring-white scale-[1.03] shadow-xl'
-                      : 'opacity-75 hover:opacity-100'
+                      ? 'ring-4 ring-[#F2293A] scale-[1.03] shadow-lg'
+                      : 'opacity-80 hover:opacity-100'
                   }`}
                 >
                   <span className="text-2xl mb-1">{srv.icono}</span>
-                  <span className="text-[10px] font-black uppercase leading-tight line-clamp-1">
+                  <span className="text-[10px] font-black leading-tight line-clamp-1">
                     {srv.nombre}
                   </span>
-                  <span className={`text-xs font-black mt-0.5 ${color.sub}`}>
+                  <span className="text-xs font-black text-[#F2293A] mt-0.5">
                     {APP_CONFIG.monedaSimbolo}{srv.precio}
                   </span>
                 </button>
@@ -731,15 +738,15 @@ function ClienteContent() {
           </div>
         </div>
 
-        {/* Inputs estilo barra blanca redondeada de la 2da pantalla */}
-        <div className="space-y-2">
+        {/* Inputs limpios en blanco */}
+        <div className="space-y-2.5">
           <input
             type="text"
             required
             placeholder="Tu nombre completo *"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-full bg-white text-[#072742] placeholder-slate-400 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#37B9C5]"
+            className="w-full px-3.5 py-2.5 rounded-lg bg-white text-[#002664] placeholder-slate-400 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#F2293A]"
           />
           <input
             type="tel"
@@ -747,24 +754,24 @@ function ClienteContent() {
             placeholder="WhatsApp (Ej: 04141234567) *"
             value={telefono}
             onChange={(e) => setTelefono(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-full bg-white text-[#072742] placeholder-slate-400 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#37B9C5]"
+            className="w-full px-3.5 py-2.5 rounded-lg bg-white text-[#002664] placeholder-slate-400 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#F2293A]"
           />
         </div>
 
-        {/* Modalidad de espera si es Cola Hoy */}
+        {/* Modalidad de espera si es Turno Hoy */}
         {modoRegistro === 'cola' && (
           <div className="grid grid-cols-2 gap-2.5">
             <button
               type="button"
               onClick={() => setModalidadEspera('local')}
-              className={`p-3 rounded-xl border-2 text-left transition-all ${
+              className={`p-3 rounded-lg border text-left transition-all ${
                 modalidadEspera === 'local'
-                  ? 'bg-[#37B9C5] border-white text-[#072742]'
-                  : 'bg-[#0B3559] border-[#144673] text-white opacity-80'
+                  ? 'bg-white text-[#002664] border-white font-black'
+                  : 'bg-[#001B47] text-white/80 border-white/20'
               }`}
             >
-              <p className="text-xs font-black uppercase">💈 En el Local</p>
-              <p className="text-[10px] font-semibold opacity-80">Espero en barbería</p>
+              <p className="text-xs font-black">💈 En el Local</p>
+              <p className="text-[10px] opacity-75">Espero en barbería</p>
             </button>
 
             <button
@@ -773,70 +780,56 @@ function ClienteContent() {
                 setModalidadEspera('diligencia');
                 obtenerUbicacionGPS();
               }}
-              className={`p-3 rounded-xl border-2 text-left transition-all ${
+              className={`p-3 rounded-lg border text-left transition-all ${
                 modalidadEspera === 'diligencia'
-                  ? 'bg-[#F5D042] border-white text-[#072742]'
-                  : 'bg-[#0B3559] border-[#144673] text-white opacity-80'
+                  ? 'bg-white text-[#002664] border-white font-black'
+                  : 'bg-[#001B47] text-white/80 border-white/20'
               }`}
             >
-              <p className="text-xs font-black uppercase">🏃‍♂️ Diligencia</p>
-              <p className="text-[10px] font-semibold opacity-80">{APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)</p>
+              <p className="text-xs font-black">🏃‍♂️ Diligencia</p>
+              <p className="text-[10px] opacity-75">{APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)</p>
             </button>
           </div>
         )}
 
-        {/* Calendario estilo 3ra pantalla ("APPOINTMENT BOOKING" con barra amarilla y días en tarjetas blancas/roja) */}
+        {/* Selector de Día y Hora estilo Pantalla 3 ("Elige tu Día" y "Elige tu Hora" con líneas inferiores) */}
         {modoRegistro === 'cita' && (
-          <div className="space-y-3 pt-1">
-            <p className="text-center text-xs font-black tracking-widest uppercase text-[#C62828]">
-              APPOINTMENT BOOKING
-            </p>
-
-            {/* Barra amarilla del mes */}
-            <div className="flex items-center justify-between px-3">
-              <span className="text-white font-black text-sm">‹</span>
-              <div className="px-6 py-1.5 rounded-lg bg-[#F5D042] text-[#072742] font-black text-xs uppercase tracking-widest shadow">
-                {mesActivoObj ? mesActivoObj.mesNombre : 'SELECCIONA DÍA'}
-              </div>
-              <span className="text-white font-black text-sm">›</span>
-            </div>
-
-            {/* Tira de 7 días estilo calendario */}
-            <div className="grid grid-cols-7 gap-1 pt-1 border-t border-b border-white/15 py-2.5">
-              {diasProximos.map((d) => {
-                const isSelected = fechaCita === d.fecha;
-                return (
-                  <button
-                    key={d.fecha}
-                    type="button"
-                    onClick={() => {
-                      setFechaCita(d.fecha);
-                      setHoraCitaSeleccionada('');
-                    }}
-                    className={`py-2 rounded-lg flex flex-col items-center justify-center transition-all ${
-                      isSelected
-                        ? 'bg-[#C62828] text-white scale-105 shadow-md'
-                        : 'bg-white text-[#072742] hover:bg-[#F5D042]'
-                    }`}
-                  >
-                    <span className="text-[8px] font-black uppercase">{d.diaCorto}</span>
-                    <span className="text-xs font-black mt-0.5">{d.numDia}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Selector de hora estilo "SELECT A TIME" con cuadro turquesa */}
+          <div className="space-y-4">
             <div>
-              <p className="text-center text-[11px] font-black uppercase tracking-widest text-white mb-2">
-                SELECT A TIME
-              </p>
+              <p className="text-xs font-black mb-2">Elige tu Día</p>
+              <div className="grid grid-cols-6 gap-1 text-center">
+                {diasProximos.map((d) => {
+                  const isSelected = fechaCita === d.fecha;
+                  return (
+                    <button
+                      key={d.fecha}
+                      type="button"
+                      onClick={() => {
+                        setFechaCita(d.fecha);
+                        setHoraCitaSeleccionada('');
+                      }}
+                      className={`py-2 rounded-md flex flex-col items-center transition-all ${
+                        isSelected
+                          ? 'bg-[#F2293A] text-white font-black shadow'
+                          : 'text-white/85 hover:bg-white/10'
+                      }`}
+                    >
+                      <span className="text-[9px] font-bold">{d.diaCorto}</span>
+                      <span className="text-xs font-black mt-0.5">{d.numDia}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-black mb-2">Elige tu Hora</p>
               {bloquesDisponibles.length === 0 ? (
-                <p className="text-[11px] text-slate-300 text-center py-3 border border-dashed border-white/20 rounded-xl">
+                <p className="text-[11px] text-white/70 text-center py-3 border border-dashed border-white/25 rounded-lg">
                   Sin horarios disponibles para este día.
                 </p>
               ) : (
-                <div className="grid grid-cols-3 gap-2 max-h-32 overflow-y-auto pr-0.5">
+                <div className="grid grid-cols-3 gap-2.5 max-h-32 overflow-y-auto pr-0.5">
                   {bloquesDisponibles.map((b) => {
                     const horaText = b.hora_inicio.substring(0, 5);
                     const selected = horaCitaSeleccionada === b.hora_inicio;
@@ -845,10 +838,10 @@ function ClienteContent() {
                         key={b.id}
                         type="button"
                         onClick={() => setHoraCitaSeleccionada(b.hora_inicio)}
-                        className={`py-2 rounded-lg text-xs font-black transition-all ${
+                        className={`py-2 text-xs font-black border-b-2 transition-all ${
                           selected
-                            ? 'bg-[#37B9C5] text-[#072742] ring-2 ring-white shadow'
-                            : 'bg-[#0B3559] text-white border border-[#144673] hover:border-[#37B9C5]'
+                            ? 'text-[#F2293A] border-[#F2293A]'
+                            : 'text-white border-white/60 hover:border-white'
                         }`}
                       >
                         {horaText}
@@ -861,17 +854,17 @@ function ClienteContent() {
           </div>
         )}
 
-        {/* Botón Rojo "BOOK NOW" de la 3ra pantalla */}
+        {/* Botón de envío */}
         <button
           type="submit"
           disabled={registrando || !nombre.trim() || !telefono.trim() || (modoRegistro === 'cita' && !horaCitaSeleccionada)}
-          className="w-full py-3.5 rounded-xl bg-[#C62828] hover:bg-[#B02020] text-white font-black text-xs uppercase tracking-widest shadow-lg transition-all active:scale-95 disabled:opacity-40"
+          className="w-full py-3.5 rounded-lg bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-xs uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40"
         >
           {registrando
-            ? 'PROCESANDO...'
+            ? 'Procesando...'
             : modoRegistro === 'cola'
-            ? 'TOMAR TURNO AHORA'
-            : 'BOOK NOW'}
+            ? 'Tomar Turno Ahora'
+            : 'Confirmar Reserva'}
         </button>
       </form>
     </div>
@@ -879,8 +872,8 @@ function ClienteContent() {
 }
 
 export default function ClienteView() {
-  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('dark');
-  const [esNoche, setEsNoche] = useState<boolean>(true);
+  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('light');
+  const [esNoche, setEsNoche] = useState<boolean>(false);
 
   useEffect(() => {
     const hora = new Date().getHours();
@@ -892,24 +885,31 @@ export default function ClienteView() {
   return (
     <main
       className={`min-h-screen flex flex-col items-center justify-center p-3 sm:p-6 transition-colors duration-500 ${
-        isDark ? 'bg-[#041626] text-white' : 'bg-[#D6D8DC] text-[#072742]'
+        isDark ? 'bg-[#001233] text-white' : 'bg-[#EEF1F6] text-[#002664]'
       }`}
     >
-      <div className="w-full max-w-[410px] rounded-[34px] p-6 shadow-2xl border-2 bg-[#072742] border-[#123D63] text-white">
+      <div className="w-full max-w-[410px] rounded-[34px] shadow-2xl overflow-hidden bg-[#002664]">
         {/* Barra superior con botón Volver al Inicio y Tema */}
-        <div className="flex items-center justify-between mb-4">
+        <div
+          className="flex items-center justify-between px-6 pt-5 pb-2 text-white"
+          style={{
+            backgroundColor: '#F2293A',
+            backgroundImage:
+              'repeating-linear-gradient(to bottom, transparent, transparent 10px, rgba(0, 38, 100, 0.14) 10px, rgba(0, 38, 100, 0.14) 16px)',
+          }}
+        >
           <Link
             href="/"
-            className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#04182B] border border-[#143F66] text-[#37B9C5] hover:border-[#F5D042] text-[11px] font-black uppercase transition-all"
+            className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white text-[#F2293A] text-[11px] font-black transition-all active:scale-95 shadow-xs"
           >
             ← Inicio
           </Link>
 
-          <div className="flex items-center gap-0.5 p-1 rounded-full bg-[#04182B] border border-[#143F66] text-[10px] font-bold">
+          <div className="flex items-center gap-0.5 p-1 rounded-full bg-[#002664]/80 text-[10px] font-bold">
             <button
               onClick={() => setModoTema('light')}
               className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                modoTema === 'light' ? 'bg-[#F5D042] text-[#072742]' : 'text-slate-400'
+                modoTema === 'light' ? 'bg-white text-[#002664]' : 'text-white/70'
               }`}
             >
               ☀️
@@ -917,7 +917,7 @@ export default function ClienteView() {
             <button
               onClick={() => setModoTema('dark')}
               className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                modoTema === 'dark' ? 'bg-[#C62828] text-white' : 'text-slate-400'
+                modoTema === 'dark' ? 'bg-[#F2293A] text-white' : 'text-white/70'
               }`}
             >
               🌙
@@ -925,7 +925,7 @@ export default function ClienteView() {
             <button
               onClick={() => setModoTema('auto')}
               className={`px-2 h-6 rounded-full transition-all ${
-                modoTema === 'auto' ? 'bg-[#37B9C5] text-[#072742]' : 'text-slate-400'
+                modoTema === 'auto' ? 'bg-white text-[#002664]' : 'text-white/70'
               }`}
             >
               Auto
@@ -933,9 +933,14 @@ export default function ClienteView() {
           </div>
         </div>
 
-        <Suspense fallback={<p className="text-center text-slate-300 text-xs py-10">Cargando...</p>}>
+        <Suspense fallback={<p className="text-center text-white text-xs py-10">Cargando...</p>}>
           <ClienteContent />
         </Suspense>
+
+        {/* Franja inferior roja estilo 2da y 3ra pantalla */}
+        <div className="h-6 bg-[#F2293A] flex items-center justify-center text-white text-xs font-black">
+          ⌄
+        </div>
       </div>
     </main>
   );
