@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import { APP_CONFIG } from '../../lib/config';
 
@@ -39,6 +39,8 @@ interface ServicioOption {
   icono: string;
 }
 
+const STORAGE_KEY = 'pegate_ahi_registro_activo';
+
 const getMananaLocal = () => {
   const d = new Date();
   d.setDate(d.getDate() + 1);
@@ -57,8 +59,10 @@ const getHoyLocal = () => {
 };
 
 function ClienteContent({ isDark }: { isDark: boolean }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
+  const citaParam = searchParams.get('cita');
 
   const [modoRegistro, setModoRegistro] = useState<'cola' | 'cita'>('cola');
   const [nombre, setNombre] = useState('');
@@ -89,6 +93,25 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [horaActual, setHoraActual] = useState<string>('');
   const [tiempoRestanteSegundos, setTiempoRestanteSegundos] = useState<number | null>(null);
   const [distanciaKm, setDistanciaKm] = useState<number | null>(null);
+
+  const guardarPersistencia = (tipo: 'turno' | 'cita', codigo: string) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ tipo, codigo }));
+    } catch {
+      // Ignorar si localStorage está restringido
+    }
+    const paramName = tipo === 'turno' ? 'ticket' : 'cita';
+    router.replace(`/cliente?${paramName}=${encodeURIComponent(codigo)}`, { scroll: false });
+  };
+
+  const limpiarPersistencia = () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // Ignorar
+    }
+    router.replace('/cliente', { scroll: false });
+  };
 
   const sonarAlarma = () => {
     try {
@@ -267,6 +290,26 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     }
   };
 
+  const cargarCitaGuardada = async (codigoCita: string) => {
+    const { data, error } = await supabase
+      .from('citas')
+      .select('*')
+      .eq('codigo_ticket', codigoCita.toUpperCase())
+      .neq('estado', 'cancelada')
+      .maybeSingle();
+
+    if (!error && data) {
+      if (data.estado === 'atendida') {
+        await cargarTurnoYPosicion(data.codigo_ticket);
+        return;
+      }
+      setCitaConfirmada(data as CitaCliente);
+    } else {
+      limpiarPersistencia();
+    }
+    setLoading(false);
+  };
+
   const cargarTurnoYPosicion = async (codigoOId: string) => {
     let query = supabase.from('turnos').select('*');
     if (codigoOId.includes('-')) {
@@ -275,9 +318,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       query = query.eq('id', codigoOId);
     }
 
-    const { data: miTurno, error } = await query.single();
+    const { data: miTurno, error } = await query.maybeSingle();
 
-    if (!error && miTurno) {
+    if (!error && miTurno && miTurno.estado !== 'cancelado') {
       if (turno && turno.estado === 'espera' && miTurno.estado === 'atendiendo') {
         sonarAlarma();
       }
@@ -298,14 +341,39 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           setTotalInicialCola(delante + 1);
         }
       }
+    } else if (!miTurno || miTurno.estado === 'cancelado') {
+      limpiarPersistencia();
+      setTurno(null);
     }
     setLoading(false);
   };
 
+  // Recuperar automáticamente turno o cita desde URL o localStorage al cargar/recargar
   useEffect(() => {
-    const idBusqueda = ticketParam || turno?.id || turno?.codigo_ticket;
-    if (idBusqueda) cargarTurnoYPosicion(idBusqueda);
-    else setLoading(false);
+    let guardado: { tipo: 'turno' | 'cita'; codigo: string } | null = null;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) guardado = JSON.parse(raw);
+    } catch {
+      guardado = null;
+    }
+
+    const idTurno = ticketParam || turno?.codigo_ticket || (guardado?.tipo === 'turno' ? guardado.codigo : null);
+    const idCita = citaParam || citaConfirmada?.codigo_ticket || (guardado?.tipo === 'cita' ? guardado.codigo : null);
+
+    if (idTurno) {
+      if (!ticketParam) {
+        router.replace(`/cliente?ticket=${encodeURIComponent(idTurno)}`, { scroll: false });
+      }
+      cargarTurnoYPosicion(idTurno);
+    } else if (idCita) {
+      if (!citaParam) {
+        router.replace(`/cliente?cita=${encodeURIComponent(idCita)}`, { scroll: false });
+      }
+      cargarCitaGuardada(idCita);
+    } else {
+      setLoading(false);
+    }
 
     const channel = supabase
       .channel('cliente_realtime_cola')
@@ -318,7 +386,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [ticketParam, turno?.id, turno?.codigo_ticket]);
+  }, [ticketParam, citaParam, turno?.id, turno?.codigo_ticket]);
 
   useEffect(() => {
     if (
@@ -370,7 +438,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
     if (!error && data) {
       setTurno(data as TurnoCliente);
-      window.history.pushState({}, '', `/cliente?ticket=${data.codigo_ticket}`);
+      guardarPersistencia('turno', data.codigo_ticket);
       cargarTurnoYPosicion(data.codigo_ticket);
     }
     setRegistrando(false);
@@ -410,6 +478,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
     if (!error && data) {
       setCitaConfirmada(data as CitaCliente);
+      guardarPersistencia('cita', data.codigo_ticket);
       cargarHorarios();
     }
     setRegistrando(false);
@@ -439,12 +508,12 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   };
 
   const volverAlInicio = () => {
+    limpiarPersistencia();
     setTurno(null);
     setCitaConfirmada(null);
     setNombre('');
     setTelefono('');
     setHoraCitaSeleccionada('');
-    window.location.href = '/cliente';
   };
 
   const cancelarTurno = async () => {
@@ -697,7 +766,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         </p>
       </div>
 
-      {/* Selector Cola Hoy (acento Rojo) / Agendar Cita (acento Azul) */}
       <div
         className={`grid grid-cols-2 gap-1.5 p-1.5 rounded-xl border ${
           isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
@@ -731,7 +799,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita}
         className="space-y-5"
       >
-        {/* Servicios */}
         <div>
           <label className="block text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-2">
             1. Selecciona tu servicio
@@ -746,9 +813,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   onClick={() => setServicioSeleccionado(srv)}
                   className={`p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
                     selected
-                      ? isDark
-                        ? 'bg-zinc-900 border-[#C59B27] text-white shadow-md'
-                        : 'bg-zinc-900 border-[#C59B27] text-white shadow-sm'
+                      ? 'bg-zinc-900 border-[#C59B27] text-white shadow-md'
                       : isDark
                       ? 'bg-zinc-950/80 border-zinc-800 text-zinc-400 hover:border-zinc-700'
                       : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:border-zinc-300'
@@ -766,7 +831,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           </div>
         </div>
 
-        {/* Datos del cliente */}
         <div className="space-y-3">
           <label className="block text-xs font-extrabold uppercase tracking-wider text-zinc-400">
             2. Tus datos de contacto
@@ -797,7 +861,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           />
         </div>
 
-        {/* Modalidad de espera si es Turno Hoy */}
         {modoRegistro === 'cola' && (
           <div>
             <label className="block text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-2">
@@ -842,7 +905,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           </div>
         )}
 
-        {/* Selector de Día y Hora para Citas */}
         {modoRegistro === 'cita' && (
           <div className="space-y-4">
             <div>
@@ -912,7 +974,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           </div>
         )}
 
-        {/* Botón principal Rojo puntual */}
         <button
           type="submit"
           disabled={
@@ -957,7 +1018,6 @@ export default function ClienteView() {
         }`}
       >
         <div className="rounded-2xl border border-[#C59B27]/60 p-5 sm:p-6">
-          {/* Barra superior */}
           <div
             className={`flex items-center justify-between pb-3 border-b ${
               isDark ? 'border-zinc-800' : 'border-zinc-200'
