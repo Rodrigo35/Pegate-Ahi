@@ -452,44 +452,42 @@ function BarberoContent() {
 
   return (
     <div className="space-y-4">
-      {/* Perfil del Barbero estilo 3ra pantalla (Avatar circular blanco con borde rojo + Nombre en rojo + Métricas) */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <div className="w-14 h-14 rounded-full bg-white border-4 border-[#F2293A] flex items-center justify-center text-2xl shrink-0 shadow">
             🧔🏻
           </div>
           <div>
-            <h1 className="text-base font-black text-[#F2293A] leading-tight">
+            <h1 className="text-lg font-black text-[#F2293A] leading-tight">
               {APP_CONFIG.nombreNegocio || 'Panel Barbero'}
             </h1>
             <p className="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
               En línea · {horaActual}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="px-3 py-1.5 rounded-lg bg-white text-[#002664] text-center shadow">
-            <span className="text-[9px] uppercase font-black block">Caja</span>
-            <span className="text-xs font-black text-[#F2293A]">{APP_CONFIG.monedaSimbolo}{totalIngresos}</span>
+          <div className="px-3 py-1.5 rounded-xl bg-white text-[#002664] text-center shadow">
+            <span className="text-[11px] uppercase font-black block">Caja</span>
+            <span className="text-sm font-black text-[#F2293A]">{APP_CONFIG.monedaSimbolo}{totalIngresos}</span>
           </div>
-          <div className="px-3 py-1.5 rounded-lg bg-[#001B47] border border-white/20 text-white text-center">
-            <span className="text-[9px] uppercase font-bold text-white/75 block">Cortes</span>
-            <span className="text-xs font-black">{totalAtendidos}</span>
+          <div className="px-3 py-1.5 rounded-xl bg-[#001B47] border border-white/20 text-white text-center">
+            <span className="text-[11px] uppercase font-bold text-white/80 block">Cortes</span>
+            <span className="text-sm font-black">{totalAtendidos}</span>
           </div>
         </div>
       </div>
 
-      {/* Pestañas de navegación */}
       <div className="grid grid-cols-4 gap-1.5 bg-[#001B47] p-1.5 rounded-xl border border-white/15">
         <button
           type="button"
           onClick={() => setTabActiva('silla')}
-          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+          className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'silla'
               ? 'bg-[#F2293A] text-white shadow'
-              : 'text-white/80 hover:text-white'
+              : 'text-white/85 hover:text-white'
           }`}
         >
           Silla ({colaEspera.length})
@@ -498,7 +496,7 @@ function BarberoContent() {
         <button
           type="button"
           onClick={() => setTabActiva('qr')}
-          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+          className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'qr'
               ? 'bg-white text-[#F2293A] shadow'
               : 'text-white hover:bg-white/10'
@@ -510,10 +508,10 @@ function BarberoContent() {
         <button
           type="button"
           onClick={() => setTabActiva('citas')}
-          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+          className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'citas'
               ? 'bg-[#F2293A] text-white shadow'
-              : 'text-white/80 hover:text-white'
+              : 'text-white/85 hover:text-white'
           }`}
         >
           Citas ({citasDelDia.length})
@@ -522,65 +520,64 @@ function BarberoContent() {
         <button
           type="button"
           onClick={() => setTabActiva('horarios')}
-          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+          className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'horarios'
               ? 'bg-white text-[#002664] shadow'
-              : 'text-white/80 hover:text-white'
+              : 'text-white/85 hover:text-white'
           }`}
         >
           Horarios
         </button>
       </div>
 
-      {/* --- TAB 1: SILLA & COLA EN VIVO --- */}
       {tabActiva === 'silla' && (
         <div className="space-y-4">
           <div className="p-5 rounded-2xl bg-white text-[#002664] space-y-4 shadow-xl">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black uppercase tracking-wider text-[#002664]/70">
+              <span className="text-xs font-black uppercase tracking-wider text-[#002664]/75">
                 En Silla Ahora
               </span>
               {turnoActual && (
-                <span className="text-[10px] font-black px-2.5 py-0.5 rounded bg-[#F2293A] text-white">
+                <span className="text-xs font-black px-3 py-0.5 rounded bg-[#F2293A] text-white">
                   {turnoActual.modalidad_espera === 'diligencia' ? '🏃‍♂️ En camino' : '✂️ Atendiendo'}
                 </span>
               )}
             </div>
 
             {loading ? (
-              <p className="text-center text-xs text-slate-500 py-6 animate-pulse">Cargando...</p>
+              <p className="text-center text-sm text-slate-500 py-6 animate-pulse">Cargando...</p>
             ) : turnoActual ? (
               <div className="space-y-4">
                 {turnoActual.cliente_llego && (
-                  <div className="p-2.5 rounded-lg bg-[#002664] text-white text-center text-[11px] font-black">
+                  <div className="p-3 rounded-xl bg-[#002664] text-white text-center text-xs font-black">
                     📍 ¡El cliente ya llegó al local!
                   </div>
                 )}
 
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-[#002664] text-white flex items-center justify-center text-base font-black shrink-0">
+                    <div className="w-14 h-14 rounded-xl bg-[#002664] text-white flex items-center justify-center text-base font-black shrink-0">
                       {turnoActual.codigo_ticket}
                     </div>
                     <div>
-                      <h3 className="text-base font-black leading-tight">{turnoActual.nombre_cliente}</h3>
-                      <p className="text-xs font-bold text-slate-600">{turnoActual.tipo_corte || tipoServicio}</p>
+                      <h3 className="text-lg font-black leading-tight">{turnoActual.nombre_cliente}</h3>
+                      <p className="text-sm font-bold text-slate-600">{turnoActual.tipo_corte || tipoServicio}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-black text-[#F2293A]">
+                    <p className="text-3xl font-black text-[#F2293A]">
                       {APP_CONFIG.monedaSimbolo}{turnoActual.monto || precioServicio}
                     </p>
                   </div>
                 </div>
 
                 {editandoServicio ? (
-                  <div className="p-3 rounded-xl bg-slate-100 space-y-2.5">
+                  <div className="p-3.5 rounded-xl bg-slate-100 space-y-3">
                     <div className="flex gap-2">
                       <select
                         value={nuevoTipoInput}
                         onChange={handleTipoChange}
-                        className="flex-1 px-3 py-2 text-xs font-bold rounded-lg bg-white border border-slate-300 text-[#002664] focus:outline-none"
+                        className="flex-1 px-3 py-2.5 text-sm font-bold rounded-lg bg-white border border-slate-300 text-[#002664] focus:outline-none"
                       >
                         <option value="Corte clásico">Corte clásico</option>
                         <option value="Corte + barba">Corte + barba</option>
@@ -591,21 +588,21 @@ function BarberoContent() {
                         step="0.5"
                         value={nuevoPrecioInput}
                         onChange={(e) => setNuevoPrecioInput(e.target.value)}
-                        className="w-20 px-3 py-2 text-xs font-bold rounded-lg bg-white border border-slate-300 text-[#002664] focus:outline-none"
+                        className="w-24 px-3 py-2.5 text-sm font-bold rounded-lg bg-white border border-slate-300 text-[#002664] focus:outline-none"
                       />
                     </div>
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => setEditandoServicio(false)}
-                        className="flex-1 py-2 rounded-lg text-xs font-bold border border-slate-300 text-slate-600"
+                        className="flex-1 py-2.5 rounded-lg text-xs font-bold border border-slate-300 text-slate-600"
                       >
                         Cancelar
                       </button>
                       <button
                         type="button"
                         onClick={guardarNuevoServicio}
-                        className="flex-1 py-2 rounded-lg text-xs font-black bg-[#002664] text-white"
+                        className="flex-1 py-2.5 rounded-lg text-xs font-black bg-[#002664] text-white"
                       >
                         Guardar
                       </button>
@@ -620,7 +617,7 @@ function BarberoContent() {
                         setNuevoPrecioInput((turnoActual.monto || precioServicio).toString());
                         setEditandoServicio(true);
                       }}
-                      className="text-[11px] font-bold text-slate-500 hover:text-[#F2293A]"
+                      className="text-xs font-bold text-slate-600 hover:text-[#F2293A]"
                     >
                       ✏️ Cambiar servicio/monto
                     </button>
@@ -629,7 +626,7 @@ function BarberoContent() {
                       <button
                         type="button"
                         onClick={() => enviarWhatsAppTurno(turnoActual.cliente_telefono!, turnoActual.nombre_cliente, turnoActual.codigo_ticket)}
-                        className="px-3 py-1 rounded-lg bg-emerald-600 text-white text-[11px] font-black"
+                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-black"
                       >
                         📲 WhatsApp
                       </button>
@@ -638,14 +635,14 @@ function BarberoContent() {
                 )}
 
                 {turnoActual.modalidad_espera === 'diligencia' && minutosRestantes !== null && !turnoActual.cliente_llego && (
-                  <div className="p-3.5 rounded-xl bg-slate-100 text-center space-y-2">
-                    <p className="text-[11px] font-bold text-slate-600">
+                  <div className="p-4 rounded-xl bg-slate-100 text-center space-y-2.5">
+                    <p className="text-xs font-bold text-slate-700">
                       Tiempo límite: <span className="text-[#F2293A] font-black">{minutosRestantes} min</span>
                     </p>
                     <button
                       type="button"
                       onClick={confirmarLlegadaCliente}
-                      className="w-full py-2.5 rounded-lg bg-[#002664] text-white font-black text-xs"
+                      className="w-full py-3 rounded-lg bg-[#002664] text-white font-black text-xs"
                     >
                       💈 Confirmar Llegada al Local
                     </button>
@@ -653,10 +650,10 @@ function BarberoContent() {
                 )}
               </div>
             ) : (
-              <div className="py-5 text-center space-y-1">
-                <span className="text-3xl block">💺</span>
-                <p className="text-xs font-black">Silla disponible</p>
-                <p className="text-[11px] text-slate-500">Llama al siguiente cliente o muestra el QR</p>
+              <div className="py-6 text-center space-y-1.5">
+                <span className="text-4xl block">💺</span>
+                <p className="text-base font-black">Silla disponible</p>
+                <p className="text-xs text-slate-600">Llama al siguiente cliente o muestra el QR</p>
               </div>
             )}
 
@@ -666,14 +663,14 @@ function BarberoContent() {
                   <button
                     onClick={llamarSiguiente}
                     disabled={colaEspera.length === 0}
-                    className="flex-1 py-3.5 rounded-lg bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-xs uppercase tracking-wider shadow-md active:scale-95 disabled:opacity-40"
+                    className="flex-1 py-4 rounded-xl bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-sm uppercase tracking-wider shadow-md active:scale-95 disabled:opacity-40"
                   >
                     📢 Llamar ({colaEspera.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setTabActiva('qr')}
-                    className="px-4 py-3.5 rounded-lg bg-[#002664] text-white font-black text-xs active:scale-95 shadow"
+                    className="px-4 py-4 rounded-xl bg-[#002664] text-white font-black text-sm active:scale-95 shadow"
                   >
                     📷 QR
                   </button>
@@ -683,14 +680,14 @@ function BarberoContent() {
                   {turnoActual.modalidad_espera === 'diligencia' && (
                     <button
                       onClick={pasarSiguientePorAusencia}
-                      className="flex-1 py-3.5 rounded-lg border-2 border-[#F2293A] text-[#F2293A] font-black text-xs"
+                      className="flex-1 py-4 rounded-xl border-2 border-[#F2293A] text-[#F2293A] font-black text-sm"
                     >
                       Ausente
                     </button>
                   )}
                   <button
                     onClick={finalizarServicio}
-                    className="flex-1 py-3.5 rounded-lg bg-[#002664] hover:bg-[#001D4D] text-white font-black text-xs uppercase tracking-wider shadow-md active:scale-95"
+                    className="flex-1 py-4 rounded-xl bg-[#002664] hover:bg-[#001D4D] text-white font-black text-sm uppercase tracking-wider shadow-md active:scale-95"
                   >
                     ✅ Finalizar Corte
                   </button>
@@ -699,40 +696,39 @@ function BarberoContent() {
             </div>
           </div>
 
-          {/* Lista de Espera del mismo día */}
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-black text-white">Cola de hoy ({colaEspera.length})</span>
-              <span className="text-[11px] font-bold text-white/80">Prom. ~{tiempoPromedioMinutos}m</span>
+              <span className="text-sm font-black text-white">Cola de hoy ({colaEspera.length})</span>
+              <span className="text-xs font-bold text-white/85">Prom. ~{tiempoPromedioMinutos}m</span>
             </div>
 
             {colaEspera.length === 0 ? (
-              <div className="p-5 rounded-xl bg-[#001B47] border border-white/15 text-center text-xs text-white/75">
+              <div className="p-5 rounded-xl bg-[#001B47] border border-white/15 text-center text-sm text-white/80">
                 No hay clientes en espera hoy.
               </div>
             ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-0.5">
+              <div className="space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
                 {colaEspera.map((item, idx) => (
                   <div
                     key={item.id}
-                    className="p-3.5 rounded-xl bg-white text-[#002664] flex items-center justify-between shadow"
+                    className="p-4 rounded-xl bg-white text-[#002664] flex items-center justify-between shadow"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-[#F2293A] text-white flex items-center justify-center text-xs font-black shrink-0">
+                      <div className="w-10 h-10 rounded-lg bg-[#F2293A] text-white flex items-center justify-center text-sm font-black shrink-0">
                         #{idx + 1}
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-black">{item.nombre_cliente}</span>
-                          <span className="text-[10px] font-black text-[#F2293A]">({item.codigo_ticket})</span>
+                          <span className="text-sm font-black">{item.nombre_cliente}</span>
+                          <span className="text-xs font-black text-[#F2293A]">({item.codigo_ticket})</span>
                         </div>
-                        <p className="text-[11px] text-slate-600 font-semibold">
+                        <p className="text-xs text-slate-600 font-semibold mt-0.5">
                           {item.tipo_corte} · {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 Local'}
                         </p>
                       </div>
                     </div>
 
-                    <span className="text-sm font-black text-[#002664]">
+                    <span className="text-base font-black text-[#002664]">
                       {APP_CONFIG.monedaSimbolo}{item.monto || precioServicio}
                     </span>
                   </div>
@@ -743,34 +739,33 @@ function BarberoContent() {
         </div>
       )}
 
-      {/* --- TAB 2: CÓDIGO QR PARA TURNO DEL MISMO DÍA --- */}
       {tabActiva === 'qr' && (
         <div className="p-6 rounded-2xl bg-white text-[#002664] text-center space-y-4 shadow-xl">
           <div>
-            <span className="inline-block px-3 py-1 rounded bg-[#F2293A] text-white text-[10px] font-black uppercase tracking-widest">
+            <span className="inline-block px-3 py-1 rounded bg-[#F2293A] text-white text-xs font-black uppercase tracking-widest">
               Registro Rápido en Local
             </span>
-            <h3 className="text-base font-black mt-2">Escanea para tomar tu turno hoy</h3>
-            <p className="text-[11px] text-slate-600 mt-1">
+            <h3 className="text-lg font-black mt-2">Escanea para tomar tu turno hoy</h3>
+            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
               El cliente entra directo a la cola del día y sigue su turno en vivo desde su teléfono.
             </p>
           </div>
 
-          <div className="p-3 rounded-2xl border-4 border-[#002664] inline-block mx-auto">
+          <div className="p-3.5 rounded-2xl border-4 border-[#002664] inline-block mx-auto">
             {qrImageUrl ? (
               <img
                 src={qrImageUrl}
                 alt="QR Cola Barbería"
-                className="w-44 h-44 rounded-lg"
+                className="w-48 h-48 rounded-lg"
               />
             ) : (
-              <div className="w-44 h-44 flex items-center justify-center text-xs text-slate-400">
+              <div className="w-48 h-48 flex items-center justify-center text-sm text-slate-400">
                 Generando QR...
               </div>
             )}
           </div>
 
-          <div className="p-2.5 rounded-lg bg-slate-100 text-[11px] font-mono text-slate-600 truncate">
+          <div className="p-3 rounded-lg bg-slate-100 text-xs font-mono text-slate-700 truncate">
             {clienteUrl}
           </div>
 
@@ -778,14 +773,14 @@ function BarberoContent() {
             <button
               type="button"
               onClick={copiarEnlaceCliente}
-              className="flex-1 py-3 rounded-lg bg-[#002664] text-white font-black text-xs active:scale-95"
+              className="flex-1 py-3.5 rounded-xl bg-[#002664] text-white font-black text-xs active:scale-95"
             >
               {copiadoUrl ? '✅ Copiado' : '📋 Copiar Enlace'}
             </button>
             <button
               type="button"
               onClick={() => setTabActiva('silla')}
-              className="flex-1 py-3 rounded-lg bg-[#F2293A] text-white font-black text-xs active:scale-95"
+              className="flex-1 py-3.5 rounded-xl bg-[#F2293A] text-white font-black text-xs active:scale-95"
             >
               Volver a Silla
             </button>
@@ -793,38 +788,37 @@ function BarberoContent() {
         </div>
       )}
 
-      {/* --- TAB 3: AGENDA DE CITAS (HOY + DÍAS SIGUIENTES) --- */}
       {tabActiva === 'citas' && (
-        <div className="space-y-4 max-h-[460px] overflow-y-auto pr-0.5">
-          <div className="space-y-2">
+        <div className="space-y-4 max-h-[480px] overflow-y-auto pr-0.5">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-black text-white">
+              <span className="text-sm font-black text-white">
                 📅 Citas de Hoy ({citasDeHoy.length})
               </span>
-              <span className="text-[10px] text-white/75">Pasar a cola al llegar</span>
+              <span className="text-xs text-white/80">Pasar a cola al llegar</span>
             </div>
 
             {citasDeHoy.length === 0 ? (
-              <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 text-center text-xs text-white/75">
+              <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 text-center text-sm text-white/80">
                 Sin citas agendadas para hoy.
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {citasDeHoy.map((cita) => (
                   <div
                     key={cita.id}
-                    className="p-3.5 rounded-xl bg-white text-[#002664] border-l-4 border-[#F2293A] flex items-center justify-between gap-2 shadow"
+                    className="p-4 rounded-xl bg-white text-[#002664] border-l-4 border-[#F2293A] flex items-center justify-between gap-2 shadow"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="px-2.5 py-1.5 rounded-lg bg-[#F2293A] text-white text-center shrink-0">
-                        <span className="text-[8px] font-black uppercase block">HOY</span>
-                        <span className="text-xs font-black">{cita.hora_inicio.substring(0, 5)}</span>
+                      <div className="px-3 py-2 rounded-lg bg-[#F2293A] text-white text-center shrink-0">
+                        <span className="text-[11px] font-black uppercase block">HOY</span>
+                        <span className="text-sm font-black">{cita.hora_inicio.substring(0, 5)}</span>
                       </div>
                       <div>
-                        <p className="text-xs font-black leading-tight">
+                        <p className="text-sm font-black leading-tight">
                           {cita.nombre_cliente} <span className="text-[#F2293A]">({cita.codigo_ticket})</span>
                         </p>
-                        <p className="text-[11px] text-slate-600 font-semibold mt-0.5">
+                        <p className="text-xs text-slate-600 font-semibold mt-0.5">
                           {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}{cita.monto}
                         </p>
                       </div>
@@ -834,7 +828,7 @@ function BarberoContent() {
                       <button
                         type="button"
                         onClick={() => procesarNotificacionCitaWA(cita)}
-                        className="px-3 py-2 rounded-lg bg-[#002664] text-white font-black text-[10px] shrink-0 active:scale-95"
+                        className="px-3.5 py-2.5 rounded-lg bg-[#002664] text-white font-black text-xs shrink-0 active:scale-95"
                       >
                         📲 Cola + WA
                       </button>
@@ -845,7 +839,7 @@ function BarberoContent() {
                           const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
                           if (num) procesarNotificacionCitaWA(cita, num);
                         }}
-                        className="px-3 py-2 rounded-lg bg-[#F2293A] text-white font-black text-[10px] shrink-0"
+                        className="px-3.5 py-2.5 rounded-lg bg-[#F2293A] text-white font-black text-xs shrink-0"
                       >
                         ➕ Tlf
                       </button>
@@ -856,34 +850,34 @@ function BarberoContent() {
             )}
           </div>
 
-          <div className="space-y-2 pt-1">
+          <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-black text-white">
+              <span className="text-sm font-black text-white">
                 🗓️ Próximos Días ({citasSiguientes.length})
               </span>
             </div>
 
             {citasSiguientes.length === 0 ? (
-              <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 text-center text-xs text-white/75">
+              <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 text-center text-sm text-white/80">
                 No hay citas agendadas para los próximos días.
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {citasSiguientes.map((cita) => (
                   <div
                     key={cita.id}
-                    className="p-3.5 rounded-xl bg-white text-[#002664] flex items-center justify-between gap-2 shadow"
+                    className="p-4 rounded-xl bg-white text-[#002664] flex items-center justify-between gap-2 shadow"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="px-2.5 py-1.5 rounded-lg bg-[#002664] text-white text-center shrink-0">
-                        <span className="text-[9px] font-bold block">{cita.fecha.slice(5)}</span>
-                        <span className="text-xs font-black text-[#F2293A]">{cita.hora_inicio.substring(0, 5)}</span>
+                      <div className="px-3 py-2 rounded-lg bg-[#002664] text-white text-center shrink-0">
+                        <span className="text-[11px] font-bold block">{cita.fecha.slice(5)}</span>
+                        <span className="text-sm font-black text-[#F2293A]">{cita.hora_inicio.substring(0, 5)}</span>
                       </div>
                       <div>
-                        <p className="text-xs font-black leading-tight">
+                        <p className="text-sm font-black leading-tight">
                           {cita.nombre_cliente} <span className="text-[#F2293A]">({cita.codigo_ticket})</span>
                         </p>
-                        <p className="text-[11px] text-slate-600 font-semibold mt-0.5">
+                        <p className="text-xs text-slate-600 font-semibold mt-0.5">
                           {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}{cita.monto}
                         </p>
                       </div>
@@ -893,7 +887,7 @@ function BarberoContent() {
                       <button
                         type="button"
                         onClick={() => procesarNotificacionCitaWA(cita)}
-                        className="px-3 py-2 rounded-lg bg-[#F2293A] text-white font-black text-[10px] shrink-0 active:scale-95"
+                        className="px-3.5 py-2.5 rounded-lg bg-[#F2293A] text-white font-black text-xs shrink-0 active:scale-95"
                       >
                         📲 WA
                       </button>
@@ -904,7 +898,7 @@ function BarberoContent() {
                           const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
                           if (num) procesarNotificacionCitaWA(cita, num);
                         }}
-                        className="px-3 py-2 rounded-lg bg-[#002664] text-white font-black text-[10px] shrink-0"
+                        className="px-3.5 py-2.5 rounded-lg bg-[#002664] text-white font-black text-xs shrink-0"
                       >
                         ➕ Tlf
                       </button>
@@ -917,15 +911,14 @@ function BarberoContent() {
         </div>
       )}
 
-      {/* --- TAB 4: GESTOR DE HORARIOS (Estilo Pantalla 3 con líneas blancas/rojas) --- */}
       {tabActiva === 'horarios' && (
         <div className="p-5 rounded-2xl bg-[#001B47] border border-white/15 space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-white">Elige tu Día</span>
+            <span className="text-sm font-black text-white">Elige tu Día</span>
             <select
               value={diaSeleccionado}
               onChange={(e) => setDiaSeleccionado(Number(e.target.value))}
-              className="px-4 py-1.5 text-xs font-black rounded-lg bg-[#F2293A] text-white focus:outline-none"
+              className="px-4 py-2 text-sm font-black rounded-lg bg-[#F2293A] text-white focus:outline-none"
             >
               {diasNombres.map((d, idx) => (
                 <option key={idx} value={idx}>{d}</option>
@@ -933,13 +926,13 @@ function BarberoContent() {
             </select>
           </div>
 
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-3 gap-3">
             {bloques.map((bloque) => (
               <button
                 key={bloque.id}
                 type="button"
                 onClick={() => toggleBloque(bloque.id, bloque.activo)}
-                className={`py-2 text-xs font-black border-b-2 transition-all ${
+                className={`py-2.5 text-sm font-black border-b-2 transition-all ${
                   bloque.activo
                     ? 'text-white border-white'
                     : 'text-[#F2293A] border-[#F2293A] line-through opacity-75'
@@ -973,7 +966,7 @@ export default function BarberoView() {
       }`}
     >
       <div
-        className="w-full max-w-[430px] rounded-[34px] shadow-2xl overflow-hidden text-white"
+        className="w-full max-w-[450px] rounded-[34px] shadow-2xl overflow-hidden text-white"
         style={{
           backgroundColor: '#002664',
           backgroundImage:
@@ -981,36 +974,35 @@ export default function BarberoView() {
         }}
       >
         <div className="p-6 pb-4">
-          {/* Barra superior con botón Volver al Inicio y Tema */}
           <div className="flex items-center justify-between mb-4">
             <Link
               href="/"
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white text-[#002664] hover:bg-[#F2293A] hover:text-white text-[11px] font-black transition-all"
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-[#002664] hover:bg-[#F2293A] hover:text-white text-xs font-black transition-all"
             >
               ← Inicio
             </Link>
 
-            <div className="flex items-center gap-0.5 p-1 rounded-full bg-[#001B47] border border-white/15 text-[10px] font-bold">
+            <div className="flex items-center gap-1 p-1 rounded-full bg-[#001B47] border border-white/15 text-xs font-bold">
               <button
                 onClick={() => setModoTema('light')}
-                className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                  modoTema === 'light' ? 'bg-white text-[#002664]' : 'text-white/70'
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                  modoTema === 'light' ? 'bg-white text-[#002664]' : 'text-white/80'
                 }`}
               >
                 ☀️
               </button>
               <button
                 onClick={() => setModoTema('dark')}
-                className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                  modoTema === 'dark' ? 'bg-[#F2293A] text-white' : 'text-white/70'
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                  modoTema === 'dark' ? 'bg-[#F2293A] text-white' : 'text-white/80'
                 }`}
               >
                 🌙
               </button>
               <button
                 onClick={() => setModoTema('auto')}
-                className={`px-2 h-6 rounded-full transition-all ${
-                  modoTema === 'auto' ? 'bg-white text-[#002664]' : 'text-white/70'
+                className={`px-2.5 h-7 rounded-full transition-all ${
+                  modoTema === 'auto' ? 'bg-white text-[#002664]' : 'text-white/80'
                 }`}
               >
                 Auto
@@ -1021,8 +1013,7 @@ export default function BarberoView() {
           <BarberoContent />
         </div>
 
-        {/* Franja inferior roja estilo 3ra pantalla */}
-        <div className="h-6 bg-[#F2293A] flex items-center justify-center text-white text-xs font-black">
+        <div className="h-7 bg-[#F2293A] flex items-center justify-center text-white text-sm font-black">
           ⌄
         </div>
       </div>
