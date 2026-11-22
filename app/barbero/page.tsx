@@ -46,7 +46,7 @@ const getFechaLocalStr = () => {
   return `${year}-${month}-${day}`;
 };
 
-function BarberoContent() {
+function BarberoContent({ isDark }: { isDark: boolean }) {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [turnosFinalizados, setTurnosFinalizados] = useState<Turno[]>([]);
   const [citasDelDia, setCitasDelDia] = useState<Cita[]>([]);
@@ -233,9 +233,15 @@ function BarberoContent() {
         },
       ]);
 
-      await supabase.from('citas').update({ estado: 'atendida', cliente_telefono: telefonoFinal }).eq('id', cita.id);
+      await supabase
+        .from('citas')
+        .update({ estado: 'atendida', cliente_telefono: telefonoFinal })
+        .eq('id', cita.id);
     } else if (telefonoEspecifico) {
-      await supabase.from('citas').update({ cliente_telefono: telefonoEspecifico }).eq('id', cita.id);
+      await supabase
+        .from('citas')
+        .update({ cliente_telefono: telefonoEspecifico })
+        .eq('id', cita.id);
     }
 
     fetchTurnosYCitas();
@@ -279,7 +285,7 @@ function BarberoContent() {
         .from('turnos')
         .update({
           tipo_corte: nuevoTipoInput,
-          monto: valorPrecio
+          monto: valorPrecio,
         })
         .eq('id', turnoActual.id);
       await fetchTurnosYCitas();
@@ -296,7 +302,7 @@ function BarberoContent() {
       .update({
         estado: 'espera',
         llamado_en: null,
-        creado_en: new Date().toISOString()
+        creado_en: new Date().toISOString(),
       })
       .eq('id', turnoExpirado.id);
 
@@ -317,7 +323,11 @@ function BarberoContent() {
         .eq('id', siguiente.id);
 
       if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
-        enviarWhatsAppTurno(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
+        enviarWhatsAppTurno(
+          siguiente.cliente_telefono,
+          siguiente.nombre_cliente,
+          siguiente.codigo_ticket
+        );
       }
     }
 
@@ -355,7 +365,7 @@ function BarberoContent() {
         .update({
           estado: 'espera',
           llamado_en: null,
-          creado_en: new Date().toISOString()
+          creado_en: new Date().toISOString(),
         })
         .eq('id', turnoActual.id);
     }
@@ -372,7 +382,11 @@ function BarberoContent() {
       .eq('id', siguiente.id);
 
     if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
-      enviarWhatsAppTurno(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
+      enviarWhatsAppTurno(
+        siguiente.cliente_telefono,
+        siguiente.nombre_cliente,
+        siguiente.codigo_ticket
+      );
     }
 
     fetchTurnosYCitas();
@@ -380,7 +394,10 @@ function BarberoContent() {
 
   const confirmarLlegadaCliente = async () => {
     if (!turnoActual) return;
-    await supabase.from('turnos').update({ modalidad_espera: 'local', llamado_en: null }).eq('id', turnoActual.id);
+    await supabase
+      .from('turnos')
+      .update({ modalidad_espera: 'local', llamado_en: null })
+      .eq('id', turnoActual.id);
     fetchTurnosYCitas();
   };
 
@@ -392,7 +409,7 @@ function BarberoContent() {
       .update({
         estado: 'espera',
         llamado_en: null,
-        creado_en: new Date().toISOString()
+        creado_en: new Date().toISOString(),
       })
       .eq('id', turnoActual.id);
 
@@ -413,7 +430,11 @@ function BarberoContent() {
         .eq('id', siguiente.id);
 
       if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
-        enviarWhatsAppTurno(siguiente.cliente_telefono, siguiente.nombre_cliente, siguiente.codigo_ticket);
+        enviarWhatsAppTurno(
+          siguiente.cliente_telefono,
+          siguiente.nombre_cliente,
+          siguiente.codigo_ticket
+        );
       }
     }
 
@@ -428,7 +449,7 @@ function BarberoContent() {
         estado: 'finalizado',
         finalizado_en: new Date().toISOString(),
         monto: turnoActual.monto || precioServicio,
-        tipo_corte: turnoActual.tipo_corte || tipoServicio
+        tipo_corte: turnoActual.tipo_corte || tipoServicio,
       })
       .eq('id', turnoActual.id);
 
@@ -447,47 +468,60 @@ function BarberoContent() {
   };
 
   const qrImageUrl = clienteUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&color=002664&bgcolor=FFFFFF&data=${encodeURIComponent(clienteUrl)}`
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&color=0F172A&bgcolor=FFFFFF&data=${encodeURIComponent(clienteUrl)}`
     : '';
+
+  const cardSurface = isDark
+    ? 'bg-zinc-900/90 border-zinc-800 text-zinc-100'
+    : 'bg-zinc-50 border-zinc-200 text-zinc-900';
 
   return (
     <div className="space-y-4">
+      {/* Perfil del barbero + indicadores */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <div className="w-14 h-14 rounded-full bg-white border-4 border-[#F2293A] flex items-center justify-center text-2xl shrink-0 shadow">
+          <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-[#C59B27]/60 text-white flex items-center justify-center text-2xl shrink-0">
             🧔🏻
           </div>
           <div>
-            <h1 className="text-lg font-black text-[#F2293A] leading-tight">
+            <h1 className="text-lg font-black leading-tight">
               {APP_CONFIG.nombreNegocio || 'Panel Barbero'}
             </h1>
-            <p className="text-xs font-bold text-white flex items-center gap-1.5 mt-0.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <p className="text-xs font-bold text-zinc-400 flex items-center gap-1.5 mt-0.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               En línea · {horaActual}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="px-3 py-1.5 rounded-xl bg-white text-[#002664] text-center shadow">
-            <span className="text-[11px] uppercase font-black block">Caja</span>
-            <span className="text-sm font-black text-[#F2293A]">{APP_CONFIG.monedaSimbolo}{totalIngresos}</span>
+          <div className={`px-3 py-1.5 rounded-xl border text-center ${cardSurface}`}>
+            <span className="text-[11px] uppercase font-bold text-zinc-400 block">Caja</span>
+            <span className="text-sm font-black text-[#C59B27]">
+              {APP_CONFIG.monedaSimbolo}
+              {totalIngresos}
+            </span>
           </div>
-          <div className="px-3 py-1.5 rounded-xl bg-[#001B47] border border-white/20 text-white text-center">
-            <span className="text-[11px] uppercase font-bold text-white/80 block">Cortes</span>
+          <div className={`px-3 py-1.5 rounded-xl border text-center ${cardSurface}`}>
+            <span className="text-[11px] uppercase font-bold text-zinc-400 block">Cortes</span>
             <span className="text-sm font-black">{totalAtendidos}</span>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-1.5 bg-[#001B47] p-1.5 rounded-xl border border-white/15">
+      {/* Pestañas con acentos discretos */}
+      <div
+        className={`grid grid-cols-4 gap-1.5 p-1.5 rounded-xl border ${
+          isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+        }`}
+      >
         <button
           type="button"
           onClick={() => setTabActiva('silla')}
           className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'silla'
-              ? 'bg-[#F2293A] text-white shadow'
-              : 'text-white/85 hover:text-white'
+              ? 'bg-[#DC2626] text-white shadow-xs'
+              : 'text-zinc-400 hover:text-white'
           }`}
         >
           Silla ({colaEspera.length})
@@ -498,8 +532,8 @@ function BarberoContent() {
           onClick={() => setTabActiva('qr')}
           className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'qr'
-              ? 'bg-white text-[#F2293A] shadow'
-              : 'text-white hover:bg-white/10'
+              ? 'bg-white text-zinc-950 shadow-xs'
+              : 'text-zinc-400 hover:text-white'
           }`}
         >
           📷 QR Hoy
@@ -510,8 +544,8 @@ function BarberoContent() {
           onClick={() => setTabActiva('citas')}
           className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'citas'
-              ? 'bg-[#F2293A] text-white shadow'
-              : 'text-white/85 hover:text-white'
+              ? 'bg-[#2563EB] text-white shadow-xs'
+              : 'text-zinc-400 hover:text-white'
           }`}
         >
           Citas ({citasDelDia.length})
@@ -522,62 +556,76 @@ function BarberoContent() {
           onClick={() => setTabActiva('horarios')}
           className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'horarios'
-              ? 'bg-white text-[#002664] shadow'
-              : 'text-white/85 hover:text-white'
+              ? 'bg-[#C59B27] text-zinc-950 shadow-xs'
+              : 'text-zinc-400 hover:text-white'
           }`}
         >
           Horarios
         </button>
       </div>
 
+      {/* --- TAB 1: SILLA & COLA EN VIVO --- */}
       {tabActiva === 'silla' && (
         <div className="space-y-4">
-          <div className="p-5 rounded-2xl bg-white text-[#002664] space-y-4 shadow-xl">
+          <div className={`p-5 rounded-2xl border border-[#C59B27]/40 space-y-4 ${cardSurface}`}>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-black uppercase tracking-wider text-[#002664]/75">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-400">
                 En Silla Ahora
               </span>
               {turnoActual && (
-                <span className="text-xs font-black px-3 py-0.5 rounded bg-[#F2293A] text-white">
+                <span className="text-xs font-black px-3 py-0.5 rounded-full bg-[#DC2626]/15 text-[#DC2626] border border-[#DC2626]/30">
                   {turnoActual.modalidad_espera === 'diligencia' ? '🏃‍♂️ En camino' : '✂️ Atendiendo'}
                 </span>
               )}
             </div>
 
             {loading ? (
-              <p className="text-center text-sm text-slate-500 py-6 animate-pulse">Cargando...</p>
+              <p className="text-center text-sm text-zinc-400 py-6 animate-pulse">Cargando...</p>
             ) : turnoActual ? (
               <div className="space-y-4">
                 {turnoActual.cliente_llego && (
-                  <div className="p-3 rounded-xl bg-[#002664] text-white text-center text-xs font-black">
+                  <div className="p-3 rounded-xl bg-emerald-600 text-white text-center text-xs font-black">
                     📍 ¡El cliente ya llegó al local!
                   </div>
                 )}
 
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-14 h-14 rounded-xl bg-[#002664] text-white flex items-center justify-center text-base font-black shrink-0">
+                    <div className="px-3.5 py-2.5 rounded-xl bg-[#DC2626] text-white text-base font-black shrink-0">
                       {turnoActual.codigo_ticket}
                     </div>
                     <div>
-                      <h3 className="text-lg font-black leading-tight">{turnoActual.nombre_cliente}</h3>
-                      <p className="text-sm font-bold text-slate-600">{turnoActual.tipo_corte || tipoServicio}</p>
+                      <h3 className="text-lg font-black leading-tight">
+                        {turnoActual.nombre_cliente}
+                      </h3>
+                      <p className="text-sm font-semibold text-zinc-400">
+                        {turnoActual.tipo_corte || tipoServicio}
+                      </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-black text-[#F2293A]">
-                      {APP_CONFIG.monedaSimbolo}{turnoActual.monto || precioServicio}
+                    <p className="text-3xl font-black text-[#C59B27]">
+                      {APP_CONFIG.monedaSimbolo}
+                      {turnoActual.monto || precioServicio}
                     </p>
                   </div>
                 </div>
 
                 {editandoServicio ? (
-                  <div className="p-3.5 rounded-xl bg-slate-100 space-y-3">
+                  <div
+                    className={`p-3.5 rounded-xl border space-y-3 ${
+                      isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-white border-zinc-200'
+                    }`}
+                  >
                     <div className="flex gap-2">
                       <select
                         value={nuevoTipoInput}
                         onChange={handleTipoChange}
-                        className="flex-1 px-3 py-2.5 text-sm font-bold rounded-lg bg-white border border-slate-300 text-[#002664] focus:outline-none"
+                        className={`flex-1 px-3 py-2.5 text-sm font-bold rounded-lg border focus:outline-none ${
+                          isDark
+                            ? 'bg-zinc-900 border-zinc-700 text-white'
+                            : 'bg-zinc-50 border-zinc-300 text-zinc-900'
+                        }`}
                       >
                         <option value="Corte clásico">Corte clásico</option>
                         <option value="Corte + barba">Corte + barba</option>
@@ -588,21 +636,25 @@ function BarberoContent() {
                         step="0.5"
                         value={nuevoPrecioInput}
                         onChange={(e) => setNuevoPrecioInput(e.target.value)}
-                        className="w-24 px-3 py-2.5 text-sm font-bold rounded-lg bg-white border border-slate-300 text-[#002664] focus:outline-none"
+                        className={`w-24 px-3 py-2.5 text-sm font-bold rounded-lg border focus:outline-none ${
+                          isDark
+                            ? 'bg-zinc-900 border-zinc-700 text-white'
+                            : 'bg-zinc-50 border-zinc-300 text-zinc-900'
+                        }`}
                       />
                     </div>
                     <div className="flex gap-2">
                       <button
                         type="button"
                         onClick={() => setEditandoServicio(false)}
-                        className="flex-1 py-2.5 rounded-lg text-xs font-bold border border-slate-300 text-slate-600"
+                        className="flex-1 py-2.5 rounded-lg text-xs font-bold border border-zinc-700 text-zinc-400"
                       >
                         Cancelar
                       </button>
                       <button
                         type="button"
                         onClick={guardarNuevoServicio}
-                        className="flex-1 py-2.5 rounded-lg text-xs font-black bg-[#002664] text-white"
+                        className="flex-1 py-2.5 rounded-lg text-xs font-black bg-[#C59B27] text-zinc-950"
                       >
                         Guardar
                       </button>
@@ -617,7 +669,7 @@ function BarberoContent() {
                         setNuevoPrecioInput((turnoActual.monto || precioServicio).toString());
                         setEditandoServicio(true);
                       }}
-                      className="text-xs font-bold text-slate-600 hover:text-[#F2293A]"
+                      className="text-xs font-bold text-zinc-400 hover:text-white"
                     >
                       ✏️ Cambiar servicio/monto
                     </button>
@@ -625,7 +677,13 @@ function BarberoContent() {
                     {turnoActual.cliente_telefono && (
                       <button
                         type="button"
-                        onClick={() => enviarWhatsAppTurno(turnoActual.cliente_telefono!, turnoActual.nombre_cliente, turnoActual.codigo_ticket)}
+                        onClick={() =>
+                          enviarWhatsAppTurno(
+                            turnoActual.cliente_telefono!,
+                            turnoActual.nombre_cliente,
+                            turnoActual.codigo_ticket
+                          )
+                        }
                         className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-black"
                       >
                         📲 WhatsApp
@@ -634,26 +692,35 @@ function BarberoContent() {
                   </div>
                 )}
 
-                {turnoActual.modalidad_espera === 'diligencia' && minutosRestantes !== null && !turnoActual.cliente_llego && (
-                  <div className="p-4 rounded-xl bg-slate-100 text-center space-y-2.5">
-                    <p className="text-xs font-bold text-slate-700">
-                      Tiempo límite: <span className="text-[#F2293A] font-black">{minutosRestantes} min</span>
-                    </p>
-                    <button
-                      type="button"
-                      onClick={confirmarLlegadaCliente}
-                      className="w-full py-3 rounded-lg bg-[#002664] text-white font-black text-xs"
+                {turnoActual.modalidad_espera === 'diligencia' &&
+                  minutosRestantes !== null &&
+                  !turnoActual.cliente_llego && (
+                    <div
+                      className={`p-4 rounded-xl border text-center space-y-2.5 ${
+                        isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-white border-zinc-200'
+                      }`}
                     >
-                      💈 Confirmar Llegada al Local
-                    </button>
-                  </div>
-                )}
+                      <p className="text-xs font-bold text-zinc-400">
+                        Tiempo límite:{' '}
+                        <span className="text-[#DC2626] font-black">{minutosRestantes} min</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={confirmarLlegadaCliente}
+                        className="w-full py-3 rounded-lg bg-[#2563EB] text-white font-black text-xs"
+                      >
+                        💈 Confirmar Llegada al Local
+                      </button>
+                    </div>
+                  )}
               </div>
             ) : (
               <div className="py-6 text-center space-y-1.5">
                 <span className="text-4xl block">💺</span>
                 <p className="text-base font-black">Silla disponible</p>
-                <p className="text-xs text-slate-600">Llama al siguiente cliente o muestra el QR</p>
+                <p className="text-xs text-zinc-400">
+                  Llama al siguiente cliente o muestra el QR
+                </p>
               </div>
             )}
 
@@ -663,14 +730,14 @@ function BarberoContent() {
                   <button
                     onClick={llamarSiguiente}
                     disabled={colaEspera.length === 0}
-                    className="flex-1 py-4 rounded-xl bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-sm uppercase tracking-wider shadow-md active:scale-95 disabled:opacity-40"
+                    className="flex-1 py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-sm tracking-wide shadow-md active:scale-95 disabled:opacity-40"
                   >
                     📢 Llamar ({colaEspera.length})
                   </button>
                   <button
                     type="button"
                     onClick={() => setTabActiva('qr')}
-                    className="px-4 py-4 rounded-xl bg-[#002664] text-white font-black text-sm active:scale-95 shadow"
+                    className="px-4 py-4 rounded-xl bg-zinc-800 border border-zinc-700 text-white font-black text-sm active:scale-95"
                   >
                     📷 QR
                   </button>
@@ -680,14 +747,14 @@ function BarberoContent() {
                   {turnoActual.modalidad_espera === 'diligencia' && (
                     <button
                       onClick={pasarSiguientePorAusencia}
-                      className="flex-1 py-4 rounded-xl border-2 border-[#F2293A] text-[#F2293A] font-black text-sm"
+                      className="flex-1 py-4 rounded-xl border border-[#DC2626] text-[#DC2626] font-black text-sm"
                     >
                       Ausente
                     </button>
                   )}
                   <button
                     onClick={finalizarServicio}
-                    className="flex-1 py-4 rounded-xl bg-[#002664] hover:bg-[#001D4D] text-white font-black text-sm uppercase tracking-wider shadow-md active:scale-95"
+                    className="flex-1 py-4 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-sm tracking-wide shadow-md active:scale-95"
                   >
                     ✅ Finalizar Corte
                   </button>
@@ -696,14 +763,17 @@ function BarberoContent() {
             </div>
           </div>
 
+          {/* Lista de Espera del mismo día */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
-              <span className="text-sm font-black text-white">Cola de hoy ({colaEspera.length})</span>
-              <span className="text-xs font-bold text-white/85">Prom. ~{tiempoPromedioMinutos}m</span>
+              <span className="text-sm font-black">Cola de hoy ({colaEspera.length})</span>
+              <span className="text-xs font-bold text-zinc-400">
+                Prom. ~{tiempoPromedioMinutos}m
+              </span>
             </div>
 
             {colaEspera.length === 0 ? (
-              <div className="p-5 rounded-xl bg-[#001B47] border border-white/15 text-center text-sm text-white/80">
+              <div className={`p-5 rounded-xl border text-center text-sm text-zinc-400 ${cardSurface}`}>
                 No hay clientes en espera hoy.
               </div>
             ) : (
@@ -711,25 +781,29 @@ function BarberoContent() {
                 {colaEspera.map((item, idx) => (
                   <div
                     key={item.id}
-                    className="p-4 rounded-xl bg-white text-[#002664] flex items-center justify-between shadow"
+                    className={`p-4 rounded-xl border flex items-center justify-between ${cardSurface}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-[#F2293A] text-white flex items-center justify-center text-sm font-black shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 text-white flex items-center justify-center text-sm font-black shrink-0">
                         #{idx + 1}
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm font-black">{item.nombre_cliente}</span>
-                          <span className="text-xs font-black text-[#F2293A]">({item.codigo_ticket})</span>
+                          <span className="text-xs font-black text-[#DC2626]">
+                            ({item.codigo_ticket})
+                          </span>
                         </div>
-                        <p className="text-xs text-slate-600 font-semibold mt-0.5">
-                          {item.tipo_corte} · {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 Local'}
+                        <p className="text-xs text-zinc-400 font-semibold mt-0.5">
+                          {item.tipo_corte} ·{' '}
+                          {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 Local'}
                         </p>
                       </div>
                     </div>
 
-                    <span className="text-base font-black text-[#002664]">
-                      {APP_CONFIG.monedaSimbolo}{item.monto || precioServicio}
+                    <span className="text-base font-black text-[#C59B27]">
+                      {APP_CONFIG.monedaSimbolo}
+                      {item.monto || precioServicio}
                     </span>
                   </div>
                 ))}
@@ -739,33 +813,36 @@ function BarberoContent() {
         </div>
       )}
 
+      {/* --- TAB 2: QR DEL DÍA --- */}
       {tabActiva === 'qr' && (
-        <div className="p-6 rounded-2xl bg-white text-[#002664] text-center space-y-4 shadow-xl">
+        <div className={`p-6 rounded-2xl border text-center space-y-4 ${cardSurface}`}>
           <div>
-            <span className="inline-block px-3 py-1 rounded bg-[#F2293A] text-white text-xs font-black uppercase tracking-widest">
+            <span className="inline-block px-3 py-1 rounded-full bg-[#C59B27]/15 text-[#C59B27] border border-[#C59B27]/30 text-xs font-extrabold uppercase tracking-wider">
               Registro Rápido en Local
             </span>
             <h3 className="text-lg font-black mt-2">Escanea para tomar tu turno hoy</h3>
-            <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+            <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
               El cliente entra directo a la cola del día y sigue su turno en vivo desde su teléfono.
             </p>
           </div>
 
-          <div className="p-3.5 rounded-2xl border-4 border-[#002664] inline-block mx-auto">
+          <div className="p-3.5 rounded-2xl bg-white border-2 border-[#C59B27]/50 inline-block mx-auto">
             {qrImageUrl ? (
-              <img
-                src={qrImageUrl}
-                alt="QR Cola Barbería"
-                className="w-48 h-48 rounded-lg"
-              />
+              <img src={qrImageUrl} alt="QR Cola Barbería" className="w-48 h-48 rounded-lg" />
             ) : (
-              <div className="w-48 h-48 flex items-center justify-center text-sm text-slate-400">
+              <div className="w-48 h-48 flex items-center justify-center text-sm text-zinc-400">
                 Generando QR...
               </div>
             )}
           </div>
 
-          <div className="p-3 rounded-lg bg-slate-100 text-xs font-mono text-slate-700 truncate">
+          <div
+            className={`p-3 rounded-lg border text-xs font-mono truncate ${
+              isDark
+                ? 'bg-zinc-950 border-zinc-800 text-zinc-400'
+                : 'bg-white border-zinc-200 text-zinc-600'
+            }`}
+          >
             {clienteUrl}
           </div>
 
@@ -773,14 +850,14 @@ function BarberoContent() {
             <button
               type="button"
               onClick={copiarEnlaceCliente}
-              className="flex-1 py-3.5 rounded-xl bg-[#002664] text-white font-black text-xs active:scale-95"
+              className="flex-1 py-3.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white font-black text-xs active:scale-95"
             >
               {copiadoUrl ? '✅ Copiado' : '📋 Copiar Enlace'}
             </button>
             <button
               type="button"
               onClick={() => setTabActiva('silla')}
-              className="flex-1 py-3.5 rounded-xl bg-[#F2293A] text-white font-black text-xs active:scale-95"
+              className="flex-1 py-3.5 rounded-xl bg-[#DC2626] text-white font-black text-xs active:scale-95"
             >
               Volver a Silla
             </button>
@@ -788,18 +865,17 @@ function BarberoContent() {
         </div>
       )}
 
+      {/* --- TAB 3: AGENDA DE CITAS --- */}
       {tabActiva === 'citas' && (
         <div className="space-y-4 max-h-[480px] overflow-y-auto pr-0.5">
           <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
-              <span className="text-sm font-black text-white">
-                📅 Citas de Hoy ({citasDeHoy.length})
-              </span>
-              <span className="text-xs text-white/80">Pasar a cola al llegar</span>
+              <span className="text-sm font-black">📅 Citas de Hoy ({citasDeHoy.length})</span>
+              <span className="text-xs text-zinc-400">Pasar a cola al llegar</span>
             </div>
 
             {citasDeHoy.length === 0 ? (
-              <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 text-center text-sm text-white/80">
+              <div className={`p-4 rounded-xl border text-center text-sm text-zinc-400 ${cardSurface}`}>
                 Sin citas agendadas para hoy.
               </div>
             ) : (
@@ -807,19 +883,23 @@ function BarberoContent() {
                 {citasDeHoy.map((cita) => (
                   <div
                     key={cita.id}
-                    className="p-4 rounded-xl bg-white text-[#002664] border-l-4 border-[#F2293A] flex items-center justify-between gap-2 shadow"
+                    className={`p-4 rounded-xl border border-l-4 border-l-[#DC2626] flex items-center justify-between gap-2 ${cardSurface}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="px-3 py-2 rounded-lg bg-[#F2293A] text-white text-center shrink-0">
+                      <div className="px-3 py-2 rounded-lg bg-[#DC2626] text-white text-center shrink-0">
                         <span className="text-[11px] font-black uppercase block">HOY</span>
-                        <span className="text-sm font-black">{cita.hora_inicio.substring(0, 5)}</span>
+                        <span className="text-sm font-black">
+                          {cita.hora_inicio.substring(0, 5)}
+                        </span>
                       </div>
                       <div>
                         <p className="text-sm font-black leading-tight">
-                          {cita.nombre_cliente} <span className="text-[#F2293A]">({cita.codigo_ticket})</span>
+                          {cita.nombre_cliente}{' '}
+                          <span className="text-[#DC2626]">({cita.codigo_ticket})</span>
                         </p>
-                        <p className="text-xs text-slate-600 font-semibold mt-0.5">
-                          {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}{cita.monto}
+                        <p className="text-xs text-zinc-400 font-semibold mt-0.5">
+                          {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
+                          {cita.monto}
                         </p>
                       </div>
                     </div>
@@ -828,7 +908,7 @@ function BarberoContent() {
                       <button
                         type="button"
                         onClick={() => procesarNotificacionCitaWA(cita)}
-                        className="px-3.5 py-2.5 rounded-lg bg-[#002664] text-white font-black text-xs shrink-0 active:scale-95"
+                        className="px-3.5 py-2.5 rounded-lg bg-[#2563EB] text-white font-black text-xs shrink-0 active:scale-95"
                       >
                         📲 Cola + WA
                       </button>
@@ -839,7 +919,7 @@ function BarberoContent() {
                           const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
                           if (num) procesarNotificacionCitaWA(cita, num);
                         }}
-                        className="px-3.5 py-2.5 rounded-lg bg-[#F2293A] text-white font-black text-xs shrink-0"
+                        className="px-3.5 py-2.5 rounded-lg bg-[#DC2626] text-white font-black text-xs shrink-0"
                       >
                         ➕ Tlf
                       </button>
@@ -852,13 +932,13 @@ function BarberoContent() {
 
           <div className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between px-1">
-              <span className="text-sm font-black text-white">
+              <span className="text-sm font-black">
                 🗓️ Próximos Días ({citasSiguientes.length})
               </span>
             </div>
 
             {citasSiguientes.length === 0 ? (
-              <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 text-center text-sm text-white/80">
+              <div className={`p-4 rounded-xl border text-center text-sm text-zinc-400 ${cardSurface}`}>
                 No hay citas agendadas para los próximos días.
               </div>
             ) : (
@@ -866,19 +946,25 @@ function BarberoContent() {
                 {citasSiguientes.map((cita) => (
                   <div
                     key={cita.id}
-                    className="p-4 rounded-xl bg-white text-[#002664] flex items-center justify-between gap-2 shadow"
+                    className={`p-4 rounded-xl border flex items-center justify-between gap-2 ${cardSurface}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="px-3 py-2 rounded-lg bg-[#002664] text-white text-center shrink-0">
-                        <span className="text-[11px] font-bold block">{cita.fecha.slice(5)}</span>
-                        <span className="text-sm font-black text-[#F2293A]">{cita.hora_inicio.substring(0, 5)}</span>
+                      <div className="px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-center shrink-0">
+                        <span className="text-[11px] font-bold text-zinc-400 block">
+                          {cita.fecha.slice(5)}
+                        </span>
+                        <span className="text-sm font-black text-[#2563EB]">
+                          {cita.hora_inicio.substring(0, 5)}
+                        </span>
                       </div>
                       <div>
                         <p className="text-sm font-black leading-tight">
-                          {cita.nombre_cliente} <span className="text-[#F2293A]">({cita.codigo_ticket})</span>
+                          {cita.nombre_cliente}{' '}
+                          <span className="text-[#C59B27]">({cita.codigo_ticket})</span>
                         </p>
-                        <p className="text-xs text-slate-600 font-semibold mt-0.5">
-                          {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}{cita.monto}
+                        <p className="text-xs text-zinc-400 font-semibold mt-0.5">
+                          {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
+                          {cita.monto}
                         </p>
                       </div>
                     </div>
@@ -887,7 +973,7 @@ function BarberoContent() {
                       <button
                         type="button"
                         onClick={() => procesarNotificacionCitaWA(cita)}
-                        className="px-3.5 py-2.5 rounded-lg bg-[#F2293A] text-white font-black text-xs shrink-0 active:scale-95"
+                        className="px-3.5 py-2.5 rounded-lg bg-[#DC2626] text-white font-black text-xs shrink-0 active:scale-95"
                       >
                         📲 WA
                       </button>
@@ -898,7 +984,7 @@ function BarberoContent() {
                           const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
                           if (num) procesarNotificacionCitaWA(cita, num);
                         }}
-                        className="px-3.5 py-2.5 rounded-lg bg-[#002664] text-white font-black text-xs shrink-0"
+                        className="px-3.5 py-2.5 rounded-lg bg-[#2563EB] text-white font-black text-xs shrink-0"
                       >
                         ➕ Tlf
                       </button>
@@ -911,31 +997,36 @@ function BarberoContent() {
         </div>
       )}
 
+      {/* --- TAB 4: GESTOR DE HORARIOS --- */}
       {tabActiva === 'horarios' && (
-        <div className="p-5 rounded-2xl bg-[#001B47] border border-white/15 space-y-4">
+        <div className={`p-5 rounded-2xl border space-y-4 ${cardSurface}`}>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-black text-white">Elige tu Día</span>
+            <span className="text-sm font-black">Horarios disponibles</span>
             <select
               value={diaSeleccionado}
               onChange={(e) => setDiaSeleccionado(Number(e.target.value))}
-              className="px-4 py-2 text-sm font-black rounded-lg bg-[#F2293A] text-white focus:outline-none"
+              className="px-4 py-2 text-sm font-black rounded-xl bg-zinc-950 border border-[#C59B27]/50 text-white focus:outline-none"
             >
               {diasNombres.map((d, idx) => (
-                <option key={idx} value={idx}>{d}</option>
+                <option key={idx} value={idx}>
+                  {d}
+                </option>
               ))}
             </select>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2.5">
             {bloques.map((bloque) => (
               <button
                 key={bloque.id}
                 type="button"
                 onClick={() => toggleBloque(bloque.id, bloque.activo)}
-                className={`py-2.5 text-sm font-black border-b-2 transition-all ${
+                className={`py-2.5 rounded-xl border text-sm font-black transition-all ${
                   bloque.activo
-                    ? 'text-white border-white'
-                    : 'text-[#F2293A] border-[#F2293A] line-through opacity-75'
+                    ? isDark
+                      ? 'bg-zinc-950 border-[#2563EB]/60 text-white'
+                      : 'bg-white border-[#2563EB] text-[#2563EB]'
+                    : 'bg-[#DC2626]/10 border-[#DC2626]/30 text-[#DC2626] line-through opacity-75'
                 }`}
               >
                 {bloque.hora_inicio.substring(0, 5)}
@@ -949,8 +1040,8 @@ function BarberoContent() {
 }
 
 export default function BarberoView() {
-  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('light');
-  const [esNoche, setEsNoche] = useState<boolean>(false);
+  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('dark');
+  const [esNoche, setEsNoche] = useState<boolean>(true);
 
   useEffect(() => {
     const hora = new Date().getHours();
@@ -961,32 +1052,41 @@ export default function BarberoView() {
 
   return (
     <main
-      className={`min-h-screen flex flex-col items-center justify-center p-3 sm:p-6 transition-colors duration-500 ${
-        isDark ? 'bg-[#001233] text-white' : 'bg-[#EEF1F6] text-[#002664]'
+      className={`min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 transition-colors duration-300 ${
+        isDark ? 'bg-[#09090B] text-white' : 'bg-[#F4F4F5] text-zinc-900'
       }`}
     >
       <div
-        className="w-full max-w-[450px] rounded-[34px] shadow-2xl overflow-hidden text-white"
-        style={{
-          backgroundColor: '#002664',
-          backgroundImage:
-            'repeating-linear-gradient(to bottom, transparent, transparent 14px, rgba(255, 255, 255, 0.03) 14px, rgba(255, 255, 255, 0.03) 22px)',
-        }}
+        className={`w-full max-w-[460px] rounded-3xl p-3 sm:p-4 shadow-2xl border transition-colors ${
+          isDark ? 'bg-[#121215] border-zinc-800' : 'bg-white border-zinc-200'
+        }`}
       >
-        <div className="p-6 pb-4">
-          <div className="flex items-center justify-between mb-4">
+        <div className="rounded-2xl border border-[#C59B27]/60 p-5 sm:p-6">
+          <div
+            className={`flex items-center justify-between pb-3 mb-4 border-b ${
+              isDark ? 'border-zinc-800' : 'border-zinc-200'
+            }`}
+          >
             <Link
               href="/"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-[#002664] hover:bg-[#F2293A] hover:text-white text-xs font-black transition-all"
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all ${
+                isDark
+                  ? 'bg-zinc-900 text-white border border-zinc-800 hover:border-[#C59B27]'
+                  : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
+              }`}
             >
               ← Inicio
             </Link>
 
-            <div className="flex items-center gap-1 p-1 rounded-full bg-[#001B47] border border-white/15 text-xs font-bold">
+            <div
+              className={`flex items-center gap-1 p-1 rounded-full border text-xs font-bold ${
+                isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+              }`}
+            >
               <button
                 onClick={() => setModoTema('light')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                  modoTema === 'light' ? 'bg-white text-[#002664]' : 'text-white/80'
+                  modoTema === 'light' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-400'
                 }`}
               >
                 ☀️
@@ -994,7 +1094,7 @@ export default function BarberoView() {
               <button
                 onClick={() => setModoTema('dark')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                  modoTema === 'dark' ? 'bg-[#F2293A] text-white' : 'text-white/80'
+                  modoTema === 'dark' ? 'bg-[#C59B27] text-zinc-950 shadow-xs' : 'text-zinc-400'
                 }`}
               >
                 🌙
@@ -1002,7 +1102,7 @@ export default function BarberoView() {
               <button
                 onClick={() => setModoTema('auto')}
                 className={`px-2.5 h-7 rounded-full transition-all ${
-                  modoTema === 'auto' ? 'bg-white text-[#002664]' : 'text-white/80'
+                  modoTema === 'auto' ? 'bg-[#DC2626] text-white shadow-xs' : 'text-zinc-400'
                 }`}
               >
                 Auto
@@ -1010,11 +1110,7 @@ export default function BarberoView() {
             </div>
           </div>
 
-          <BarberoContent />
-        </div>
-
-        <div className="h-7 bg-[#F2293A] flex items-center justify-center text-white text-sm font-black">
-          ⌄
+          <BarberoContent isDark={isDark} />
         </div>
       </div>
     </main>
