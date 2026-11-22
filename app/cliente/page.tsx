@@ -447,39 +447,38 @@ function ClienteContent() {
 
   if (loading) {
     return (
-      <div className="p-12 text-center space-y-2 bg-[#002664] text-white">
-        <div className="w-8 h-8 border-2 border-[#F2293A] border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-xs font-bold">Cargando tu turno...</p>
+      <div className="p-12 text-center space-y-3 bg-[#002664] text-white">
+        <div className="w-9 h-9 border-2 border-[#F2293A] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-sm font-bold">Cargando tu turno...</p>
       </div>
     );
   }
 
-  // --- CITA CONFIRMADA ---
   if (citaConfirmada) {
     return (
-      <div className="p-6 bg-[#002664] text-white text-center space-y-4">
-        <div className="w-16 h-16 rounded-full bg-white border-4 border-[#F2293A] text-[#002664] flex items-center justify-center text-2xl mx-auto font-black">
+      <div className="p-6 bg-[#002664] text-white text-center space-y-5">
+        <div className="w-16 h-16 rounded-full bg-white border-4 border-[#F2293A] text-[#002664] flex items-center justify-center text-3xl mx-auto font-black">
           📅
         </div>
         <div>
-          <p className="text-[11px] font-black uppercase tracking-widest text-[#F2293A]">
+          <p className="text-xs font-black uppercase tracking-widest text-[#F2293A]">
             Cita Confirmada
           </p>
           <h2 className="text-4xl font-black text-white mt-1">{citaConfirmada.codigo_ticket}</h2>
-          <p className="text-sm font-bold text-white/90 mt-0.5">{citaConfirmada.nombre_cliente}</p>
+          <p className="text-base font-bold text-white/95 mt-1">{citaConfirmada.nombre_cliente}</p>
         </div>
 
-        <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 text-xs space-y-2 text-left">
+        <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 text-sm space-y-2.5 text-left">
           <div className="flex justify-between">
-            <span className="text-white/70">Fecha:</span>
+            <span className="text-white/75">Fecha:</span>
             <span className="font-bold text-white">{citaConfirmada.fecha}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/70">Hora:</span>
+            <span className="text-white/75">Hora:</span>
             <span className="font-black text-[#F2293A]">{citaConfirmada.hora_inicio.substring(0, 5)} hrs</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-white/70">Servicio:</span>
+            <span className="text-white/75">Servicio:</span>
             <span className="font-extrabold text-white">
               {citaConfirmada.tipo_corte} ({APP_CONFIG.monedaSimbolo}{citaConfirmada.monto})
             </span>
@@ -488,7 +487,7 @@ function ClienteContent() {
 
         <button
           onClick={volverAlInicio}
-          className="w-full py-3.5 rounded-lg bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-xs uppercase tracking-wider shadow-lg active:scale-95"
+          className="w-full py-4 rounded-xl bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-sm uppercase tracking-wider shadow-lg active:scale-95"
         >
           Volver al Inicio
         </button>
@@ -496,7 +495,6 @@ function ClienteContent() {
     );
   }
 
-  // --- MONITOR DE TURNO ACTIVO EN COLA ---
   if (turno && turno.estado !== 'cancelado') {
     const tiempoEstimado = personasAdelante * APP_CONFIG.tiempoEstimadoPorClienteMin;
     const porcentajeProgreso =
@@ -506,7 +504,6 @@ function ClienteContent() {
 
     return (
       <div>
-        {/* Cabecera Roja estilo 2da pantalla */}
         <div
           className="p-5 text-white flex items-center justify-between"
           style={{
@@ -515,32 +512,31 @@ function ClienteContent() {
               'repeating-linear-gradient(to bottom, transparent, transparent 10px, rgba(0, 38, 100, 0.14) 10px, rgba(0, 38, 100, 0.14) 16px)',
           }}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-white border-2 border-[#002664] text-[#002664] flex items-center justify-center text-base font-black shrink-0">
+          <div className="flex items-center gap-3.5">
+            <div className="w-14 h-14 rounded-full bg-white border-2 border-[#002664] text-[#002664] flex items-center justify-center text-lg font-black shrink-0">
               {turno.codigo_ticket}
             </div>
             <div>
-              <span className="text-[10px] font-black uppercase tracking-wider block text-white/90">
+              <span className="text-xs font-black uppercase tracking-wider block text-white/95">
                 Tu Turno · {horaActual}
               </span>
-              <h2 className="text-base font-black leading-tight">{turno.nombre_cliente}</h2>
-              <p className="text-xs font-bold text-white/95">
+              <h2 className="text-lg font-black leading-tight">{turno.nombre_cliente}</h2>
+              <p className="text-sm font-bold text-white">
                 {turno.tipo_corte} · {APP_CONFIG.monedaSimbolo}{turno.monto}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Cuerpo Azul Marino */}
         <div className="p-5 bg-[#002664] text-white space-y-4">
           {turno.estado === 'espera' && (
             <>
-              <div className="p-3.5 rounded-xl bg-[#001B47] border border-white/15 space-y-2">
-                <div className="flex justify-between text-xs font-extrabold">
+              <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 space-y-2.5">
+                <div className="flex justify-between text-sm font-extrabold">
                   <span>Progreso de fila</span>
                   <span className="text-[#F2293A]">{porcentajeProgreso}%</span>
                 </div>
-                <div className="w-full h-2.5 rounded-full bg-white/15 overflow-hidden">
+                <div className="w-full h-3 rounded-full bg-white/15 overflow-hidden">
                   <div
                     className="h-full bg-[#F2293A] rounded-full transition-all duration-700"
                     style={{ width: `${porcentajeProgreso}%` }}
@@ -550,21 +546,21 @@ function ClienteContent() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-4 rounded-xl bg-white text-[#002664] text-center shadow">
-                  <span className="text-[10px] font-black uppercase block">Delante de ti</span>
-                  <p className="text-3xl font-black text-[#F2293A] mt-0.5">{personasAdelante}</p>
-                  <span className="text-[10px] font-bold">clientes</span>
+                  <span className="text-xs font-black uppercase block">Delante de ti</span>
+                  <p className="text-4xl font-black text-[#F2293A] mt-0.5">{personasAdelante}</p>
+                  <span className="text-xs font-bold">clientes</span>
                 </div>
                 <div className="p-4 rounded-xl bg-[#001B47] border border-white/20 text-center">
-                  <span className="text-[10px] font-black uppercase text-white/75 block">Espera aprox.</span>
-                  <p className="text-3xl font-black text-white mt-0.5">{tiempoEstimado}m</p>
-                  <span className="text-[10px] text-white/70 font-bold">estimados</span>
+                  <span className="text-xs font-black uppercase text-white/80 block">Espera aprox.</span>
+                  <p className="text-4xl font-black text-white mt-0.5">{tiempoEstimado}m</p>
+                  <span className="text-xs text-white/75 font-bold">estimados</span>
                 </div>
               </div>
 
               <div className="p-4 rounded-xl bg-[#001B47] border border-white/15 space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-white/80">Modalidad de espera:</span>
-                  <span className="px-2.5 py-0.5 rounded bg-white text-[#002664] font-black text-[10px]">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-bold text-white/85">Modalidad:</span>
+                  <span className="px-3 py-1 rounded bg-white text-[#002664] font-black text-xs">
                     {turno.modalidad_espera === 'diligencia' ? '🏃‍♂️ Diligencia' : '💈 En el local'}
                   </span>
                 </div>
@@ -573,7 +569,7 @@ function ClienteContent() {
                   <button
                     type="button"
                     onClick={() => cambiarModalidadEnVivo('diligencia')}
-                    className="w-full py-2.5 rounded-lg bg-white text-[#002664] font-black text-xs"
+                    className="w-full py-3 rounded-lg bg-white text-[#002664] font-black text-sm"
                   >
                     Salgo a diligencia ({APP_CONFIG.tiempoLimiteDiligenciaMin} min tolerancia)
                   </button>
@@ -581,14 +577,14 @@ function ClienteContent() {
                   <button
                     type="button"
                     onClick={() => cambiarModalidadEnVivo('local')}
-                    className="w-full py-2.5 rounded-lg bg-[#F2293A] text-white font-black text-xs"
+                    className="w-full py-3 rounded-lg bg-[#F2293A] text-white font-black text-sm"
                   >
                     Ya regresé a la barbería
                   </button>
                 )}
 
                 {distanciaKm !== null && turno.modalidad_espera === 'diligencia' && (
-                  <p className="text-[11px] text-center text-white/80">
+                  <p className="text-xs text-center text-white/85">
                     📍 Distancia al local: <strong>~{distanciaKm} km</strong>
                   </p>
                 )}
@@ -596,7 +592,7 @@ function ClienteContent() {
 
               <button
                 onClick={cancelarTurno}
-                className="w-full py-3 rounded-lg bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-xs uppercase tracking-wider transition-all"
+                className="w-full py-3.5 rounded-xl bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-sm uppercase tracking-wider transition-all"
               >
                 Cancelar mi turno
               </button>
@@ -607,32 +603,32 @@ function ClienteContent() {
             <div className="p-6 rounded-xl bg-white text-[#002664] text-center space-y-4 shadow-xl">
               {turno.cliente_llego ? (
                 <>
-                  <span className="text-4xl block">💈</span>
-                  <h2 className="text-xl font-black text-[#F2293A]">¡Ya estás reportado!</h2>
-                  <p className="text-xs font-bold">El barbero sabe que estás listo en el local.</p>
+                  <span className="text-5xl block">💈</span>
+                  <h2 className="text-2xl font-black text-[#F2293A]">¡Ya estás reportado!</h2>
+                  <p className="text-sm font-bold">El barbero sabe que estás listo en el local.</p>
                 </>
               ) : turno.modalidad_espera === 'diligencia' && tiempoRestanteSegundos !== null ? (
                 <>
-                  <span className="text-4xl block">🏃‍♂️</span>
-                  <h2 className="text-lg font-black text-[#F2293A]">¡El barbero te está llamando!</h2>
+                  <span className="text-5xl block">🏃‍♂️</span>
+                  <h2 className="text-xl font-black text-[#F2293A]">¡El barbero te está llamando!</h2>
                   <div className="py-3 px-5 rounded-xl bg-[#002664] text-white">
-                    <span className="text-[10px] uppercase font-bold block">Tiempo para llegar</span>
+                    <span className="text-xs uppercase font-bold block">Tiempo para llegar</span>
                     <p className="text-4xl font-black font-mono mt-1">
                       {formatearTiempo(tiempoRestanteSegundos)}
                     </p>
                   </div>
                   <button
                     onClick={notificarLlegadaPresencial}
-                    className="w-full py-3.5 rounded-lg bg-[#F2293A] text-white font-black text-xs uppercase tracking-wider shadow-lg active:scale-95"
+                    className="w-full py-4 rounded-xl bg-[#F2293A] text-white font-black text-sm uppercase tracking-wider shadow-lg active:scale-95"
                   >
                     📍 ¡Ya llegué al local!
                   </button>
                 </>
               ) : (
                 <>
-                  <span className="text-4xl block">✂️</span>
+                  <span className="text-5xl block">✂️</span>
                   <h2 className="text-2xl font-black text-[#F2293A]">¡Es tu turno!</h2>
-                  <p className="text-xs font-bold">Pasa adelante, tu silla está lista.</p>
+                  <p className="text-sm font-bold">Pasa adelante, tu silla está lista.</p>
                 </>
               )}
             </div>
@@ -640,13 +636,13 @@ function ClienteContent() {
 
           {(turno.estado === 'finalizado' || turno.estado === 'ausente') && (
             <div className="p-6 rounded-xl bg-white text-[#002664] text-center space-y-4">
-              <span className="text-3xl block">{turno.estado === 'finalizado' ? '✨' : '⏳'}</span>
-              <h2 className="text-lg font-black">
+              <span className="text-4xl block">{turno.estado === 'finalizado' ? '✨' : '⏳'}</span>
+              <h2 className="text-xl font-black">
                 {turno.estado === 'finalizado' ? '¡Gracias por tu visita!' : 'Tiempo agotado'}
               </h2>
               <button
                 onClick={volverAlInicio}
-                className="w-full py-3.5 rounded-lg bg-[#F2293A] text-white font-black text-xs uppercase tracking-wider"
+                className="w-full py-4 rounded-xl bg-[#F2293A] text-white font-black text-sm uppercase tracking-wider"
               >
                 Solicitar nuevo turno
               </button>
@@ -657,10 +653,8 @@ function ClienteContent() {
     );
   }
 
-  // --- FORMULARIO ESTILO PANTALLAS 2 Y 3 ("Bienvenido" Rojo + "Servicios" y "Elige tu Horario" Azul Marino) ---
   return (
     <div>
-      {/* Sección Superior Roja estilo Pantalla 2 ("01 / Bienvenido") */}
       <div
         className="px-6 pt-3 pb-6 text-center text-white space-y-3"
         style={{
@@ -670,21 +664,20 @@ function ClienteContent() {
         }}
       >
         <div>
-          <h2 className="text-2xl font-black tracking-tight">Bienvenido</h2>
-          <p className="text-xs font-extrabold text-[#002664] mt-0.5">
+          <h2 className="text-3xl font-black tracking-tight">Bienvenido</h2>
+          <p className="text-sm font-extrabold text-[#002664] mt-0.5">
             - {nombre.trim() || APP_CONFIG.nombreNegocio || 'Pégate Ahí'} -
           </p>
         </div>
 
-        {/* Selector Cola Hoy / Agendar Cita */}
-        <div className="grid grid-cols-2 gap-2 bg-[#002664] p-1 rounded-lg">
+        <div className="grid grid-cols-2 gap-2 bg-[#002664] p-1.5 rounded-xl">
           <button
             type="button"
             onClick={() => setModoRegistro('cola')}
-            className={`py-2 rounded-md text-xs font-black transition-all ${
+            className={`py-2.5 rounded-lg text-sm font-black transition-all ${
               modoRegistro === 'cola'
                 ? 'bg-white text-[#F2293A] shadow'
-                : 'text-white/80 hover:text-white'
+                : 'text-white/85 hover:text-white'
             }`}
           >
             ✂️ Turno Hoy
@@ -692,10 +685,10 @@ function ClienteContent() {
           <button
             type="button"
             onClick={() => setModoRegistro('cita')}
-            className={`py-2 rounded-md text-xs font-black transition-all ${
+            className={`py-2.5 rounded-lg text-sm font-black transition-all ${
               modoRegistro === 'cita'
                 ? 'bg-white text-[#F2293A] shadow'
-                : 'text-white/80 hover:text-white'
+                : 'text-white/85 hover:text-white'
             }`}
           >
             📅 Agendar Cita
@@ -703,14 +696,12 @@ function ClienteContent() {
         </div>
       </div>
 
-      {/* Sección Inferior Azul Marino estilo Pantallas 2 y 3 */}
       <form
         onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita}
         className="p-6 bg-[#002664] text-white space-y-5"
       >
-        {/* Cuadrícula de Servicios en tarjetas blancas como "Services" */}
         <div>
-          <h3 className="text-center text-lg font-black tracking-wide mb-3">Servicios</h3>
+          <h3 className="text-center text-xl font-black tracking-wide mb-3">Servicios</h3>
           <div className="grid grid-cols-3 gap-2.5">
             {listaServicios.map((srv) => {
               const selected = servicioSeleccionado.nombre === srv.nombre;
@@ -719,17 +710,17 @@ function ClienteContent() {
                   type="button"
                   key={srv.id}
                   onClick={() => setServicioSeleccionado(srv)}
-                  className={`p-3 rounded-lg bg-white text-[#002664] flex flex-col items-center justify-center text-center transition-all ${
+                  className={`p-3 rounded-xl bg-white text-[#002664] flex flex-col items-center justify-center text-center transition-all ${
                     selected
                       ? 'ring-4 ring-[#F2293A] scale-[1.03] shadow-lg'
-                      : 'opacity-80 hover:opacity-100'
+                      : 'opacity-85 hover:opacity-100'
                   }`}
                 >
                   <span className="text-2xl mb-1">{srv.icono}</span>
-                  <span className="text-[10px] font-black leading-tight line-clamp-1">
+                  <span className="text-xs font-black leading-snug">
                     {srv.nombre}
                   </span>
-                  <span className="text-xs font-black text-[#F2293A] mt-0.5">
+                  <span className="text-sm font-black text-[#F2293A] mt-0.5">
                     {APP_CONFIG.monedaSimbolo}{srv.precio}
                   </span>
                 </button>
@@ -738,15 +729,14 @@ function ClienteContent() {
           </div>
         </div>
 
-        {/* Inputs limpios en blanco */}
-        <div className="space-y-2.5">
+        <div className="space-y-3">
           <input
             type="text"
             required
             placeholder="Tu nombre completo *"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-lg bg-white text-[#002664] placeholder-slate-400 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#F2293A]"
+            className="w-full px-4 py-3 rounded-xl bg-white text-[#002664] placeholder-slate-400 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#F2293A]"
           />
           <input
             type="tel"
@@ -754,24 +744,23 @@ function ClienteContent() {
             placeholder="WhatsApp (Ej: 04141234567) *"
             value={telefono}
             onChange={(e) => setTelefono(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-lg bg-white text-[#002664] placeholder-slate-400 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#F2293A]"
+            className="w-full px-4 py-3 rounded-xl bg-white text-[#002664] placeholder-slate-400 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#F2293A]"
           />
         </div>
 
-        {/* Modalidad de espera si es Turno Hoy */}
         {modoRegistro === 'cola' && (
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
               onClick={() => setModalidadEspera('local')}
-              className={`p-3 rounded-lg border text-left transition-all ${
+              className={`p-3.5 rounded-xl border text-left transition-all ${
                 modalidadEspera === 'local'
                   ? 'bg-white text-[#002664] border-white font-black'
-                  : 'bg-[#001B47] text-white/80 border-white/20'
+                  : 'bg-[#001B47] text-white/85 border-white/20'
               }`}
             >
-              <p className="text-xs font-black">💈 En el Local</p>
-              <p className="text-[10px] opacity-75">Espero en barbería</p>
+              <p className="text-sm font-black">💈 En el Local</p>
+              <p className="text-xs opacity-80 mt-0.5">Espero en barbería</p>
             </button>
 
             <button
@@ -780,24 +769,23 @@ function ClienteContent() {
                 setModalidadEspera('diligencia');
                 obtenerUbicacionGPS();
               }}
-              className={`p-3 rounded-lg border text-left transition-all ${
+              className={`p-3.5 rounded-xl border text-left transition-all ${
                 modalidadEspera === 'diligencia'
                   ? 'bg-white text-[#002664] border-white font-black'
-                  : 'bg-[#001B47] text-white/80 border-white/20'
+                  : 'bg-[#001B47] text-white/85 border-white/20'
               }`}
             >
-              <p className="text-xs font-black">🏃‍♂️ Diligencia</p>
-              <p className="text-[10px] opacity-75">{APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)</p>
+              <p className="text-sm font-black">🏃‍♂️ Diligencia</p>
+              <p className="text-xs opacity-80 mt-0.5">{APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)</p>
             </button>
           </div>
         )}
 
-        {/* Selector de Día y Hora estilo Pantalla 3 ("Elige tu Día" y "Elige tu Hora" con líneas inferiores) */}
         {modoRegistro === 'cita' && (
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-black mb-2">Elige tu Día</p>
-              <div className="grid grid-cols-6 gap-1 text-center">
+              <p className="text-sm font-black mb-2">Elige tu Día</p>
+              <div className="grid grid-cols-6 gap-1.5 text-center">
                 {diasProximos.map((d) => {
                   const isSelected = fechaCita === d.fecha;
                   return (
@@ -808,14 +796,14 @@ function ClienteContent() {
                         setFechaCita(d.fecha);
                         setHoraCitaSeleccionada('');
                       }}
-                      className={`py-2 rounded-md flex flex-col items-center transition-all ${
+                      className={`py-2.5 rounded-lg flex flex-col items-center transition-all ${
                         isSelected
                           ? 'bg-[#F2293A] text-white font-black shadow'
-                          : 'text-white/85 hover:bg-white/10'
+                          : 'text-white/90 hover:bg-white/10'
                       }`}
                     >
-                      <span className="text-[9px] font-bold">{d.diaCorto}</span>
-                      <span className="text-xs font-black mt-0.5">{d.numDia}</span>
+                      <span className="text-xs font-bold">{d.diaCorto}</span>
+                      <span className="text-sm font-black mt-0.5">{d.numDia}</span>
                     </button>
                   );
                 })}
@@ -823,13 +811,13 @@ function ClienteContent() {
             </div>
 
             <div>
-              <p className="text-xs font-black mb-2">Elige tu Hora</p>
+              <p className="text-sm font-black mb-2">Elige tu Hora</p>
               {bloquesDisponibles.length === 0 ? (
-                <p className="text-[11px] text-white/70 text-center py-3 border border-dashed border-white/25 rounded-lg">
+                <p className="text-xs text-white/80 text-center py-3.5 border border-dashed border-white/25 rounded-xl">
                   Sin horarios disponibles para este día.
                 </p>
               ) : (
-                <div className="grid grid-cols-3 gap-2.5 max-h-32 overflow-y-auto pr-0.5">
+                <div className="grid grid-cols-3 gap-3 max-h-36 overflow-y-auto pr-0.5">
                   {bloquesDisponibles.map((b) => {
                     const horaText = b.hora_inicio.substring(0, 5);
                     const selected = horaCitaSeleccionada === b.hora_inicio;
@@ -838,7 +826,7 @@ function ClienteContent() {
                         key={b.id}
                         type="button"
                         onClick={() => setHoraCitaSeleccionada(b.hora_inicio)}
-                        className={`py-2 text-xs font-black border-b-2 transition-all ${
+                        className={`py-2.5 text-sm font-black border-b-2 transition-all ${
                           selected
                             ? 'text-[#F2293A] border-[#F2293A]'
                             : 'text-white border-white/60 hover:border-white'
@@ -854,11 +842,10 @@ function ClienteContent() {
           </div>
         )}
 
-        {/* Botón de envío */}
         <button
           type="submit"
           disabled={registrando || !nombre.trim() || !telefono.trim() || (modoRegistro === 'cita' && !horaCitaSeleccionada)}
-          className="w-full py-3.5 rounded-lg bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-xs uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40"
+          className="w-full py-4 rounded-xl bg-[#F2293A] hover:bg-[#D91E2E] text-white font-black text-sm uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40"
         >
           {registrando
             ? 'Procesando...'
@@ -888,8 +875,7 @@ export default function ClienteView() {
         isDark ? 'bg-[#001233] text-white' : 'bg-[#EEF1F6] text-[#002664]'
       }`}
     >
-      <div className="w-full max-w-[410px] rounded-[34px] shadow-2xl overflow-hidden bg-[#002664]">
-        {/* Barra superior con botón Volver al Inicio y Tema */}
+      <div className="w-full max-w-[440px] rounded-[34px] shadow-2xl overflow-hidden bg-[#002664]">
         <div
           className="flex items-center justify-between px-6 pt-5 pb-2 text-white"
           style={{
@@ -900,32 +886,32 @@ export default function ClienteView() {
         >
           <Link
             href="/"
-            className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white text-[#F2293A] text-[11px] font-black transition-all active:scale-95 shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-[#F2293A] text-xs font-black transition-all active:scale-95 shadow-xs"
           >
             ← Inicio
           </Link>
 
-          <div className="flex items-center gap-0.5 p-1 rounded-full bg-[#002664]/80 text-[10px] font-bold">
+          <div className="flex items-center gap-1 p-1 rounded-full bg-[#002664]/85 text-xs font-bold">
             <button
               onClick={() => setModoTema('light')}
-              className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                modoTema === 'light' ? 'bg-white text-[#002664]' : 'text-white/70'
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                modoTema === 'light' ? 'bg-white text-[#002664]' : 'text-white/80'
               }`}
             >
               ☀️
             </button>
             <button
               onClick={() => setModoTema('dark')}
-              className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                modoTema === 'dark' ? 'bg-[#F2293A] text-white' : 'text-white/70'
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                modoTema === 'dark' ? 'bg-[#F2293A] text-white' : 'text-white/80'
               }`}
             >
               🌙
             </button>
             <button
               onClick={() => setModoTema('auto')}
-              className={`px-2 h-6 rounded-full transition-all ${
-                modoTema === 'auto' ? 'bg-white text-[#002664]' : 'text-white/70'
+              className={`px-2.5 h-7 rounded-full transition-all ${
+                modoTema === 'auto' ? 'bg-white text-[#002664]' : 'text-white/80'
               }`}
             >
               Auto
@@ -933,12 +919,11 @@ export default function ClienteView() {
           </div>
         </div>
 
-        <Suspense fallback={<p className="text-center text-white text-xs py-10">Cargando...</p>}>
+        <Suspense fallback={<p className="text-center text-white text-sm py-10">Cargando...</p>}>
           <ClienteContent />
         </Suspense>
 
-        {/* Franja inferior roja estilo 2da y 3ra pantalla */}
-        <div className="h-6 bg-[#F2293A] flex items-center justify-center text-white text-xs font-black">
+        <div className="h-7 bg-[#F2293A] flex items-center justify-center text-white text-sm font-black">
           ⌄
         </div>
       </div>
