@@ -31,14 +31,12 @@ interface Cita {
   estado: string;
 }
 
-interface ServicioConfig {
-  id: string;
-  nombre: string;
-  descripcion?: string;
-  precio: number;
-}
+const SERVICIOS_DEFAULT = [
+  { nombre: 'Corte clásico', precio: 10 },
+  { nombre: 'Corte + barba', precio: 15 },
+  { nombre: 'Barba', precio: 7 },
+];
 
-// Helper para obtener fecha YYYY-MM-DD en hora local (evita salto de día a las 8:00 PM UTC-4)
 const getFechaLocalStr = () => {
   const d = new Date();
   const year = d.getFullYear();
@@ -54,26 +52,19 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [horaActual, setHoraActual] = useState<string>('');
   const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
-  const [eliminandoCitaId, setEliminandoCitaId] = useState<string | null>(null);
+
+  const [tabActiva, setTabActiva] = useState<'silla' | 'citas' | 'horarios'>('silla');
 
   const [diaSeleccionado, setDiaSeleccionado] = useState<number>(1);
   const [bloques, setBloques] = useState<any[]>([]);
   const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
-  const [serviciosCatalogo, setServiciosCatalogo] = useState<ServicioConfig[]>([]);
   const [tipoServicio, setTipoServicio] = useState<string>('Corte clásico');
   const [precioServicio, setPrecioServicio] = useState<number>(10);
   const [editandoServicio, setEditandoServicio] = useState<boolean>(false);
-  const [creandoNuevoServicio, setCreandoNuevoServicio] = useState<boolean>(false);
 
   const [nuevoTipoInput, setNuevoTipoInput] = useState<string>('Corte clásico');
-  const [nuevaDescripcionInput, setNuevaDescripcionInput] = useState<string>('');
   const [nuevoPrecioInput, setNuevoPrecioInput] = useState<string>('10');
-
-  const [nombreServicioNuevo, setNombreServicioNuevo] = useState<string>('');
-  const [descripcionServicioNuevo, setDescripcionServicioNuevo] = useState<string>('');
-  const [precioServicioNuevo, setPrecioServicioNuevo] = useState<string>('');
-  const [guardandoCatalogo, setGuardandoCatalogo] = useState<boolean>(false);
 
   useEffect(() => {
     const hoy = new Date().getDay();
@@ -81,7 +72,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
     const actualizarHora = () => {
       const ahora = new Date();
-      setHoraActual(ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setHoraActual(ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
     };
     actualizarHora();
     const interval = setInterval(actualizarHora, 1000);
@@ -108,32 +99,16 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .eq('id', id);
   };
 
-  const cargarServiciosCatalogo = async () => {
-    const { data } = await supabase
-      .from('servicios_config')
-      .select('*')
-      .order('nombre', { ascending: true });
-
-    if (data && data.length > 0) {
-      const formateados: ServicioConfig[] = data.map((s) => ({
-        id: s.id,
-        nombre: s.nombre,
-        descripcion: s.descripcion || '',
-        precio: Number(s.precio),
-      }));
-      setServiciosCatalogo(formateados);
-
-      const actual = formateados.find((s) => s.nombre === tipoServicio) || formateados[0];
-      if (actual) {
-        setTipoServicio(actual.nombre);
-        setPrecioServicio(actual.precio);
-      }
-    }
-  };
-
   useEffect(() => {
-    cargarServiciosCatalogo();
-  }, []);
+    const cargarPreciosBase = async () => {
+      const { data } = await supabase.from('servicios_config').select('*');
+      if (data && data.length > 0) {
+        const servicioActual = data.find((s) => s.nombre === tipoServicio);
+        if (servicioActual) setPrecioServicio(Number(servicioActual.precio));
+      }
+    };
+    cargarPreciosBase();
+  }, [tipoServicio]);
 
   const fetchTurnosYCitas = async () => {
     const { data: activos } = await supabase
@@ -217,7 +192,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  // NOTIFICAR WA Y PASAR A COLA DE HOY SI LA CITA ES HOY
   const procesarNotificacionCitaWA = async (cita: Cita, telefonoEspecifico?: string) => {
     const telefonoFinal = telefonoEspecifico || cita.cliente_telefono;
     if (!telefonoFinal) return;
@@ -233,7 +207,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     );
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
 
-    // Si la cita corresponde al día de hoy, bajar a la lista de espera (turnos)
     if (esHoy) {
       await supabase.from('turnos').insert([
         {
@@ -255,39 +228,23 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnosYCitas();
   };
 
-  // ELIMINAR / CANCELAR CITA DE LA AGENDA
-  const eliminarCita = async (cita: Cita) => {
-    const confirmar = window.confirm(
-      `¿Seguro que deseas eliminar la cita de ${cita.nombre_cliente} (${cita.fecha} a las ${cita.hora_inicio.substring(0, 5)})?`
-    );
-    if (!confirmar) return;
-
-    setEliminandoCitaId(cita.id);
-    try {
-      const { error } = await supabase
-        .from('citas')
-        .update({ estado: 'cancelada' })
-        .eq('id', cita.id);
-
-      if (error) throw error;
-
-      setCitasDelDia((prev) => prev.filter((c) => c.id !== cita.id));
-    } catch (err) {
-      console.error('Error al eliminar la cita:', err);
-      alert('No se pudo eliminar la cita. Intenta de nuevo.');
-    } finally {
-      setEliminandoCitaId(null);
-    }
-  };
-
-  const handleTipoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleTipoChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const seleccionado = e.target.value;
     setNuevoTipoInput(seleccionado);
 
-    const encontrado = serviciosCatalogo.find((s) => s.nombre === seleccionado);
-    if (encontrado) {
-      setNuevoPrecioInput(encontrado.precio.toString());
-      setNuevaDescripcionInput(encontrado.descripcion || '');
+    const { data } = await supabase
+      .from('servicios_config')
+      .select('precio')
+      .eq('nombre', seleccionado)
+      .maybeSingle();
+
+    if (data) {
+      setNuevoPrecioInput(data.precio.toString());
+    } else {
+      const servicioEncontrado = SERVICIOS_DEFAULT.find((s) => s.nombre === seleccionado);
+      if (servicioEncontrado) {
+        setNuevoPrecioInput(servicioEncontrado.precio.toString());
+      }
     }
   };
 
@@ -295,87 +252,28 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     const valorPrecio = parseFloat(nuevoPrecioInput);
     if (isNaN(valorPrecio) || valorPrecio < 0) return;
 
-    setGuardandoCatalogo(true);
-    const servicioObj = serviciosCatalogo.find((s) => s.nombre === nuevoTipoInput);
+    let servicioId = 'corte_clasico';
+    if (nuevoTipoInput === 'Corte + barba') servicioId = 'corte_barba';
+    if (nuevoTipoInput === 'Barba') servicioId = 'barba';
 
-    if (servicioObj) {
-      await supabase
-        .from('servicios_config')
-        .update({
-          precio: valorPrecio,
-          descripcion: nuevaDescripcionInput.trim(),
-        })
-        .eq('id', servicioObj.id);
-    }
+    await supabase
+      .from('servicios_config')
+      .update({ precio: valorPrecio })
+      .eq('id', servicioId);
 
     if (turnoActual) {
       await supabase
         .from('turnos')
         .update({
           tipo_corte: nuevoTipoInput,
-          monto: valorPrecio,
+          monto: valorPrecio
         })
         .eq('id', turnoActual.id);
       await fetchTurnosYCitas();
     }
 
-    await cargarServiciosCatalogo();
     setTipoServicio(nuevoTipoInput);
     setPrecioServicio(valorPrecio);
-    setEditandoServicio(false);
-    setGuardandoCatalogo(false);
-  };
-
-  const agregarServicioAlCatalogo = async () => {
-    const nombreLimpio = nombreServicioNuevo.trim();
-    const valorPrecio = parseFloat(precioServicioNuevo);
-    if (!nombreLimpio || isNaN(valorPrecio) || valorPrecio < 0) return;
-
-    setGuardandoCatalogo(true);
-    const nuevoId = nombreLimpio
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_|_$/g, '');
-
-    const { error } = await supabase.from('servicios_config').insert([
-      {
-        id: nuevoId || `srv_${Date.now()}`,
-        nombre: nombreLimpio,
-        descripcion: descripcionServicioNuevo.trim(),
-        precio: valorPrecio,
-      },
-    ]);
-
-    if (!error) {
-      await cargarServiciosCatalogo();
-      setTipoServicio(nombreLimpio);
-      setPrecioServicio(valorPrecio);
-      setNuevoTipoInput(nombreLimpio);
-      setNuevaDescripcionInput(descripcionServicioNuevo.trim());
-      setNuevoPrecioInput(valorPrecio.toString());
-      setNombreServicioNuevo('');
-      setDescripcionServicioNuevo('');
-      setPrecioServicioNuevo('');
-      setCreandoNuevoServicio(false);
-      setEditandoServicio(false);
-    } else {
-      alert('No se pudo guardar el servicio. Verifica que no exista ya ese nombre o los permisos en Supabase.');
-    }
-    setGuardandoCatalogo(false);
-  };
-
-  const eliminarServicioDelCatalogo = async (servicio: ServicioConfig) => {
-    if (serviciosCatalogo.length <= 1) {
-      alert('Debe quedar al menos un servicio activo.');
-      return;
-    }
-    const confirmar = window.confirm(`¿Eliminar "${servicio.nombre}" del catálogo de servicios?`);
-    if (!confirmar) return;
-
-    await supabase.from('servicios_config').delete().eq('id', servicio.id);
-    await cargarServiciosCatalogo();
     setEditandoServicio(false);
   };
 
@@ -524,522 +422,380 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnosYCitas();
   };
 
+  const cardSurface = isDark
+    ? 'bg-[#1D2229] border-[#2E353F] text-[#F4F3F1]'
+    : 'bg-white border-[#E5E2DC] text-[#232931] shadow-[0_4px_20px_-4px_rgba(35,41,49,0.06)]';
+
   return (
-    <div className="space-y-6">
-      <div className={`flex items-center justify-between p-4 rounded-2xl border ${
-        isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-      }`}>
-        <span className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-xs font-bold rounded-full">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          En Línea
-        </span>
-        <span className="text-sm font-mono font-bold text-amber-500">{horaActual}</span>
-      </div>
-
-      <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 gap-4 rounded-2xl border shadow-sm ${
-        isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-      }`}>
-        <div className="w-full sm:flex-1">
-          <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 block">
-            Servicio Activo & Tarifa
-          </span>
-
-          {creandoNuevoServicio ? (
-            <div className="space-y-2 mt-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Nombre (Ej: Corte + Cejas)"
-                  value={nombreServicioNuevo}
-                  onChange={(e) => setNombreServicioNuevo(e.target.value)}
-                  className={`px-3 py-1.5 text-xs font-bold border rounded-lg focus:outline-none ${
-                    isDark ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-100 border-slate-300 text-slate-900'
-                  }`}
-                />
-                <div className="flex items-center gap-1">
-                  <span className="text-lg font-bold text-emerald-500">{APP_CONFIG.monedaSimbolo}</span>
-                  <input
-                    type="number"
-                    step="0.5"
-                    placeholder="0.00"
-                    value={precioServicioNuevo}
-                    onChange={(e) => setPrecioServicioNuevo(e.target.value)}
-                    className={`w-20 px-2 py-1 text-sm font-bold border rounded-lg focus:outline-none ${
-                      isDark ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-100 border-slate-300 text-emerald-600'
-                    }`}
-                  />
-                </div>
-              </div>
-              <input
-                type="text"
-                maxLength={90}
-                placeholder="Breve descripción (Ej: Incluye lavado, perfilado y navaja)"
-                value={descripcionServicioNuevo}
-                onChange={(e) => setDescripcionServicioNuevo(e.target.value)}
-                className={`w-full max-w-md px-3 py-1.5 text-xs border rounded-lg focus:outline-none ${
-                  isDark ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder-slate-500' : 'bg-slate-100 border-slate-300 text-slate-800 placeholder-slate-400'
-                }`}
-              />
-            </div>
-          ) : editandoServicio ? (
-            <div className="space-y-2 mt-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={nuevoTipoInput}
-                  onChange={handleTipoChange}
-                  className={`px-3 py-1.5 text-xs font-bold border rounded-lg focus:outline-none ${
-                    isDark ? 'bg-slate-800 border-slate-700 text-amber-400' : 'bg-slate-100 border-slate-300 text-amber-600'
-                  }`}
-                >
-                  {serviciosCatalogo.map((srv) => (
-                    <option key={srv.id} value={srv.nombre}>
-                      ✂️ {srv.nombre}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="flex items-center gap-1">
-                  <span className="text-lg font-bold text-emerald-500">{APP_CONFIG.monedaSimbolo}</span>
-                  <input
-                    type="number"
-                    step="0.5"
-                    value={nuevoPrecioInput}
-                    onChange={(e) => setNuevoPrecioInput(e.target.value)}
-                    className={`w-20 px-2 py-1 text-sm font-bold border rounded-lg focus:outline-none ${
-                      isDark ? 'bg-slate-800 border-slate-700 text-emerald-400' : 'bg-slate-100 border-slate-300 text-emerald-600'
-                    }`}
-                  />
-                </div>
-
-                {serviciosCatalogo.length > 1 && (
-                  <button
-                    type="button"
-                    title="Eliminar servicio seleccionado"
-                    onClick={() => {
-                      const srv = serviciosCatalogo.find((s) => s.nombre === nuevoTipoInput);
-                      if (srv) eliminarServicioDelCatalogo(srv);
-                    }}
-                    className="px-2.5 py-1.5 text-xs font-bold bg-rose-500/10 hover:bg-rose-600 text-rose-500 hover:text-white border border-rose-500/30 rounded-lg transition-all"
-                  >
-                    🗑️
-                  </button>
-                )}
-              </div>
-              <input
-                type="text"
-                maxLength={90}
-                placeholder="Breve descripción del servicio..."
-                value={nuevaDescripcionInput}
-                onChange={(e) => setNuevaDescripcionInput(e.target.value)}
-                className={`w-full max-w-md px-3 py-1.5 text-xs border rounded-lg focus:outline-none ${
-                  isDark ? 'bg-slate-800 border-slate-700 text-slate-200 placeholder-slate-500' : 'bg-slate-100 border-slate-300 text-slate-800 placeholder-slate-400'
-                }`}
-              />
-            </div>
-          ) : (
-            <div className="mt-1">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
-                  ✂️ {turnoActual?.tipo_corte || tipoServicio}
-                </span>
-                <p className="text-2xl font-black text-emerald-500">
-                  {APP_CONFIG.monedaSimbolo}{turnoActual?.monto || precioServicio}
-                </p>
-              </div>
-              {(() => {
-                const srvActual = serviciosCatalogo.find(
-                  (s) => s.nombre === (turnoActual?.tipo_corte || tipoServicio)
-                );
-                return srvActual?.descripcion ? (
-                  <p className="text-xs text-slate-400 mt-1">{srvActual.descripcion}</p>
-                ) : null;
-              })()}
-            </div>
-          )}
+    <div className="space-y-4">
+      {/* Saludo y estado en línea */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-lg font-extrabold leading-tight">Panel Barbero</p>
+          <p className="text-xs font-bold text-[#C47E52] flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            En línea · {horaActual}
+          </p>
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-center">
-          {creandoNuevoServicio ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setCreandoNuevoServicio(false)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                }`}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={guardandoCatalogo || !nombreServicioNuevo.trim() || !precioServicioNuevo}
-                onClick={agregarServicioAlCatalogo}
-                className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50"
-              >
-                {guardandoCatalogo ? 'Guardando...' : 'Agregar'}
-              </button>
-            </>
-          ) : editandoServicio ? (
-            <>
-              <button
-                type="button"
-                onClick={() => setEditandoServicio(false)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                  isDark ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
-                }`}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={guardandoCatalogo}
-                onClick={guardarNuevoServicio}
-                className="px-3 py-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg shadow-md transition-all active:scale-95 disabled:opacity-50"
-              >
-                Guardar
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setNombreServicioNuevo('');
-                  setDescripcionServicioNuevo('');
-                  setPrecioServicioNuevo('');
-                  setCreandoNuevoServicio(true);
-                }}
-                className="px-3 py-1.5 text-xs font-bold rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition-all flex items-center gap-1"
-              >
-                ➕ Nuevo
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const nombreActual = turnoActual?.tipo_corte || tipoServicio;
-                  const srvObj = serviciosCatalogo.find((s) => s.nombre === nombreActual);
-                  setNuevoTipoInput(nombreActual);
-                  setNuevaDescripcionInput(srvObj?.descripcion || '');
-                  setNuevoPrecioInput((turnoActual?.monto || precioServicio).toString());
-                  setEditandoServicio(true);
-                }}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 ${
-                  isDark 
-                    ? 'bg-slate-800/80 border-slate-700 text-amber-400 hover:bg-slate-800' 
-                    : 'bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20'
-                }`}
-              >
-                ✏️ Editar Servicio
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className={`p-5 rounded-2xl border space-y-4 shadow-xl ${
-        isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-      }`}>
-        <div className="flex items-center justify-between">
-          <h3 className="text-xs uppercase tracking-wider font-bold text-slate-400">
-            ⚙️ Activar / Desactivar Bloques de Citas
-          </h3>
-          <select
-            value={diaSeleccionado}
-            onChange={(e) => setDiaSeleccionado(Number(e.target.value))}
-            className={`px-3 py-1.5 text-xs font-bold border rounded-lg focus:outline-none ${
-              isDark ? 'bg-slate-800 text-amber-400 border-slate-700' : 'bg-slate-100 text-slate-800 border-slate-300'
-            }`}
-          >
-            {diasNombres.map((d, idx) => (
-              <option key={idx} value={idx}>{d}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-          {bloques.map((bloque) => (
-            <button
-              key={bloque.id}
-              type="button"
-              onClick={() => toggleBloque(bloque.id, bloque.activo)}
-              className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all text-center ${
-                bloque.activo
-                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30 shadow-sm'
-                  : 'bg-slate-800/20 text-slate-500 border-slate-800 hover:bg-slate-800/40 line-through'
-              }`}
-            >
-              {bloque.hora_inicio.substring(0, 5)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {citasDelDia.length > 0 && (
-        <div className={`border rounded-2xl p-5 shadow-xl space-y-3 ${
-          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <div className="flex items-center justify-between border-b pb-2 border-slate-700/20">
-            <h3 className="text-xs uppercase tracking-wider text-amber-400 font-bold flex items-center gap-2">
-              📅 Agenda de Citas ({citasDelDia.length})
-            </h3>
+        {/* Métricas rápidas */}
+        <div className="flex items-center gap-2">
+          <div className={`px-3 py-1.5 rounded-2xl border text-center ${cardSurface}`}>
+            <span className="text-[9px] uppercase font-bold text-[#8C8881] block">Caja</span>
+            <span className="text-xs font-black text-[#C47E52]">{APP_CONFIG.monedaSimbolo}{totalIngresos}</span>
           </div>
+          <div className={`px-3 py-1.5 rounded-2xl border text-center ${cardSurface}`}>
+            <span className="text-[9px] uppercase font-bold text-[#8C8881] block">Cortes</span>
+            <span className="text-xs font-black">{totalAtendidos}</span>
+          </div>
+        </div>
+      </div>
 
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {citasDelDia.map((cita) => (
-              <div
-                key={cita.id}
-                className={`flex flex-col sm:flex-row items-start sm:items-center justify-between border p-3.5 rounded-xl gap-3 ${
-                  isDark ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-50 border-slate-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-mono font-bold rounded-lg flex flex-col items-center">
-                    <span className="text-[10px] text-slate-400">{cita.fecha}</span>
-                    <span className="text-sm text-amber-400 font-black">{cita.hora_inicio.substring(0, 5)}</span>
-                  </span>
-                  <div>
-                    <span className={`font-bold text-sm block ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      {cita.nombre_cliente} ({cita.codigo_ticket})
-                    </span>
-                    <span className="text-xs text-slate-400 font-medium">
-                      ✂️ {cita.tipo_corte} - <span className="text-emerald-400 font-bold">{APP_CONFIG.monedaSimbolo}{cita.monto}</span>
-                    </span>
+      {/* Píldoras de Navegación (Estilo "All | Services | Price" de la imagen) */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() => setTabActiva('silla')}
+          className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+            tabActiva === 'silla'
+              ? 'bg-[#232931] text-white shadow-xs'
+              : isDark
+              ? 'bg-[#1D2229] text-[#8C8881]'
+              : 'bg-white text-[#5C636E] border border-[#E5E2DC]'
+          }`}
+        >
+          Silla & Cola ({colaEspera.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setTabActiva('citas')}
+          className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+            tabActiva === 'citas'
+              ? 'bg-[#232931] text-white shadow-xs'
+              : isDark
+              ? 'bg-[#1D2229] text-[#8C8881]'
+              : 'bg-white text-[#5C636E] border border-[#E5E2DC]'
+          }`}
+        >
+          Agenda ({citasDelDia.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setTabActiva('horarios')}
+          className={`px-3.5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+            tabActiva === 'horarios'
+              ? 'bg-[#232931] text-white shadow-xs'
+              : isDark
+              ? 'bg-[#1D2229] text-[#8C8881]'
+              : 'bg-white text-[#5C636E] border border-[#E5E2DC]'
+          }`}
+        >
+          Horarios
+        </button>
+      </div>
+
+      {/* --- TAB 1: SILLA & COLA EN VIVO --- */}
+      {tabActiva === 'silla' && (
+        <div className="space-y-4">
+          {/* Tarjeta Cliente en Silla (Estilo Barber Card con precio grande a la derecha) */}
+          <div className={`p-5 rounded-3xl border space-y-4 ${cardSurface}`}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-[#8C8881]">
+                En Silla Ahora
+              </span>
+              {turnoActual && (
+                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-[#C47E52]/15 text-[#C47E52]">
+                  {turnoActual.modalidad_espera === 'diligencia' ? '🏃‍♂️ En camino' : '✂️ Atendiendo'}
+                </span>
+              )}
+            </div>
+
+            {loading ? (
+              <p className="text-center text-xs text-[#8C8881] py-6 animate-pulse">Cargando...</p>
+            ) : turnoActual ? (
+              <div className="space-y-4">
+                {turnoActual.cliente_llego && (
+                  <div className="p-2.5 rounded-2xl bg-[#C47E52]/20 border border-[#C47E52] text-center text-[11px] font-bold text-[#C47E52]">
+                    📍 ¡El cliente ya llegó al local!
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-[#C47E52]/20 flex items-center justify-center text-xl font-black text-[#C47E52] shrink-0">
+                      {turnoActual.codigo_ticket}
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold leading-tight">{turnoActual.nombre_cliente}</h3>
+                      <p className="text-xs text-[#8C8881]">{turnoActual.tipo_corte || tipoServicio}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-black text-[#C47E52]">
+                      {APP_CONFIG.monedaSimbolo}{turnoActual.monto || precioServicio}
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                {/* Edición rápida de servicio/tarifa */}
+                {editandoServicio ? (
+                  <div className={`p-3 rounded-2xl space-y-2.5 ${isDark ? 'bg-[#15191E]' : 'bg-[#F4F3F1]'}`}>
+                    <div className="flex gap-2">
+                      <select
+                        value={nuevoTipoInput}
+                        onChange={handleTipoChange}
+                        className={`flex-1 px-3 py-2 text-xs font-bold rounded-xl border focus:outline-none ${
+                          isDark ? 'bg-[#1D2229] border-[#2E353F]' : 'bg-white border-[#E5E2DC]'
+                        }`}
+                      >
+                        <option value="Corte clásico">Corte clásico</option>
+                        <option value="Corte + barba">Corte + barba</option>
+                        <option value="Barba">Barba</option>
+                      </select>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={nuevoPrecioInput}
+                        onChange={(e) => setNuevoPrecioInput(e.target.value)}
+                        className={`w-20 px-3 py-2 text-xs font-bold rounded-xl border focus:outline-none ${
+                          isDark ? 'bg-[#1D2229] border-[#2E353F]' : 'bg-white border-[#E5E2DC]'
+                        }`}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditandoServicio(false)}
+                        className="flex-1 py-2 rounded-full text-xs font-bold border border-current/15"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={guardarNuevoServicio}
+                        className="flex-1 py-2 rounded-full text-xs font-bold bg-[#C47E52] text-white"
+                      >
+                        Guardar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNuevoTipoInput(turnoActual.tipo_corte || tipoServicio);
+                        setNuevoPrecioInput((turnoActual.monto || precioServicio).toString());
+                        setEditandoServicio(true);
+                      }}
+                      className="text-[11px] font-bold text-[#8C8881] hover:text-[#C47E52]"
+                    >
+                      ✏️ Cambiar servicio/monto
+                    </button>
+
+                    {turnoActual.cliente_telefono && (
+                      <button
+                        type="button"
+                        onClick={() => enviarWhatsAppTurno(turnoActual.cliente_telefono!, turnoActual.nombre_cliente, turnoActual.codigo_ticket)}
+                        className="px-3 py-1 rounded-full bg-emerald-600/15 text-emerald-500 text-[11px] font-bold"
+                      >
+                        📲 WhatsApp
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {turnoActual.modalidad_espera === 'diligencia' && minutosRestantes !== null && !turnoActual.cliente_llego && (
+                  <div className={`p-3.5 rounded-2xl text-center space-y-2 ${isDark ? 'bg-[#15191E]' : 'bg-[#F4F3F1]'}`}>
+                    <p className="text-[11px] font-bold text-[#8C8881]">
+                      Tiempo límite: <span className="text-[#C47E52] font-black">{minutosRestantes} min</span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={confirmarLlegadaCliente}
+                      className="w-full py-2.5 rounded-full bg-[#232931] text-white font-bold text-xs"
+                    >
+                      💈 Confirmar Llegada al Local
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-6 text-center space-y-1">
+                <span className="text-3xl block">💺</span>
+                <p className="text-xs font-bold">Silla disponible</p>
+                <p className="text-[11px] text-[#8C8881]">Llama al siguiente cliente de la cola</p>
+              </div>
+            )}
+
+            {/* Botones principales de acción */}
+            <div className="pt-1">
+              {!turnoActual ? (
+                <button
+                  onClick={llamarSiguiente}
+                  disabled={colaEspera.length === 0}
+                  className={`w-full py-3.5 rounded-full font-bold text-xs tracking-wide transition-all shadow-md active:scale-95 disabled:opacity-40 ${
+                    isDark ? 'bg-[#C47E52] text-white' : 'bg-[#232931] text-white'
+                  }`}
+                >
+                  📢 Llamar Siguiente ({colaEspera.length})
+                </button>
+              ) : (
+                <div className="flex gap-2">
+                  {turnoActual.modalidad_espera === 'diligencia' && (
+                    <button
+                      onClick={pasarSiguientePorAusencia}
+                      className="flex-1 py-3.5 rounded-full border border-rose-500/40 text-rose-500 font-bold text-xs"
+                    >
+                      Ausente
+                    </button>
+                  )}
+                  <button
+                    onClick={finalizarServicio}
+                    className="flex-1 py-3.5 rounded-full bg-[#C47E52] hover:bg-[#B36E43] text-white font-bold text-xs shadow-md active:scale-95"
+                  >
+                    ✅ Finalizar Corte
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Lista de Espera estilo tarjetas de Barberos de la referencia */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-bold">Próximos en cola ({colaEspera.length})</span>
+              <span className="text-[11px] text-[#8C8881]">Prom. ~{tiempoPromedioMinutos}m</span>
+            </div>
+
+            {colaEspera.length === 0 ? (
+              <div className={`p-5 rounded-2xl border text-center text-xs text-[#8C8881] ${cardSurface}`}>
+                No hay clientes esperando en este momento.
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
+                {colaEspera.map((item, idx) => (
+                  <div
+                    key={item.id}
+                    className={`p-3.5 rounded-2xl border flex items-center justify-between ${cardSurface}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-[#C47E52]/15 text-[#C47E52] flex items-center justify-center text-xs font-black shrink-0">
+                        #{idx + 1}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-extrabold">{item.nombre_cliente}</span>
+                          <span className="text-[10px] font-bold text-[#C47E52]">({item.codigo_ticket})</span>
+                        </div>
+                        <p className="text-[11px] text-[#8C8881]">
+                          {item.tipo_corte} · {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 Local'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className="text-sm font-black">
+                      {APP_CONFIG.monedaSimbolo}{item.monto || precioServicio}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* --- TAB 2: AGENDA DE CITAS --- */}
+      {tabActiva === 'citas' && (
+        <div className="space-y-3">
+          <p className="text-xs font-bold px-1">Citas Agendadas ({citasDelDia.length})</p>
+          {citasDelDia.length === 0 ? (
+            <div className={`p-8 rounded-3xl border text-center text-xs text-[#8C8881] ${cardSurface}`}>
+              No hay citas agendadas pendientes.
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-[420px] overflow-y-auto pr-0.5">
+              {citasDelDia.map((cita) => (
+                <div
+                  key={cita.id}
+                  className={`p-4 rounded-2xl border flex items-center justify-between gap-2 ${cardSurface}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="px-2.5 py-1.5 rounded-xl bg-[#C47E52]/15 text-center shrink-0">
+                      <span className="text-[9px] font-bold text-[#8C8881] block">{cita.fecha.slice(5)}</span>
+                      <span className="text-xs font-black text-[#C47E52]">{cita.hora_inicio.substring(0, 5)}</span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-extrabold leading-tight">
+                        {cita.nombre_cliente} <span className="text-[#C47E52]">({cita.codigo_ticket})</span>
+                      </p>
+                      <p className="text-[11px] text-[#8C8881] mt-0.5">
+                        {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}{cita.monto}
+                      </p>
+                    </div>
+                  </div>
+
                   {cita.cliente_telefono ? (
                     <button
                       type="button"
                       onClick={() => procesarNotificacionCitaWA(cita)}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition-all active:scale-95 flex items-center gap-1"
+                      className="px-3.5 py-2 rounded-full bg-[#232931] hover:bg-[#191E24] text-white font-bold text-[11px] shrink-0 active:scale-95"
                     >
-                      📲 Recordatorio WA
+                      📲 WA
                     </button>
                   ) : (
                     <button
                       type="button"
                       onClick={() => {
-                        const num = prompt(`Ingresa el teléfono para ${cita.nombre_cliente}:`);
-                        if (num) {
-                          procesarNotificacionCitaWA(cita, num);
-                        }
+                        const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
+                        if (num) procesarNotificacionCitaWA(cita, num);
                       }}
-                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-slate-700 font-bold text-xs rounded-xl transition-all flex items-center gap-1"
+                      className="px-3 py-2 rounded-full bg-[#C47E52] text-white font-bold text-[11px] shrink-0"
                     >
-                      ➕ Añadir Tlf y Notificar
+                      ➕ Tlf
                     </button>
                   )}
-
-                  <button
-                    type="button"
-                    onClick={() => eliminarCita(cita)}
-                    disabled={eliminandoCitaId === cita.id}
-                    title="Eliminar cita"
-                    className={`px-3 py-1.5 font-bold text-xs rounded-xl border transition-all active:scale-95 flex items-center gap-1 disabled:opacity-50 ${
-                      isDark
-                        ? 'bg-rose-500/10 hover:bg-rose-600 text-rose-400 hover:text-white border-rose-500/30'
-                        : 'bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white border-rose-200'
-                    }`}
-                  >
-                    {eliminandoCitaId === cita.id ? '⏳...' : '🗑️ Eliminar'}
-                  </button>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className={`border rounded-2xl p-4 text-center shadow-md ${
-          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <span className="text-[10px] uppercase font-bold text-slate-400">Ingresos Hoy</span>
-          <p className="text-2xl font-black text-emerald-500 mt-1">{APP_CONFIG.monedaSimbolo}{totalIngresos}</p>
-        </div>
-
-        <div className={`border rounded-2xl p-4 text-center shadow-md ${
-          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <span className="text-[10px] uppercase font-bold text-slate-400">Atendidos Hoy</span>
-          <p className="text-2xl font-black text-amber-500 mt-1">{totalAtendidos}</p>
-        </div>
-
-        <div className={`border rounded-2xl p-4 text-center shadow-md ${
-          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <span className="text-[10px] uppercase font-bold text-slate-400">En Espera</span>
-          <p className="text-2xl font-black text-indigo-400 mt-1">{colaEspera.length}</p>
-        </div>
-
-        <div className={`border rounded-2xl p-4 text-center shadow-md ${
-          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <span className="text-[10px] uppercase font-bold text-slate-400">T. Promedio</span>
-          <p className="text-2xl font-black text-cyan-400 mt-1">~{tiempoPromedioMinutos}m</p>
-        </div>
-      </div>
-
-      <div className={`border rounded-2xl p-6 shadow-2xl space-y-6 ${
-        isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-      }`}>
-        <div className="flex items-center justify-between border-b pb-3 border-slate-700/20">
-          <h2 className="text-xs uppercase tracking-widest font-bold text-slate-400">Cliente Actual en Silla</h2>
-          {turnoActual && (
-            <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold rounded-md uppercase">
-              {turnoActual.modalidad_espera === 'diligencia' ? 'Esperando Llegada 🏃‍♂️' : 'En Silla ✂️'}
-            </span>
-          )}
-        </div>
-
-        {loading ? (
-          <p className="text-center text-slate-500 py-8 animate-pulse text-sm">Cargando...</p>
-        ) : turnoActual ? (
-          <div className={`border rounded-xl p-6 text-center space-y-4 ${
-            isDark ? 'bg-slate-800/50 border-slate-700/60' : 'bg-slate-50 border-slate-200'
-          }`}>
-            {turnoActual.cliente_llego && (
-              <div className="p-3 bg-emerald-500/20 border-2 border-emerald-500 rounded-xl text-center text-emerald-400 font-black text-xs uppercase animate-pulse">
-                📍 ¡EL CLIENTE YA LLEGÓ AL LOCAL Y ESTÁ EN ESPERA!
-              </div>
-            )}
-
-            <span className="text-xs font-semibold uppercase text-slate-400">Turno Asignado</span>
-            <p className="text-6xl font-black text-amber-500">{turnoActual.codigo_ticket}</p>
-            <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{turnoActual.nombre_cliente}</p>
-            
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-500 text-sm font-semibold">
-                ✂️ {turnoActual.tipo_corte || tipoServicio} ({APP_CONFIG.monedaSimbolo}{turnoActual.monto || precioServicio})
-              </span>
+              ))}
             </div>
-
-            {turnoActual.cliente_telefono && (
-              <button
-                type="button"
-                onClick={() => enviarWhatsAppTurno(turnoActual.cliente_telefono!, turnoActual.nombre_cliente, turnoActual.codigo_ticket)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all active:scale-95"
-              >
-                📲 Reenviar WhatsApp ({turnoActual.cliente_telefono})
-              </button>
-            )}
-
-            {turnoActual.modalidad_espera === 'diligencia' && minutosRestantes !== null && !turnoActual.cliente_llego && (
-              <div className="p-4 rounded-xl border text-center space-y-3 bg-indigo-500/10 border-indigo-500/30 text-indigo-400">
-                <p className="text-xs font-bold uppercase">Tiempo límite de llegada</p>
-                <p className="text-3xl font-black font-mono">{minutosRestantes} min</p>
-                <button
-                  type="button"
-                  onClick={confirmarLlegadaCliente}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase rounded-lg shadow-md"
-                >
-                  💈 Cliente Llegó al Local (Sentar en Silla)
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="border border-dashed rounded-xl p-8 text-center text-slate-400 text-sm">
-            Silla libre. Presiona "Llamar Siguiente Cliente" para atender.
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-          {!turnoActual ? (
-            <button
-              onClick={llamarSiguiente}
-              disabled={colaEspera.length === 0}
-              className="w-full py-4 px-6 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm rounded-xl disabled:opacity-50"
-            >
-              📢 Llamar Siguiente Cliente
-            </button>
-          ) : (
-            <>
-              {turnoActual.modalidad_espera === 'diligencia' && (
-                <button
-                  onClick={pasarSiguientePorAusencia}
-                  className="w-full py-4 px-4 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase rounded-xl"
-                >
-                  🚫 Ausente (Pasar Siguiente)
-                </button>
-              )}
-              <button
-                onClick={finalizarServicio}
-                className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm rounded-xl"
-              >
-                ✅ Finalizar Servicio
-              </button>
-            </>
           )}
-        </div>
-      </div>
-
-      {colaEspera.length > 0 && (
-        <div className={`border rounded-2xl p-5 shadow-xl space-y-3 ${
-          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <h3 className="text-xs uppercase tracking-wider text-slate-400 font-bold">
-            Próximos en Cola ({colaEspera.length})
-          </h3>
-
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {colaEspera.map((item, idx) => (
-              <div
-                key={item.id}
-                className={`flex items-center justify-between border px-4 py-3 rounded-xl text-xs ${
-                  isDark ? 'bg-slate-800/40 border-slate-800' : 'bg-slate-50 border-slate-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-slate-400 font-bold">#{idx + 1}</span>
-                  <span className="font-extrabold text-amber-500 text-sm">{item.codigo_ticket}</span>
-                  <div>
-                    <span className={`font-bold text-sm block ${isDark ? 'text-white' : 'text-slate-900'}`}>{item.nombre_cliente}</span>
-                    {item.cliente_telefono && <span className="text-[10px] text-slate-400">📱 {item.cliente_telefono}</span>}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-1 rounded-md font-semibold ${
-                    item.modalidad_espera === 'diligencia' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-emerald-500/20 text-emerald-400'
-                  }`}>
-                    {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 En local'}
-                  </span>
-                  <span className="font-bold text-amber-500">{APP_CONFIG.monedaSimbolo}{item.monto || precioServicio}</span>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
-      {turnosFinalizados.length > 0 && (
-        <div className={`border rounded-2xl p-5 shadow-xl space-y-3 ${
-          isDark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-        }`}>
-          <h3 className="text-xs uppercase tracking-wider text-slate-400 font-bold">
-            Historial de Servicios de Hoy ({turnosFinalizados.length})
-          </h3>
+      {/* --- TAB 3: GESTOR DE HORARIOS --- */}
+      {tabActiva === 'horarios' && (
+        <div className={`p-5 rounded-3xl border space-y-4 ${cardSurface}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold">Disponibilidad</span>
+            <select
+              value={diaSeleccionado}
+              onChange={(e) => setDiaSeleccionado(Number(e.target.value))}
+              className={`px-3 py-1.5 text-xs font-bold rounded-full border focus:outline-none ${
+                isDark ? 'bg-[#15191E] border-[#2E353F] text-[#C47E52]' : 'bg-[#F4F3F1] border-[#E5E2DC] text-[#232931]'
+              }`}
+            >
+              {diasNombres.map((d, idx) => (
+                <option key={idx} value={idx}>{d}</option>
+              ))}
+            </select>
+          </div>
 
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {turnosFinalizados.map((item) => (
-              <div
-                key={item.id}
-                className={`flex items-center justify-between border px-4 py-2.5 rounded-xl text-xs ${
-                  isDark ? 'bg-slate-800/20 border-slate-800/60' : 'bg-slate-50 border-slate-200'
+          <div className="grid grid-cols-3 gap-2">
+            {bloques.map((bloque) => (
+              <button
+                key={bloque.id}
+                type="button"
+                onClick={() => toggleBloque(bloque.id, bloque.activo)}
+                className={`py-2 px-2 rounded-full text-[11px] font-bold border transition-all ${
+                  bloque.activo
+                    ? 'bg-[#232931] text-white border-[#232931] shadow-xs'
+                    : isDark
+                    ? 'bg-[#15191E] text-[#5C636E] border-[#2E353F] line-through'
+                    : 'bg-[#F4F3F1] text-[#9CA3AF] border-[#E5E2DC] line-through'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <span className="font-bold text-slate-400">{item.codigo_ticket}</span>
-                  <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{item.nombre_cliente}</span>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] text-slate-400">{item.tipo_corte}</span>
-                  <span className="font-black text-emerald-500">{APP_CONFIG.monedaSimbolo}{item.monto}</span>
-                </div>
-              </div>
+                🕒 {bloque.hora_inicio.substring(0, 5)}
+              </button>
             ))}
           </div>
         </div>
@@ -1060,36 +816,65 @@ export default function BarberoView() {
   const isDark = modoTema === 'auto' ? esNoche : modoTema === 'dark';
 
   return (
-    <main className={`min-h-screen p-4 md:p-8 transition-colors duration-500 ${
-      isDark ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-900'
-    }`}>
-      <div className="max-w-4xl mx-auto space-y-6">
-        <header className="flex items-center justify-between border-b border-slate-700/20 pb-4">
-          <div>
-            <h1 className="text-2xl font-black text-amber-500 tracking-wide">{APP_CONFIG.nombreNegocio}</h1>
-            <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Control de Barbería & Citas</p>
+    <main
+      className={`min-h-screen flex flex-col items-center justify-center p-3 sm:p-6 transition-colors duration-500 ${
+        isDark ? 'bg-[#0F1216] text-[#F4F3F1]' : 'bg-[#C47E52] text-[#232931]'
+      }`}
+    >
+      <div
+        className={`w-full max-w-[430px] rounded-[36px] p-6 shadow-2xl border transition-colors duration-500 ${
+          isDark
+            ? 'bg-[#15191E] border-[#262C35]'
+            : 'bg-[#F4F3F1] border-white/60'
+        }`}
+      >
+        <header className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-[#C47E52] text-white flex items-center justify-center text-sm font-black shadow-xs">
+              💈
+            </div>
+            <div>
+              <h1 className="text-sm font-black tracking-tight uppercase leading-none">
+                {APP_CONFIG.nombreNegocio}
+              </h1>
+              <p className="text-[10px] text-[#8C8881] font-medium mt-0.5">
+                Control de Barbería
+              </p>
+            </div>
           </div>
 
-          <div className={`flex items-center gap-1 p-1 rounded-xl border text-xs font-semibold ${
-            isDark ? 'bg-slate-800 border-slate-700' : 'bg-slate-200 border-slate-300'
-          }`}>
+          <div
+            className={`flex items-center gap-0.5 p-1 rounded-full border text-[10px] font-bold ${
+              isDark ? 'bg-[#1D2229] border-[#2E353F]' : 'bg-white border-[#E5E2DC]'
+            }`}
+          >
             <button
               onClick={() => setModoTema('light')}
-              className={`p-1.5 rounded-lg transition-all ${modoTema === 'light' ? 'bg-amber-500 text-slate-950 font-bold' : isDark ? 'text-slate-400' : 'text-slate-600'}`}
+              className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                modoTema === 'light' ? 'bg-[#232931] text-white' : 'text-[#8C8881]'
+              }`}
             >
               ☀️
             </button>
             <button
               onClick={() => setModoTema('dark')}
-              className={`p-1.5 rounded-lg transition-all ${modoTema === 'dark' ? 'bg-amber-500 text-slate-950 font-bold' : isDark ? 'text-slate-400' : 'text-slate-600'}`}
+              className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                modoTema === 'dark' ? 'bg-[#C47E52] text-white' : 'text-[#8C8881]'
+              }`}
             >
               🌙
             </button>
             <button
               onClick={() => setModoTema('auto')}
-              className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${modoTema === 'auto' ? 'bg-amber-500 text-slate-950' : isDark ? 'text-slate-400' : 'text-slate-600'}`}
+              className={`px-2 h-6 rounded-full transition-all ${
+                modoTema === 'auto'
+                  ? isDark
+                    ? 'bg-[#C47E52] text-white'
+                    : 'bg-[#232931] text-white'
+                  : 'text-[#8C8881]'
+              }`}
             >
-              🔄 Auto
+              Auto
             </button>
           </div>
         </header>
