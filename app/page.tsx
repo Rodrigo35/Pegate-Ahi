@@ -29,30 +29,34 @@ export default function HomeHub() {
   return (
     <main
       className={`min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 transition-colors duration-300 ${
-        isDark ? 'bg-[#09090B] text-white' : 'bg-[#F4F4F5] text-zinc-900'
+        isDark ? 'bg-[#080D1A] text-white' : 'bg-[#F1F5F9] text-slate-900'
       }`}
     >
-      {/* Tarjeta principal oscura con marco fino dorado estilo Barber Club */}
       <div
         className={`w-full max-w-[440px] rounded-3xl p-3 sm:p-4 shadow-2xl border transition-colors ${
           isDark
-            ? 'bg-[#121215] border-zinc-800'
-            : 'bg-white border-zinc-200'
+            ? 'bg-[#0F172A] border-slate-800'
+            : 'bg-white border-slate-200'
         }`}
       >
-        <div className="rounded-2xl border border-[#C59B27]/60 p-5 sm:p-6 flex flex-col justify-between space-y-6">
+        <div className="rounded-2xl border-2 border-[#2563EB]/60 p-5 sm:p-6 flex flex-col justify-between space-y-6">
           {/* Cabecera */}
           <header className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {/* Mini indicador tricolor sutil (Rojo · Blanco · Azul) */}
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-900/90 border border-zinc-800">
+              <div
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-800'
+                    : 'bg-slate-100 border-slate-200'
+                }`}
+              >
                 <span className="w-2 h-2 rounded-full bg-[#DC2626]" />
-                <span className="w-2 h-2 rounded-full bg-white" />
+                <span className="w-2 h-2 rounded-full bg-white border border-slate-300" />
                 <span className="w-2 h-2 rounded-full bg-[#2563EB]" />
               </div>
               <span
                 className={`text-xs font-extrabold uppercase tracking-widest ${
-                  isDark ? 'text-zinc-400' : 'text-zinc-500'
+                  isDark ? 'text-slate-400' : 'text-slate-500'
                 }`}
               >
                 Barber Club
@@ -62,8 +66,8 @@ export default function HomeHub() {
             <div
               className={`flex items-center gap-1 p-1 rounded-full border text-xs font-bold ${
                 isDark
-                  ? 'bg-zinc-950 border-zinc-800'
-                  : 'bg-zinc-100 border-zinc-200'
+                  ? 'bg-slate-950 border-slate-800'
+                  : 'bg-slate-100 border-slate-200'
               }`}
             >
               <button
@@ -71,8 +75,8 @@ export default function HomeHub() {
                 onClick={() => setModoTema('light')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'light'
-                    ? 'bg-white text-zinc-900 shadow-xs'
-                    : 'text-zinc-400'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-400'
                 }`}
                 title="Modo Claro"
               >
@@ -83,8 +87,8 @@ export default function HomeHub() {
                 onClick={() => setModoTema('dark')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'dark'
-                    ? 'bg-[#C59B27] text-zinc-950 shadow-xs'
-                    : 'text-zinc-400'
+                    ? 'bg-[#2563EB] text-white shadow-xs'
+                    : 'text-slate-400'
                 }`}
                 title="Modo Oscuro"
               >
@@ -96,7 +100,7 @@ export default function HomeHub() {
                 className={`px-2.5 h-7 rounded-full transition-all ${
                   modoTema === 'auto'
                     ? 'bg-[#DC2626] text-white shadow-xs'
-                    : 'text-zinc-400'
+                    : 'text-slate-400'
                 }`}
               >
                 Auto
@@ -111,20 +115,20 @@ export default function HomeHub() {
               <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight">
                 {APP_CONFIG.nombreNegocio || 'Pégate Ahí'}
               </h1>
-              <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#C59B27] mt-1.5">
+              <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#2563EB] mt-1.5">
                 Turnos en Vivo · Citas
               </p>
               <p
                 className={`text-sm mt-3 max-w-[300px] mx-auto leading-relaxed ${
-                  isDark ? 'text-zinc-400' : 'text-zinc-600'
+                  isDark ? 'text-slate-400' : 'text-slate-600'
                 }`}
               >
                 Escanea el código QR para entrar a la fila del día o agendar tu corte sin esperas.
               </p>
             </div>
 
-            {/* Tarjeta QR con borde sutil */}
-            <div className="inline-flex flex-col items-center p-4 rounded-2xl bg-white border-2 border-[#C59B27]/50 shadow-lg">
+            {/* Tarjeta QR */}
+            <div className="inline-flex flex-col items-center p-4 rounded-2xl bg-white border-2 border-[#2563EB] shadow-lg">
               {qrCodeImageUrl ? (
                 <img
                   src={qrCodeImageUrl}
@@ -132,16 +136,16 @@ export default function HomeHub() {
                   className="w-48 h-48 rounded-xl"
                 />
               ) : (
-                <div className="w-48 h-48 bg-zinc-100 animate-pulse rounded-xl flex items-center justify-center text-zinc-900 text-sm font-bold">
+                <div className="w-48 h-48 bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-slate-900 text-sm font-bold">
                   Cargando QR...
                 </div>
               )}
-              <span className="text-xs font-black text-zinc-900 mt-2.5 tracking-wide">
+              <span className="text-xs font-black text-slate-900 mt-2.5 tracking-wide">
                 ESCANEA CON TU CÁMARA
               </span>
             </div>
 
-            {/* Botones con acentos puntuales (Rojo acción principal + Azul sutil secundaria) */}
+            {/* Botones */}
             <div className="space-y-3 pt-1">
               <Link
                 href="/cliente"
@@ -154,8 +158,8 @@ export default function HomeHub() {
                 href="/barbero"
                 className={`block w-full py-3.5 rounded-xl font-extrabold text-sm tracking-wide transition-all border active:scale-95 ${
                   isDark
-                    ? 'bg-zinc-900 hover:bg-zinc-800 text-white border-[#2563EB]/60'
-                    : 'bg-zinc-900 hover:bg-zinc-800 text-white border-zinc-900'
+                    ? 'bg-slate-900 hover:bg-slate-800 text-white border-[#2563EB]'
+                    : 'bg-[#1D4ED8] hover:bg-[#1E40AF] text-white border-[#1D4ED8]'
                 }`}
               >
                 Panel del Barbero
@@ -166,8 +170,8 @@ export default function HomeHub() {
           <footer
             className={`text-center text-xs pt-2 border-t ${
               isDark
-                ? 'text-zinc-500 border-zinc-800/80'
-                : 'text-zinc-400 border-zinc-200'
+                ? 'text-slate-500 border-slate-800/80'
+                : 'text-slate-400 border-slate-200'
             }`}
           >
             <p>© {currentYear || 2026} Pégate Ahí · Barbería</p>
