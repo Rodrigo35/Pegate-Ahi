@@ -805,85 +805,102 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* 6 Pestañas: Fila | Sillas | Servicios | Citas | QR | Horas */}
+      {/* 6 Pestañas en cuadrícula 3x2 amplia y táctil */}
       <div
-        className={`grid grid-cols-6 gap-1 p-1.5 rounded-xl border ${
+        className={`grid grid-cols-3 gap-1.5 p-1.5 rounded-2xl border ${
           isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
         }`}
       >
         <button
           type="button"
           onClick={() => setTabActiva('silla')}
-          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
+          className={`py-2.5 px-2 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
             tabActiva === 'silla'
-              ? 'bg-[#DC2626] text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-[#DC2626] text-white shadow-sm'
+              : isDark
+              ? 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
           }`}
         >
-          Fila ({colaEspera.length})
+          <span className="text-base leading-none">💈</span>
+          <span>Fila ({colaEspera.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabActiva('sillas')}
-          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
+          className={`py-2.5 px-2 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
             tabActiva === 'sillas'
-              ? 'bg-[#2563EB] text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-[#2563EB] text-white shadow-sm'
+              : isDark
+              ? 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
           }`}
         >
-          🪑 ({sillasActivas.length})
+          <span className="text-base leading-none">🪑</span>
+          <span>Sillas ({sillasActivas.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabActiva('servicios')}
-          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
+          className={`py-2.5 px-2 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
             tabActiva === 'servicios'
-              ? 'bg-[#2563EB] text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-[#2563EB] text-white shadow-sm'
+              : isDark
+              ? 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
           }`}
-          title="Servicios y Tarifas"
         >
-          ✂️ ({serviciosLista.length})
+          <span className="text-base leading-none">✂️</span>
+          <span>Tarifas ({serviciosLista.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabActiva('citas')}
-          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
+          className={`py-2.5 px-2 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
             tabActiva === 'citas'
-              ? 'bg-[#2563EB] text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-[#2563EB] text-white shadow-sm'
+              : isDark
+              ? 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
           }`}
         >
-          Citas ({citasDelDia.length})
+          <span className="text-base leading-none">📅</span>
+          <span>Citas ({citasDelDia.length})</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabActiva('qr')}
-          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
+          className={`py-2.5 px-2 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
             tabActiva === 'qr'
               ? isDark
-                ? 'bg-white text-slate-950 shadow-xs'
-                : 'bg-slate-900 text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white text-slate-950 shadow-sm'
+                : 'bg-slate-900 text-white shadow-sm'
+              : isDark
+              ? 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
           }`}
         >
-          📷 QR
+          <span className="text-base leading-none">📷</span>
+          <span>Código QR</span>
         </button>
 
         <button
           type="button"
           onClick={() => setTabActiva('horarios')}
-          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
+          className={`py-2.5 px-2 rounded-xl text-xs font-black flex flex-col items-center justify-center gap-0.5 transition-all active:scale-95 ${
             tabActiva === 'horarios'
-              ? 'bg-[#1D4ED8] text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-200'
+              ? 'bg-[#1D4ED8] text-white shadow-sm'
+              : isDark
+              ? 'text-slate-400 hover:text-white hover:bg-slate-900/60'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-white/70'
           }`}
         >
-          Horas
+          <span className="text-base leading-none">🕒</span>
+          <span>Horarios</span>
         </button>
       </div>
 
