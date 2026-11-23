@@ -1307,17 +1307,19 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       {tabActiva === 'servicios' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
-            <span className="text-sm font-black">✂️ Servicios y Tarifas</span>
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+              Tarifas activas
+            </span>
             {tarifasGuardadasOk && (
               <span className="text-xs font-black text-emerald-400">✅ Guardado</span>
             )}
           </div>
 
-          <div className="space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
+          <div className="space-y-2.5">
             {serviciosLista.map((srv) => (
               <div
                 key={srv.id}
-                className={`p-3.5 rounded-2xl border space-y-2 ${cardSurface}`}
+                className={`p-3 rounded-2xl border space-y-2 ${cardSurface}`}
               >
                 <div className="flex items-center gap-2">
                   <input
@@ -1364,11 +1366,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                 <input
                   type="text"
                   value={srv.descripcion || ''}
-                  placeholder="Descripción breve (opcional, visible al cliente)"
+                  placeholder="Descripción breve (opcional)"
                   onChange={(e) =>
                     actualizarCampoServicio(srv.id, 'descripcion', e.target.value)
                   }
-                  className={`w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                  className={`w-full px-3 py-1.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
                     isDark
                       ? 'bg-slate-950 border-slate-800 text-slate-300 placeholder-slate-600'
                       : 'bg-white border-slate-300 text-slate-700 placeholder-slate-400'
@@ -1385,7 +1387,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
               disabled={guardandoTarifas}
               className="w-full py-3.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-xs uppercase tracking-wider shadow-md active:scale-95 disabled:opacity-40"
             >
-              {guardandoTarifas ? 'Guardando...' : '💾 Guardar Cambios en Servicios'}
+              {guardandoTarifas ? 'Guardando...' : 'Guardar Cambios'}
             </button>
           )}
 
@@ -1394,14 +1396,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             onSubmit={agregarNuevoServicio}
             className={`p-3.5 rounded-2xl border border-dashed space-y-2.5 ${cardSurface}`}
           >
-            <span className="block text-xs font-extrabold uppercase tracking-wider text-slate-400">
-              ➕ Agregar nuevo servicio
-            </span>
             <div className="flex gap-2">
               <input
                 type="text"
                 required
-                placeholder="Ej: Corte + Vapor de Ozono"
+                placeholder="Nuevo servicio (Ej: Corte + Ozono)"
                 value={nuevoSrvNombre}
                 onChange={(e) => setNuevoSrvNombre(e.target.value)}
                 className={`flex-1 px-3 py-2 rounded-xl border text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
@@ -1426,10 +1425,10 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             </div>
             <input
               type="text"
-              placeholder="Descripción del servicio (opcional)"
+              placeholder="Descripción (opcional)"
               value={nuevoSrvDesc}
               onChange={(e) => setNuevoSrvDesc(e.target.value)}
-              className={`w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+              className={`w-full px-3 py-1.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
                 isDark
                   ? 'bg-slate-950 border-slate-800 text-slate-300 placeholder-slate-500'
                   : 'bg-white border-slate-300 text-slate-700 placeholder-slate-400'
