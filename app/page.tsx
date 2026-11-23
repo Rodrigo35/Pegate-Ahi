@@ -293,7 +293,7 @@ export default function HomeHub() {
                 rel="noopener noreferrer"
                 className="font-extrabold text-[#2563EB] hover:underline"
               >
-                Rodrigo Martínez (@cest.rodrigo.pmv)
+                (@cest.rodrigo.pmv)
               </a>{' '}
               & Max
             </p>
