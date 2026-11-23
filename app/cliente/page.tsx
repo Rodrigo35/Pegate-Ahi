@@ -348,7 +348,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setLoading(false);
   };
 
-  // Recuperar automáticamente turno o cita desde URL o localStorage al cargar/recargar
   useEffect(() => {
     let guardado: { tipo: 'turno' | 'cita'; codigo: string } | null = null;
     try {
@@ -532,14 +531,14 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   };
 
   const subCardClass = isDark
-    ? 'bg-zinc-900/90 border-zinc-800 text-zinc-100'
-    : 'bg-zinc-50 border-zinc-200 text-zinc-900';
+    ? 'bg-slate-900/90 border-slate-800 text-slate-100'
+    : 'bg-slate-50 border-slate-200 text-slate-900';
 
   if (loading) {
     return (
       <div className="p-12 text-center space-y-3">
-        <div className="w-9 h-9 border-2 border-[#C59B27] border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-sm font-bold text-zinc-400">Cargando tu turno...</p>
+        <div className="w-9 h-9 border-2 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto" />
+        <p className="text-sm font-bold text-slate-400">Cargando tu turno...</p>
       </div>
     );
   }
@@ -548,11 +547,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   if (citaConfirmada) {
     return (
       <div className="pt-4 text-center space-y-5">
-        <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-[#C59B27]/60 text-white flex items-center justify-center text-3xl mx-auto">
+        <div className="w-16 h-16 rounded-2xl bg-[#2563EB]/15 border border-[#2563EB]/50 text-white flex items-center justify-center text-3xl mx-auto">
           📅
         </div>
         <div>
-          <span className="inline-block px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-extrabold uppercase tracking-wider">
+          <span className="inline-block px-3 py-1 rounded-full bg-[#2563EB]/15 text-[#2563EB] border border-[#2563EB]/30 text-xs font-extrabold uppercase tracking-wider">
             Cita Confirmada
           </span>
           <h2 className="text-4xl font-black text-[#DC2626] mt-2">
@@ -563,17 +562,17 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
         <div className={`p-4 rounded-2xl border text-sm space-y-2.5 text-left ${subCardClass}`}>
           <div className="flex justify-between">
-            <span className="text-zinc-400">Fecha:</span>
+            <span className="text-slate-400">Fecha:</span>
             <span className="font-bold">{citaConfirmada.fecha}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-zinc-400">Hora:</span>
+            <span className="text-slate-400">Hora:</span>
             <span className="font-black text-[#2563EB]">
               {citaConfirmada.hora_inicio.substring(0, 5)} hrs
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-zinc-400">Servicio:</span>
+            <span className="text-slate-400">Servicio:</span>
             <span className="font-extrabold">
               {citaConfirmada.tipo_corte} ({APP_CONFIG.monedaSimbolo}
               {citaConfirmada.monto})
@@ -613,11 +612,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               {turno.codigo_ticket}
             </div>
             <div>
-              <span className="text-xs font-bold text-zinc-400 block">
+              <span className="text-xs font-bold text-slate-400 block">
                 Tu Turno · {horaActual}
               </span>
               <h2 className="text-lg font-black leading-tight">{turno.nombre_cliente}</h2>
-              <p className="text-xs font-semibold text-zinc-400 mt-0.5">
+              <p className="text-xs font-semibold text-slate-400 mt-0.5">
                 {turno.tipo_corte} · {APP_CONFIG.monedaSimbolo}
                 {turno.monto}
               </p>
@@ -632,7 +631,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <span>Progreso de fila</span>
                 <span className="text-[#2563EB]">{porcentajeProgreso}%</span>
               </div>
-              <div className="w-full h-3 rounded-full bg-zinc-800 overflow-hidden">
+              <div
+                className={`w-full h-3 rounded-full overflow-hidden ${
+                  isDark ? 'bg-slate-800' : 'bg-slate-200'
+                }`}
+              >
                 <div
                   className="h-full bg-[#2563EB] rounded-full transition-all duration-700"
                   style={{ width: `${porcentajeProgreso}%` }}
@@ -642,25 +645,31 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
             <div className="grid grid-cols-2 gap-3">
               <div className={`p-4 rounded-2xl border text-center ${subCardClass}`}>
-                <span className="text-xs font-bold text-zinc-400 uppercase block">
+                <span className="text-xs font-bold text-slate-400 uppercase block">
                   Delante de ti
                 </span>
                 <p className="text-4xl font-black text-[#DC2626] mt-1">{personasAdelante}</p>
-                <span className="text-xs font-semibold text-zinc-400">clientes</span>
+                <span className="text-xs font-semibold text-slate-400">clientes</span>
               </div>
               <div className={`p-4 rounded-2xl border text-center ${subCardClass}`}>
-                <span className="text-xs font-bold text-zinc-400 uppercase block">
+                <span className="text-xs font-bold text-slate-400 uppercase block">
                   Espera aprox.
                 </span>
                 <p className="text-4xl font-black text-[#2563EB] mt-1">{tiempoEstimado}m</p>
-                <span className="text-xs font-semibold text-zinc-400">estimados</span>
+                <span className="text-xs font-semibold text-slate-400">estimados</span>
               </div>
             </div>
 
             <div className={`p-4 rounded-2xl border space-y-3 ${subCardClass}`}>
               <div className="flex items-center justify-between text-sm">
-                <span className="font-bold text-zinc-400">Modalidad:</span>
-                <span className="px-3 py-1 rounded-lg bg-zinc-800 text-white font-bold text-xs border border-zinc-700">
+                <span className="font-bold text-slate-400">Modalidad:</span>
+                <span
+                  className={`px-3 py-1 rounded-lg font-bold text-xs border ${
+                    isDark
+                      ? 'bg-slate-800 text-white border-slate-700'
+                      : 'bg-white text-slate-900 border-slate-300'
+                  }`}
+                >
                   {turno.modalidad_espera === 'diligencia' ? '🏃‍♂️ Diligencia' : '💈 En el local'}
                 </span>
               </div>
@@ -669,7 +678,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <button
                   type="button"
                   onClick={() => cambiarModalidadEnVivo('diligencia')}
-                  className="w-full py-3 rounded-xl border border-[#2563EB]/60 text-[#2563EB] hover:bg-[#2563EB] hover:text-white font-extrabold text-sm transition-all"
+                  className="w-full py-3 rounded-xl border border-[#2563EB] text-[#2563EB] hover:bg-[#2563EB] hover:text-white font-extrabold text-sm transition-all"
                 >
                   Salgo a diligencia ({APP_CONFIG.tiempoLimiteDiligenciaMin} min tolerancia)
                 </button>
@@ -684,7 +693,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               )}
 
               {distanciaKm !== null && turno.modalidad_espera === 'diligencia' && (
-                <p className="text-xs text-center text-zinc-400">
+                <p className="text-xs text-center text-slate-400">
                   📍 Distancia al local: <strong>~{distanciaKm} km</strong>
                 </p>
               )}
@@ -711,11 +720,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               <>
                 <span className="text-5xl block">🏃‍♂️</span>
                 <h2 className="text-xl font-black text-[#DC2626]">¡El barbero te está llamando!</h2>
-                <div className="py-3 px-5 rounded-xl bg-zinc-950 border border-zinc-800 text-white">
-                  <span className="text-xs uppercase font-bold text-zinc-400 block">
+                <div className="py-3 px-5 rounded-xl bg-slate-950 border border-slate-800 text-white">
+                  <span className="text-xs uppercase font-bold text-slate-400 block">
                     Tiempo para llegar
                   </span>
-                  <p className="text-4xl font-black font-mono mt-1 text-[#C59B27]">
+                  <p className="text-4xl font-black font-mono mt-1 text-[#2563EB]">
                     {formatearTiempo(tiempoRestanteSegundos)}
                   </p>
                 </div>
@@ -754,21 +763,22 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     );
   }
 
-  // --- FORMULARIO DARK BARBER CLUB ---
+  // --- FORMULARIO AZUL, BLANCO Y ROJO ---
   return (
     <div className="pt-4 space-y-5">
       <div className="text-center">
         <h2 className="text-2xl font-black tracking-tight">
           {nombre.trim() ? `Hola, ${nombre.trim().split(' ')[0]}` : 'Bienvenido'}
         </h2>
-        <p className="text-sm text-zinc-400 mt-0.5">
+        <p className="text-sm text-slate-400 mt-0.5">
           Elige si vienes hoy o deseas agendar una cita
         </p>
       </div>
 
+      {/* Selector Cola Hoy (Rojo) / Agendar Cita (Azul) */}
       <div
         className={`grid grid-cols-2 gap-1.5 p-1.5 rounded-xl border ${
-          isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+          isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
         }`}
       >
         <button
@@ -777,7 +787,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           className={`py-2.5 rounded-lg text-sm font-black transition-all ${
             modoRegistro === 'cola'
               ? 'bg-[#DC2626] text-white shadow-xs'
-              : 'text-zinc-400 hover:text-white'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           ✂️ Turno Hoy
@@ -788,7 +798,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           className={`py-2.5 rounded-lg text-sm font-black transition-all ${
             modoRegistro === 'cita'
               ? 'bg-[#2563EB] text-white shadow-xs'
-              : 'text-zinc-400 hover:text-white'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           📅 Agendar Cita
@@ -800,7 +810,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         className="space-y-5"
       >
         <div>
-          <label className="block text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-2">
+          <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">
             1. Selecciona tu servicio
           </label>
           <div className="grid grid-cols-3 gap-2.5">
@@ -811,17 +821,21 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   type="button"
                   key={srv.id}
                   onClick={() => setServicioSeleccionado(srv)}
-                  className={`p-3 rounded-xl border flex flex-col items-center justify-center text-center transition-all ${
+                  className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center transition-all ${
                     selected
-                      ? 'bg-zinc-900 border-[#C59B27] text-white shadow-md'
+                      ? 'bg-[#2563EB] border-[#2563EB] text-white shadow-md'
                       : isDark
-                      ? 'bg-zinc-950/80 border-zinc-800 text-zinc-400 hover:border-zinc-700'
-                      : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:border-zinc-300'
+                      ? 'bg-slate-950/80 border-slate-800 text-slate-400 hover:border-slate-700'
+                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
                   }`}
                 >
                   <span className="text-2xl mb-1">{srv.icono}</span>
                   <span className="text-xs font-extrabold leading-snug">{srv.nombre}</span>
-                  <span className="text-sm font-black text-[#C59B27] mt-0.5">
+                  <span
+                    className={`text-sm font-black mt-0.5 ${
+                      selected ? 'text-white' : 'text-[#2563EB]'
+                    }`}
+                  >
                     {APP_CONFIG.monedaSimbolo}
                     {srv.precio}
                   </span>
@@ -832,7 +846,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         </div>
 
         <div className="space-y-3">
-          <label className="block text-xs font-extrabold uppercase tracking-wider text-zinc-400">
+          <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-400">
             2. Tus datos de contacto
           </label>
           <input
@@ -841,10 +855,10 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             placeholder="Tu nombre completo *"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className={`w-full px-4 py-3 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#C59B27] ${
+            className={`w-full px-4 py-3 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
               isDark
-                ? 'bg-zinc-950 border-zinc-800 text-white placeholder-zinc-500'
-                : 'bg-zinc-50 border-zinc-300 text-zinc-900 placeholder-zinc-400'
+                ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
+                : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
             }`}
           />
           <input
@@ -853,33 +867,33 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             placeholder="WhatsApp (Ej: 04141234567) *"
             value={telefono}
             onChange={(e) => setTelefono(e.target.value)}
-            className={`w-full px-4 py-3 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#C59B27] ${
+            className={`w-full px-4 py-3 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
               isDark
-                ? 'bg-zinc-950 border-zinc-800 text-white placeholder-zinc-500'
-                : 'bg-zinc-50 border-zinc-300 text-zinc-900 placeholder-zinc-400'
+                ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
+                : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
             }`}
           />
         </div>
 
         {modoRegistro === 'cola' && (
           <div>
-            <label className="block text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-2">
+            <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">
               3. ¿Dónde esperarás tu turno?
             </label>
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setModalidadEspera('local')}
-                className={`p-3.5 rounded-xl border text-left transition-all ${
+                className={`p-3.5 rounded-xl border-2 text-left transition-all ${
                   modalidadEspera === 'local'
-                    ? 'bg-zinc-900 border-[#2563EB] text-white'
+                    ? 'bg-[#2563EB] border-[#2563EB] text-white'
                     : isDark
-                    ? 'bg-zinc-950/80 border-zinc-800 text-zinc-400'
-                    : 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                    ? 'bg-slate-950/80 border-slate-800 text-slate-400'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
                 }`}
               >
                 <p className="text-sm font-black">💈 En el Local</p>
-                <p className="text-xs opacity-75 mt-0.5">Espero en barbería</p>
+                <p className="text-xs opacity-80 mt-0.5">Espero en barbería</p>
               </button>
 
               <button
@@ -888,16 +902,16 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   setModalidadEspera('diligencia');
                   obtenerUbicacionGPS();
                 }}
-                className={`p-3.5 rounded-xl border text-left transition-all ${
+                className={`p-3.5 rounded-xl border-2 text-left transition-all ${
                   modalidadEspera === 'diligencia'
-                    ? 'bg-zinc-900 border-[#2563EB] text-white'
+                    ? 'bg-[#2563EB] border-[#2563EB] text-white'
                     : isDark
-                    ? 'bg-zinc-950/80 border-zinc-800 text-zinc-400'
-                    : 'bg-zinc-50 border-zinc-200 text-zinc-700'
+                    ? 'bg-slate-950/80 border-slate-800 text-slate-400'
+                    : 'bg-slate-50 border-slate-200 text-slate-700'
                 }`}
               >
                 <p className="text-sm font-black">🏃‍♂️ Diligencia</p>
-                <p className="text-xs opacity-75 mt-0.5">
+                <p className="text-xs opacity-80 mt-0.5">
                   {APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)
                 </p>
               </button>
@@ -908,7 +922,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         {modoRegistro === 'cita' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-2">
+              <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">
                 3. Elige el día
               </label>
               <div className="grid grid-cols-6 gap-1.5 text-center">
@@ -926,8 +940,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                         isSelected
                           ? 'bg-[#2563EB] border-[#2563EB] text-white font-black'
                           : isDark
-                          ? 'bg-zinc-950 border-zinc-800 text-zinc-300'
-                          : 'bg-zinc-50 border-zinc-200 text-zinc-800'
+                          ? 'bg-slate-950 border-slate-800 text-slate-300'
+                          : 'bg-slate-50 border-slate-200 text-slate-800'
                       }`}
                     >
                       <span className="text-xs font-bold">{d.diaCorto}</span>
@@ -939,11 +953,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             </div>
 
             <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-zinc-400 mb-2">
+              <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">
                 4. Elige la hora disponible
               </label>
               {bloquesDisponibles.length === 0 ? (
-                <p className="text-xs text-zinc-400 text-center py-4 border border-dashed border-zinc-700 rounded-xl">
+                <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-700 rounded-xl">
                   Sin horarios disponibles para este día.
                 </p>
               ) : (
@@ -960,8 +974,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                           selected
                             ? 'bg-[#DC2626] border-[#DC2626] text-white'
                             : isDark
-                            ? 'bg-zinc-950 border-zinc-800 text-zinc-200 hover:border-zinc-600'
-                            : 'bg-zinc-50 border-zinc-200 text-zinc-900 hover:border-zinc-400'
+                            ? 'bg-slate-950 border-slate-800 text-slate-200 hover:border-slate-600'
+                            : 'bg-slate-50 border-slate-200 text-slate-900 hover:border-slate-400'
                         }`}
                       >
                         {horaText}
@@ -1009,26 +1023,26 @@ export default function ClienteView() {
   return (
     <main
       className={`min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 transition-colors duration-300 ${
-        isDark ? 'bg-[#09090B] text-white' : 'bg-[#F4F4F5] text-zinc-900'
+        isDark ? 'bg-[#080D1A] text-white' : 'bg-[#F1F5F9] text-slate-900'
       }`}
     >
       <div
         className={`w-full max-w-[440px] rounded-3xl p-3 sm:p-4 shadow-2xl border transition-colors ${
-          isDark ? 'bg-[#121215] border-zinc-800' : 'bg-white border-zinc-200'
+          isDark ? 'bg-[#0F172A] border-slate-800' : 'bg-white border-slate-200'
         }`}
       >
-        <div className="rounded-2xl border border-[#C59B27]/60 p-5 sm:p-6">
+        <div className="rounded-2xl border-2 border-[#2563EB]/60 p-5 sm:p-6">
           <div
             className={`flex items-center justify-between pb-3 border-b ${
-              isDark ? 'border-zinc-800' : 'border-zinc-200'
+              isDark ? 'border-slate-800' : 'border-slate-200'
             }`}
           >
             <Link
               href="/"
               className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all active:scale-95 ${
                 isDark
-                  ? 'bg-zinc-900 text-white border border-zinc-800 hover:border-[#C59B27]'
-                  : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
+                  ? 'bg-slate-900 text-white border border-slate-800 hover:border-[#2563EB]'
+                  : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
               }`}
             >
               ← Inicio
@@ -1036,13 +1050,13 @@ export default function ClienteView() {
 
             <div
               className={`flex items-center gap-1 p-1 rounded-full border text-xs font-bold ${
-                isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+                isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
               }`}
             >
               <button
                 onClick={() => setModoTema('light')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                  modoTema === 'light' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-400'
+                  modoTema === 'light' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400'
                 }`}
               >
                 ☀️
@@ -1050,7 +1064,7 @@ export default function ClienteView() {
               <button
                 onClick={() => setModoTema('dark')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                  modoTema === 'dark' ? 'bg-[#C59B27] text-zinc-950 shadow-xs' : 'text-zinc-400'
+                  modoTema === 'dark' ? 'bg-[#2563EB] text-white shadow-xs' : 'text-slate-400'
                 }`}
               >
                 🌙
@@ -1058,7 +1072,7 @@ export default function ClienteView() {
               <button
                 onClick={() => setModoTema('auto')}
                 className={`px-2.5 h-7 rounded-full transition-all ${
-                  modoTema === 'auto' ? 'bg-[#DC2626] text-white shadow-xs' : 'text-zinc-400'
+                  modoTema === 'auto' ? 'bg-[#DC2626] text-white shadow-xs' : 'text-slate-400'
                 }`}
               >
                 Auto
