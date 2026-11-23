@@ -50,6 +50,7 @@ interface ServicioOption {
 }
 
 const STORAGE_KEY = 'pegate_ahi_registro_activo';
+const THEME_STORAGE_KEY = 'pegate_ahi_tema';
 
 const getMananaLocal = () => {
   const d = new Date();
@@ -1199,12 +1200,36 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 }
 
 export default function ClienteView() {
-  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('dark');
-  const [esNoche, setEsNoche] = useState<boolean>(true);
+  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('auto');
+  const [esNoche, setEsNoche] = useState<boolean>(false);
+
+  const cambiarTema = (nuevoModo: 'auto' | 'light' | 'dark') => {
+    setModoTema(nuevoModo);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, nuevoModo);
+    } catch {
+      // Ignorar si localStorage está bloqueado
+    }
+  };
 
   useEffect(() => {
-    const hora = new Date().getHours();
-    setEsNoche(hora >= 19 || hora < 6);
+    try {
+      const guardado = localStorage.getItem(THEME_STORAGE_KEY) as 'auto' | 'light' | 'dark' | null;
+      if (guardado === 'auto' || guardado === 'light' || guardado === 'dark') {
+        setModoTema(guardado);
+      }
+    } catch {
+      // Ignorar
+    }
+
+    const verificarHora = () => {
+      const hora = new Date().getHours();
+      setEsNoche(hora >= 19 || hora < 6);
+    };
+
+    verificarHora();
+    const interval = setInterval(verificarHora, 60000);
+    return () => clearInterval(interval);
   }, []);
 
   const isDark = modoTema === 'auto' ? esNoche : modoTema === 'dark';
@@ -1243,7 +1268,7 @@ export default function ClienteView() {
               }`}
             >
               <button
-                onClick={() => setModoTema('light')}
+                onClick={() => cambiarTema('light')}
                 className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'light' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400'
                 }`}
@@ -1251,7 +1276,7 @@ export default function ClienteView() {
                 ☀️
               </button>
               <button
-                onClick={() => setModoTema('dark')}
+                onClick={() => cambiarTema('dark')}
                 className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'dark' ? 'bg-[#2563EB] text-white shadow-xs' : 'text-slate-400'
                 }`}
@@ -1259,7 +1284,7 @@ export default function ClienteView() {
                 🌙
               </button>
               <button
-                onClick={() => setModoTema('auto')}
+                onClick={() => cambiarTema('auto')}
                 className={`px-3 h-8 rounded-full transition-all ${
                   modoTema === 'auto' ? 'bg-[#DC2626] text-white shadow-xs' : 'text-slate-400'
                 }`}
