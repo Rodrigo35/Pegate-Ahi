@@ -52,6 +52,7 @@ interface Cita {
 
 const PIN_BARBERO = process.env.NEXT_PUBLIC_BARBER_PIN || '1234';
 const AUTH_SESSION_KEY = 'pegate_ahi_barbero_auth';
+const THEME_STORAGE_KEY = 'pegate_ahi_tema';
 
 const getFechaLocalStr = () => {
   const d = new Date();
@@ -1699,10 +1700,19 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 }
 
 export default function BarberoView() {
-  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('dark');
-  const [esNoche, setEsNoche] = useState<boolean>(true);
+  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('auto');
+  const [esNoche, setEsNoche] = useState<boolean>(false);
   const [autorizado, setAutorizado] = useState<boolean>(false);
   const [verificandoSesion, setVerificandoSesion] = useState<boolean>(true);
+
+  const cambiarTema = (nuevoModo: 'auto' | 'light' | 'dark') => {
+    setModoTema(nuevoModo);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, nuevoModo);
+    } catch {
+      // Ignorar
+    }
+  };
 
   const bloquearPanel = () => {
     try {
@@ -1714,8 +1724,22 @@ export default function BarberoView() {
   };
 
   useEffect(() => {
-    const hora = new Date().getHours();
-    setEsNoche(hora >= 19 || hora < 6);
+    try {
+      const guardado = localStorage.getItem(THEME_STORAGE_KEY) as 'auto' | 'light' | 'dark' | null;
+      if (guardado === 'auto' || guardado === 'light' || guardado === 'dark') {
+        setModoTema(guardado);
+      }
+    } catch {
+      // Ignorar
+    }
+
+    const verificarHora = () => {
+      const hora = new Date().getHours();
+      setEsNoche(hora >= 19 || hora < 6);
+    };
+
+    verificarHora();
+    const intervalHora = setInterval(verificarHora, 60000);
 
     try {
       const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
@@ -1744,7 +1768,10 @@ export default function BarberoView() {
     };
 
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    return () => {
+      clearInterval(intervalHora);
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
   const isDark = modoTema === 'auto' ? esNoche : modoTema === 'dark';
@@ -1797,7 +1824,7 @@ export default function BarberoView() {
               }`}
             >
               <button
-                onClick={() => setModoTema('light')}
+                onClick={() => cambiarTema('light')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'light' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400'
                 }`}
@@ -1805,7 +1832,7 @@ export default function BarberoView() {
                 ☀️
               </button>
               <button
-                onClick={() => setModoTema('dark')}
+                onClick={() => cambiarTema('dark')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'dark' ? 'bg-[#2563EB] text-white shadow-xs' : 'text-slate-400'
                 }`}
@@ -1813,7 +1840,7 @@ export default function BarberoView() {
                 🌙
               </button>
               <button
-                onClick={() => setModoTema('auto')}
+                onClick={() => cambiarTema('auto')}
                 className={`px-2.5 h-7 rounded-full transition-all ${
                   modoTema === 'auto' ? 'bg-[#DC2626] text-white shadow-xs' : 'text-slate-400'
                 }`}
