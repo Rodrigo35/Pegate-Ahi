@@ -101,7 +101,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
   const [fechaCita, setFechaCita] = useState<string>('');
   const [diasProximos, setDiasProximos] = useState<
-    { fecha: string; diaCorto: string; numDia: string }[]
+    { fecha: string; diaCorto: string; numDia: string; mesCorto: string }[]
   >([]);
   const [bloquesDisponibles, setBloquesDisponibles] = useState<any[]>([]);
   const [horaCitaSeleccionada, setHoraCitaSeleccionada] = useState<string>('');
@@ -177,8 +177,22 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setFechaCita((prev) => prev || mananaInit);
 
     const diasNombres = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const mesesNombres = [
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic',
+    ];
     const listaDias = [];
-    for (let i = 1; i <= 6; i++) {
+    for (let i = 1; i <= 14; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
       const y = d.getFullYear();
@@ -188,6 +202,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         fecha: `${y}-${m}-${day}`,
         diaCorto: diasNombres[d.getDay()],
         numDia: day,
+        mesCorto: mesesNombres[d.getMonth()],
       });
     }
     setDiasProximos(listaDias);
@@ -1123,10 +1138,13 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         {modoRegistro === 'cita' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-2">
-                3. Elige el día
-              </label>
-              <div className="grid grid-cols-6 gap-1.5 text-center">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400">
+                  3. Elige el día
+                </label>
+                <span className="text-xs font-bold text-[#2563EB]">Desliza →</span>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1.5">
                 {diasProximos.map((d) => {
                   const isSelected = fechaCita === d.fecha;
                   return (
@@ -1137,16 +1155,23 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                         setFechaCita(d.fecha);
                         setHoraCitaSeleccionada('');
                       }}
-                      className={`py-2.5 rounded-xl border flex flex-col items-center transition-all ${
+                      className={`min-w-[58px] py-2.5 px-2 rounded-xl border flex flex-col items-center shrink-0 transition-all ${
                         isSelected
-                          ? 'bg-[#2563EB] border-[#2563EB] text-white font-black'
+                          ? 'bg-[#2563EB] border-[#2563EB] text-white font-black shadow-sm'
                           : isDark
                           ? 'bg-slate-950 border-slate-800 text-slate-300'
                           : 'bg-slate-50 border-slate-200 text-slate-800'
                       }`}
                     >
-                      <span className="text-xs font-bold">{d.diaCorto}</span>
-                      <span className="text-base font-black mt-0.5">{d.numDia}</span>
+                      <span className="text-[11px] font-bold">{d.diaCorto}</span>
+                      <span className="text-base font-black leading-tight mt-0.5">{d.numDia}</span>
+                      <span
+                        className={`text-[10px] font-bold uppercase mt-0.5 ${
+                          isSelected ? 'text-white/90' : 'text-slate-400'
+                        }`}
+                      >
+                        {d.mesCorto}
+                      </span>
                     </button>
                   );
                 })}
