@@ -278,13 +278,25 @@ export default function HomeHub() {
           </section>
 
           <footer
-            className={`text-center text-xs pt-2 border-t ${
+            className={`text-center text-xs pt-3 border-t space-y-1 ${
               isDark
                 ? 'text-slate-500 border-slate-800/80'
                 : 'text-slate-400 border-slate-200'
             }`}
           >
-            <p>© {currentYear || 2026} Pégate Ahí · Barbería</p>
+            <p>© {currentYear || 2026} {APP_CONFIG.nombreNegocio || 'Pégate Ahí'} · Barbería</p>
+            <p className="text-[11px] font-semibold">
+              Desarrollado por{' '}
+              <a
+                href="https://instagram.com/cest.rodrigo.pmv"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-extrabold text-[#2563EB] hover:underline"
+              >
+                Rodrigo Martínez (@cest.rodrigo.pmv)
+              </a>{' '}
+              & Max
+            </p>
           </footer>
         </div>
       </div>
