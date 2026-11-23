@@ -38,7 +38,6 @@ const SERVICIOS_DEFAULT = [
   { nombre: 'Barba', precio: 7 },
 ];
 
-// PIN configurable desde .env.local / Vercel (NEXT_PUBLIC_BARBER_PIN) o '1234' por defecto
 const PIN_BARBERO = process.env.NEXT_PUBLIC_BARBER_PIN || '1234';
 const AUTH_SESSION_KEY = 'pegate_ahi_barbero_auth';
 
@@ -65,7 +64,7 @@ function BarberoPinGate({
       try {
         sessionStorage.setItem(AUTH_SESSION_KEY, 'true');
       } catch {
-        // Ignorar si sessionStorage está restringido
+        // Ignorar
       }
       onUnlock();
     } else {
@@ -106,11 +105,11 @@ function BarberoPinGate({
   return (
     <div className="py-4 text-center space-y-6">
       <div>
-        <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-[#C59B27]/60 text-white flex items-center justify-center text-3xl mx-auto shadow-md">
+        <div className="w-16 h-16 rounded-2xl bg-[#2563EB]/15 border border-[#2563EB]/50 text-white flex items-center justify-center text-3xl mx-auto shadow-md">
           🔐
         </div>
         <h1 className="text-2xl font-black mt-3">Acceso Barbero</h1>
-        <p className="text-xs font-semibold text-zinc-400 mt-1">
+        <p className="text-xs font-semibold text-slate-400 mt-1">
           Ingresa el PIN de seguridad para gestionar la silla y las citas
         </p>
       </div>
@@ -126,10 +125,10 @@ function BarberoPinGate({
                 errorPin
                   ? 'bg-[#DC2626] border-[#DC2626] scale-110'
                   : lleno
-                  ? 'bg-[#C59B27] border-[#C59B27] scale-110'
+                  ? 'bg-[#2563EB] border-[#2563EB] scale-110'
                   : isDark
-                  ? 'border-zinc-700 bg-zinc-950'
-                  : 'border-zinc-300 bg-zinc-100'
+                  ? 'border-slate-700 bg-slate-950'
+                  : 'border-slate-300 bg-slate-100'
               }`}
             />
           );
@@ -141,7 +140,7 @@ function BarberoPinGate({
           PIN incorrecto · Intenta de nuevo
         </p>
       ) : (
-        <p className="text-xs text-zinc-500">PIN de {PIN_BARBERO.length} dígitos</p>
+        <p className="text-xs text-slate-500">PIN de {PIN_BARBERO.length} dígitos</p>
       )}
 
       {/* Teclado numérico táctil */}
@@ -153,8 +152,8 @@ function BarberoPinGate({
             onClick={() => agregarDigito(num)}
             className={`h-14 rounded-2xl border text-xl font-black transition-all active:scale-95 ${
               isDark
-                ? 'bg-zinc-900/90 border-zinc-800 text-white hover:border-[#C59B27]'
-                : 'bg-zinc-50 border-zinc-200 text-zinc-900 hover:border-zinc-400'
+                ? 'bg-slate-900/90 border-slate-800 text-white hover:border-[#2563EB]'
+                : 'bg-slate-50 border-slate-200 text-slate-900 hover:border-[#2563EB]'
             }`}
           >
             {num}
@@ -166,8 +165,8 @@ function BarberoPinGate({
           onClick={() => setPinIngresado('')}
           className={`h-14 rounded-2xl border text-xs font-extrabold uppercase transition-all active:scale-95 ${
             isDark
-              ? 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
-              : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+              ? 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+              : 'bg-slate-100 border-slate-200 text-slate-500'
           }`}
         >
           Limpiar
@@ -178,8 +177,8 @@ function BarberoPinGate({
           onClick={() => agregarDigito('0')}
           className={`h-14 rounded-2xl border text-xl font-black transition-all active:scale-95 ${
             isDark
-              ? 'bg-zinc-900/90 border-zinc-800 text-white hover:border-[#C59B27]'
-              : 'bg-zinc-50 border-zinc-200 text-zinc-900 hover:border-zinc-400'
+              ? 'bg-slate-900/90 border-slate-800 text-white hover:border-[#2563EB]'
+              : 'bg-slate-50 border-slate-200 text-slate-900 hover:border-[#2563EB]'
           }`}
         >
           0
@@ -190,8 +189,8 @@ function BarberoPinGate({
           onClick={borrarDigito}
           className={`h-14 rounded-2xl border text-base font-black transition-all active:scale-95 ${
             isDark
-              ? 'bg-zinc-950 border-zinc-800 text-[#DC2626] hover:border-[#DC2626]'
-              : 'bg-zinc-100 border-zinc-200 text-[#DC2626]'
+              ? 'bg-slate-950 border-slate-800 text-[#DC2626] hover:border-[#DC2626]'
+              : 'bg-slate-100 border-slate-200 text-[#DC2626]'
           }`}
         >
           ⌫
@@ -627,23 +626,23 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     : '';
 
   const cardSurface = isDark
-    ? 'bg-zinc-900/90 border-zinc-800 text-zinc-100'
-    : 'bg-zinc-50 border-zinc-200 text-zinc-900';
+    ? 'bg-slate-900/90 border-slate-800 text-slate-100'
+    : 'bg-slate-50 border-slate-200 text-slate-900';
 
   return (
     <div className="space-y-4">
       {/* Perfil del barbero + indicadores */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-[#C59B27]/60 text-white flex items-center justify-center text-2xl shrink-0">
+          <div className="w-12 h-12 rounded-2xl bg-[#2563EB]/15 border border-[#2563EB]/50 text-white flex items-center justify-center text-2xl shrink-0">
             🧔🏻
           </div>
           <div>
             <h1 className="text-lg font-black leading-tight">
               {APP_CONFIG.nombreNegocio || 'Panel Barbero'}
             </h1>
-            <p className="text-xs font-bold text-zinc-400 flex items-center gap-1.5 mt-0.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <p className="text-xs font-bold text-slate-400 flex items-center gap-1.5 mt-0.5">
+              <span className="w-2 h-2 rounded-full bg-[#2563EB] animate-pulse" />
               En línea · {horaActual}
             </p>
           </div>
@@ -651,23 +650,23 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
         <div className="flex items-center gap-2">
           <div className={`px-3 py-1.5 rounded-xl border text-center ${cardSurface}`}>
-            <span className="text-[11px] uppercase font-bold text-zinc-400 block">Caja</span>
-            <span className="text-sm font-black text-[#C59B27]">
+            <span className="text-[11px] uppercase font-bold text-slate-400 block">Caja</span>
+            <span className="text-sm font-black text-[#2563EB]">
               {APP_CONFIG.monedaSimbolo}
               {totalIngresos}
             </span>
           </div>
           <div className={`px-3 py-1.5 rounded-xl border text-center ${cardSurface}`}>
-            <span className="text-[11px] uppercase font-bold text-zinc-400 block">Cortes</span>
+            <span className="text-[11px] uppercase font-bold text-slate-400 block">Cortes</span>
             <span className="text-sm font-black">{totalAtendidos}</span>
           </div>
         </div>
       </div>
 
-      {/* Pestañas con acentos discretos */}
+      {/* Pestañas en Rojo, Blanco y Azul */}
       <div
         className={`grid grid-cols-4 gap-1.5 p-1.5 rounded-xl border ${
-          isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+          isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
         }`}
       >
         <button
@@ -676,7 +675,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'silla'
               ? 'bg-[#DC2626] text-white shadow-xs'
-              : 'text-zinc-400 hover:text-white'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           Silla ({colaEspera.length})
@@ -687,8 +686,10 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           onClick={() => setTabActiva('qr')}
           className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'qr'
-              ? 'bg-white text-zinc-950 shadow-xs'
-              : 'text-zinc-400 hover:text-white'
+              ? isDark
+                ? 'bg-white text-slate-950 shadow-xs'
+                : 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           📷 QR Hoy
@@ -700,7 +701,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'citas'
               ? 'bg-[#2563EB] text-white shadow-xs'
-              : 'text-zinc-400 hover:text-white'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           Citas ({citasDelDia.length})
@@ -711,8 +712,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           onClick={() => setTabActiva('horarios')}
           className={`py-2.5 rounded-lg text-xs font-black transition-all ${
             tabActiva === 'horarios'
-              ? 'bg-[#C59B27] text-zinc-950 shadow-xs'
-              : 'text-zinc-400 hover:text-white'
+              ? 'bg-[#1D4ED8] text-white shadow-xs'
+              : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           Horarios
@@ -722,9 +723,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       {/* --- TAB 1: SILLA & COLA EN VIVO --- */}
       {tabActiva === 'silla' && (
         <div className="space-y-4">
-          <div className={`p-5 rounded-2xl border border-[#C59B27]/40 space-y-4 ${cardSurface}`}>
+          <div className={`p-5 rounded-2xl border border-[#2563EB]/40 space-y-4 ${cardSurface}`}>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-zinc-400">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
                 En Silla Ahora
               </span>
               {turnoActual && (
@@ -735,11 +736,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             </div>
 
             {loading ? (
-              <p className="text-center text-sm text-zinc-400 py-6 animate-pulse">Cargando...</p>
+              <p className="text-center text-sm text-slate-400 py-6 animate-pulse">Cargando...</p>
             ) : turnoActual ? (
               <div className="space-y-4">
                 {turnoActual.cliente_llego && (
-                  <div className="p-3 rounded-xl bg-emerald-600 text-white text-center text-xs font-black">
+                  <div className="p-3 rounded-xl bg-[#2563EB] text-white text-center text-xs font-black">
                     📍 ¡El cliente ya llegó al local!
                   </div>
                 )}
@@ -753,13 +754,13 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                       <h3 className="text-lg font-black leading-tight">
                         {turnoActual.nombre_cliente}
                       </h3>
-                      <p className="text-sm font-semibold text-zinc-400">
+                      <p className="text-sm font-semibold text-slate-400">
                         {turnoActual.tipo_corte || tipoServicio}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-black text-[#C59B27]">
+                    <p className="text-3xl font-black text-[#2563EB]">
                       {APP_CONFIG.monedaSimbolo}
                       {turnoActual.monto || precioServicio}
                     </p>
@@ -769,7 +770,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                 {editandoServicio ? (
                   <div
                     className={`p-3.5 rounded-xl border space-y-3 ${
-                      isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-white border-zinc-200'
+                      isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
                     }`}
                   >
                     <div className="flex gap-2">
@@ -778,8 +779,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                         onChange={handleTipoChange}
                         className={`flex-1 px-3 py-2.5 text-sm font-bold rounded-lg border focus:outline-none ${
                           isDark
-                            ? 'bg-zinc-900 border-zinc-700 text-white'
-                            : 'bg-zinc-50 border-zinc-300 text-zinc-900'
+                            ? 'bg-slate-900 border-slate-700 text-white'
+                            : 'bg-slate-50 border-slate-300 text-slate-900'
                         }`}
                       >
                         <option value="Corte clásico">Corte clásico</option>
@@ -793,8 +794,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                         onChange={(e) => setNuevoPrecioInput(e.target.value)}
                         className={`w-24 px-3 py-2.5 text-sm font-bold rounded-lg border focus:outline-none ${
                           isDark
-                            ? 'bg-zinc-900 border-zinc-700 text-white'
-                            : 'bg-zinc-50 border-zinc-300 text-zinc-900'
+                            ? 'bg-slate-900 border-slate-700 text-white'
+                            : 'bg-slate-50 border-slate-300 text-slate-900'
                         }`}
                       />
                     </div>
@@ -802,14 +803,14 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                       <button
                         type="button"
                         onClick={() => setEditandoServicio(false)}
-                        className="flex-1 py-2.5 rounded-lg text-xs font-bold border border-zinc-700 text-zinc-400"
+                        className="flex-1 py-2.5 rounded-lg text-xs font-bold border border-slate-700 text-slate-400"
                       >
                         Cancelar
                       </button>
                       <button
                         type="button"
                         onClick={guardarNuevoServicio}
-                        className="flex-1 py-2.5 rounded-lg text-xs font-black bg-[#C59B27] text-zinc-950"
+                        className="flex-1 py-2.5 rounded-lg text-xs font-black bg-[#2563EB] text-white"
                       >
                         Guardar
                       </button>
@@ -824,7 +825,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                         setNuevoPrecioInput((turnoActual.monto || precioServicio).toString());
                         setEditandoServicio(true);
                       }}
-                      className="text-xs font-bold text-zinc-400 hover:text-white"
+                      className="text-xs font-bold text-slate-400 hover:text-[#2563EB]"
                     >
                       ✏️ Cambiar servicio/monto
                     </button>
@@ -839,7 +840,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                             turnoActual.codigo_ticket
                           )
                         }
-                        className="px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-black"
+                        className="px-3.5 py-1.5 rounded-lg bg-[#2563EB] text-white text-xs font-black"
                       >
                         📲 WhatsApp
                       </button>
@@ -852,10 +853,10 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   !turnoActual.cliente_llego && (
                     <div
                       className={`p-4 rounded-xl border text-center space-y-2.5 ${
-                        isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-white border-zinc-200'
+                        isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
                       }`}
                     >
-                      <p className="text-xs font-bold text-zinc-400">
+                      <p className="text-xs font-bold text-slate-400">
                         Tiempo límite:{' '}
                         <span className="text-[#DC2626] font-black">{minutosRestantes} min</span>
                       </p>
@@ -873,7 +874,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
               <div className="py-6 text-center space-y-1.5">
                 <span className="text-4xl block">💺</span>
                 <p className="text-base font-black">Silla disponible</p>
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-slate-400">
                   Llama al siguiente cliente o muestra el QR
                 </p>
               </div>
@@ -892,7 +893,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   <button
                     type="button"
                     onClick={() => setTabActiva('qr')}
-                    className="px-4 py-4 rounded-xl bg-zinc-800 border border-zinc-700 text-white font-black text-sm active:scale-95"
+                    className="px-4 py-4 rounded-xl bg-[#2563EB] text-white font-black text-sm active:scale-95"
                   >
                     📷 QR
                   </button>
@@ -922,13 +923,13 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
               <span className="text-sm font-black">Cola de hoy ({colaEspera.length})</span>
-              <span className="text-xs font-bold text-zinc-400">
+              <span className="text-xs font-bold text-slate-400">
                 Prom. ~{tiempoPromedioMinutos}m
               </span>
             </div>
 
             {colaEspera.length === 0 ? (
-              <div className={`p-5 rounded-xl border text-center text-sm text-zinc-400 ${cardSurface}`}>
+              <div className={`p-5 rounded-xl border text-center text-sm text-slate-400 ${cardSurface}`}>
                 No hay clientes en espera hoy.
               </div>
             ) : (
@@ -939,7 +940,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                     className={`p-4 rounded-xl border flex items-center justify-between ${cardSurface}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 text-white flex items-center justify-center text-sm font-black shrink-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] flex items-center justify-center text-sm font-black shrink-0">
                         #{idx + 1}
                       </div>
                       <div>
@@ -949,14 +950,14 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                             ({item.codigo_ticket})
                           </span>
                         </div>
-                        <p className="text-xs text-zinc-400 font-semibold mt-0.5">
+                        <p className="text-xs text-slate-400 font-semibold mt-0.5">
                           {item.tipo_corte} ·{' '}
                           {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 Local'}
                         </p>
                       </div>
                     </div>
 
-                    <span className="text-base font-black text-[#C59B27]">
+                    <span className="text-base font-black text-[#2563EB]">
                       {APP_CONFIG.monedaSimbolo}
                       {item.monto || precioServicio}
                     </span>
@@ -972,20 +973,20 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       {tabActiva === 'qr' && (
         <div className={`p-6 rounded-2xl border text-center space-y-4 ${cardSurface}`}>
           <div>
-            <span className="inline-block px-3 py-1 rounded-full bg-[#C59B27]/15 text-[#C59B27] border border-[#C59B27]/30 text-xs font-extrabold uppercase tracking-wider">
+            <span className="inline-block px-3 py-1 rounded-full bg-[#2563EB]/15 text-[#2563EB] border border-[#2563EB]/30 text-xs font-extrabold uppercase tracking-wider">
               Registro Rápido en Local
             </span>
             <h3 className="text-lg font-black mt-2">Escanea para tomar tu turno hoy</h3>
-            <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
               El cliente entra directo a la cola del día y sigue su turno en vivo desde su teléfono.
             </p>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-white border-2 border-[#C59B27]/50 inline-block mx-auto">
+          <div className="p-3.5 rounded-2xl bg-white border-2 border-[#2563EB] inline-block mx-auto">
             {qrImageUrl ? (
               <img src={qrImageUrl} alt="QR Cola Barbería" className="w-48 h-48 rounded-lg" />
             ) : (
-              <div className="w-48 h-48 flex items-center justify-center text-sm text-zinc-400">
+              <div className="w-48 h-48 flex items-center justify-center text-sm text-slate-400">
                 Generando QR...
               </div>
             )}
@@ -994,8 +995,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           <div
             className={`p-3 rounded-lg border text-xs font-mono truncate ${
               isDark
-                ? 'bg-zinc-950 border-zinc-800 text-zinc-400'
-                : 'bg-white border-zinc-200 text-zinc-600'
+                ? 'bg-slate-950 border-slate-800 text-slate-400'
+                : 'bg-white border-slate-200 text-slate-600'
             }`}
           >
             {clienteUrl}
@@ -1005,7 +1006,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             <button
               type="button"
               onClick={copiarEnlaceCliente}
-              className="flex-1 py-3.5 rounded-xl bg-zinc-800 border border-zinc-700 text-white font-black text-xs active:scale-95"
+              className="flex-1 py-3.5 rounded-xl bg-[#2563EB] text-white font-black text-xs active:scale-95"
             >
               {copiadoUrl ? '✅ Copiado' : '📋 Copiar Enlace'}
             </button>
@@ -1026,11 +1027,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
               <span className="text-sm font-black">📅 Citas de Hoy ({citasDeHoy.length})</span>
-              <span className="text-xs text-zinc-400">Pasar a cola al llegar</span>
+              <span className="text-xs text-slate-400">Pasar a cola al llegar</span>
             </div>
 
             {citasDeHoy.length === 0 ? (
-              <div className={`p-4 rounded-xl border text-center text-sm text-zinc-400 ${cardSurface}`}>
+              <div className={`p-4 rounded-xl border text-center text-sm text-slate-400 ${cardSurface}`}>
                 Sin citas agendadas para hoy.
               </div>
             ) : (
@@ -1052,7 +1053,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                           {cita.nombre_cliente}{' '}
                           <span className="text-[#DC2626]">({cita.codigo_ticket})</span>
                         </p>
-                        <p className="text-xs text-zinc-400 font-semibold mt-0.5">
+                        <p className="text-xs text-slate-400 font-semibold mt-0.5">
                           {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
                           {cita.monto}
                         </p>
@@ -1093,7 +1094,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             </div>
 
             {citasSiguientes.length === 0 ? (
-              <div className={`p-4 rounded-xl border text-center text-sm text-zinc-400 ${cardSurface}`}>
+              <div className={`p-4 rounded-xl border text-center text-sm text-slate-400 ${cardSurface}`}>
                 No hay citas agendadas para los próximos días.
               </div>
             ) : (
@@ -1104,8 +1105,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                     className={`p-4 rounded-xl border flex items-center justify-between gap-2 ${cardSurface}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white text-center shrink-0">
-                        <span className="text-[11px] font-bold text-zinc-400 block">
+                      <div className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-center shrink-0">
+                        <span className="text-[11px] font-bold text-slate-400 block">
                           {cita.fecha.slice(5)}
                         </span>
                         <span className="text-sm font-black text-[#2563EB]">
@@ -1115,9 +1116,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                       <div>
                         <p className="text-sm font-black leading-tight">
                           {cita.nombre_cliente}{' '}
-                          <span className="text-[#C59B27]">({cita.codigo_ticket})</span>
+                          <span className="text-[#2563EB]">({cita.codigo_ticket})</span>
                         </p>
-                        <p className="text-xs text-zinc-400 font-semibold mt-0.5">
+                        <p className="text-xs text-slate-400 font-semibold mt-0.5">
                           {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
                           {cita.monto}
                         </p>
@@ -1160,7 +1161,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             <select
               value={diaSeleccionado}
               onChange={(e) => setDiaSeleccionado(Number(e.target.value))}
-              className="px-4 py-2 text-sm font-black rounded-xl bg-zinc-950 border border-[#C59B27]/50 text-white focus:outline-none"
+              className="px-4 py-2 text-sm font-black rounded-xl bg-slate-950 border border-[#2563EB]/60 text-white focus:outline-none"
             >
               {diasNombres.map((d, idx) => (
                 <option key={idx} value={idx}>
@@ -1179,7 +1180,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                 className={`py-2.5 rounded-xl border text-sm font-black transition-all ${
                   bloque.activo
                     ? isDark
-                      ? 'bg-zinc-950 border-[#2563EB]/60 text-white'
+                      ? 'bg-slate-950 border-[#2563EB] text-white'
                       : 'bg-white border-[#2563EB] text-[#2563EB]'
                     : 'bg-[#DC2626]/10 border-[#DC2626]/30 text-[#DC2626] line-through opacity-75'
                 }`}
@@ -1214,7 +1215,6 @@ export default function BarberoView() {
     setEsNoche(hora >= 19 || hora < 6);
 
     try {
-      // Solo conserva la sesión si fue una recarga directa dentro de /barbero
       const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
       const esRecarga = navEntries.length > 0 && navEntries[0].type === 'reload';
       const sesion = sessionStorage.getItem(AUTH_SESSION_KEY);
@@ -1230,7 +1230,6 @@ export default function BarberoView() {
     }
     setVerificandoSesion(false);
 
-    // Si el usuario navega hacia atrás o sale de la ruta, limpiar sesión
     const handlePopState = () => {
       if (window.location.pathname !== '/barbero') {
         try {
@@ -1250,18 +1249,18 @@ export default function BarberoView() {
   return (
     <main
       className={`min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 transition-colors duration-300 ${
-        isDark ? 'bg-[#09090B] text-white' : 'bg-[#F4F4F5] text-zinc-900'
+        isDark ? 'bg-[#080D1A] text-white' : 'bg-[#F1F5F9] text-slate-900'
       }`}
     >
       <div
         className={`w-full max-w-[460px] rounded-3xl p-3 sm:p-4 shadow-2xl border transition-colors ${
-          isDark ? 'bg-[#121215] border-zinc-800' : 'bg-white border-zinc-200'
+          isDark ? 'bg-[#0F172A] border-slate-800' : 'bg-white border-slate-200'
         }`}
       >
-        <div className="rounded-2xl border border-[#C59B27]/60 p-5 sm:p-6">
+        <div className="rounded-2xl border-2 border-[#2563EB]/60 p-5 sm:p-6">
           <div
             className={`flex items-center justify-between pb-3 mb-4 border-b ${
-              isDark ? 'border-zinc-800' : 'border-zinc-200'
+              isDark ? 'border-slate-800' : 'border-slate-200'
             }`}
           >
             <div className="flex items-center gap-2">
@@ -1270,8 +1269,8 @@ export default function BarberoView() {
                 onClick={bloquearPanel}
                 className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all ${
                   isDark
-                    ? 'bg-zinc-900 text-white border border-zinc-800 hover:border-[#C59B27]'
-                    : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
+                    ? 'bg-slate-900 text-white border border-slate-800 hover:border-[#2563EB]'
+                    : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
                 }`}
               >
                 ← Inicio
@@ -1291,13 +1290,13 @@ export default function BarberoView() {
 
             <div
               className={`flex items-center gap-1 p-1 rounded-full border text-xs font-bold ${
-                isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+                isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
               }`}
             >
               <button
                 onClick={() => setModoTema('light')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                  modoTema === 'light' ? 'bg-white text-zinc-900 shadow-xs' : 'text-zinc-400'
+                  modoTema === 'light' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400'
                 }`}
               >
                 ☀️
@@ -1305,7 +1304,7 @@ export default function BarberoView() {
               <button
                 onClick={() => setModoTema('dark')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
-                  modoTema === 'dark' ? 'bg-[#C59B27] text-zinc-950 shadow-xs' : 'text-zinc-400'
+                  modoTema === 'dark' ? 'bg-[#2563EB] text-white shadow-xs' : 'text-slate-400'
                 }`}
               >
                 🌙
@@ -1313,7 +1312,7 @@ export default function BarberoView() {
               <button
                 onClick={() => setModoTema('auto')}
                 className={`px-2.5 h-7 rounded-full transition-all ${
-                  modoTema === 'auto' ? 'bg-[#DC2626] text-white shadow-xs' : 'text-zinc-400'
+                  modoTema === 'auto' ? 'bg-[#DC2626] text-white shadow-xs' : 'text-slate-400'
                 }`}
               >
                 Auto
@@ -1322,7 +1321,7 @@ export default function BarberoView() {
           </div>
 
           {verificandoSesion ? (
-            <p className="text-center text-sm text-zinc-400 py-10">Verificando acceso...</p>
+            <p className="text-center text-sm text-slate-400 py-10">Verificando acceso...</p>
           ) : autorizado ? (
             <BarberoContent isDark={isDark} />
           ) : (
