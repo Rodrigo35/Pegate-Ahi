@@ -81,6 +81,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [personasAdelante, setPersonasAdelante] = useState<number>(0);
   const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
+  const [reseteando, setReseteando] = useState<boolean>(false);
 
   const [fechaCita, setFechaCita] = useState<string>('');
   const [diasProximos, setDiasProximos] = useState<
@@ -107,6 +108,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const limpiarPersistencia = () => {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState(null, '', '/cliente');
+      }
     } catch {
       // Ignorar
     }
@@ -349,6 +353,13 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   };
 
   useEffect(() => {
+    if (reseteando) {
+      if (!ticketParam && !citaParam) {
+        setReseteando(false);
+      }
+      return;
+    }
+
     let guardado: { tipo: 'turno' | 'cita'; codigo: string } | null = null;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -357,8 +368,14 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       guardado = null;
     }
 
-    const idTurno = ticketParam || turno?.codigo_ticket || (guardado?.tipo === 'turno' ? guardado.codigo : null);
-    const idCita = citaParam || citaConfirmada?.codigo_ticket || (guardado?.tipo === 'cita' ? guardado.codigo : null);
+    const idTurno =
+      ticketParam ||
+      turno?.codigo_ticket ||
+      (guardado?.tipo === 'turno' ? guardado.codigo : null);
+    const idCita =
+      citaParam ||
+      citaConfirmada?.codigo_ticket ||
+      (guardado?.tipo === 'cita' ? guardado.codigo : null);
 
     if (idTurno) {
       if (!ticketParam) {
@@ -385,7 +402,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [ticketParam, citaParam, turno?.id, turno?.codigo_ticket]);
+  }, [ticketParam, citaParam, turno?.id, turno?.codigo_ticket, reseteando]);
 
   useEffect(() => {
     if (
@@ -507,6 +524,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   };
 
   const volverAlInicio = () => {
+    setReseteando(true);
     limpiarPersistencia();
     setTurno(null);
     setCitaConfirmada(null);
@@ -581,6 +599,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         </div>
 
         <button
+          type="button"
           onClick={volverAlInicio}
           className="w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-sm uppercase tracking-wider shadow-md active:scale-95"
         >
@@ -700,6 +719,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             </div>
 
             <button
+              type="button"
               onClick={cancelarTurno}
               className="w-full py-3.5 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-extrabold text-sm transition-all"
             >
@@ -729,6 +749,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={notificarLlegadaPresencial}
                   className="w-full py-4 rounded-xl bg-[#DC2626] text-white font-black text-sm uppercase tracking-wider shadow-md active:scale-95"
                 >
@@ -752,8 +773,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               {turno.estado === 'finalizado' ? '¡Gracias por tu visita!' : 'Tiempo agotado'}
             </h2>
             <button
+              type="button"
               onClick={volverAlInicio}
-              className="w-full py-4 rounded-xl bg-[#DC2626] text-white font-black text-sm uppercase tracking-wider"
+              className="w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-sm uppercase tracking-wider active:scale-95"
             >
               Solicitar nuevo turno
             </button>
