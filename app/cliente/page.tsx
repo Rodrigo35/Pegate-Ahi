@@ -248,6 +248,14 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     const fechaObj = new Date(fechaCita + 'T00:00:00');
     const diaSemana = fechaObj.getDay();
 
+    // 1. Obtener capacidad según sillas activas
+    const { count: totalSillas } = await supabase
+      .from('sillas')
+      .select('*', { count: 'exact', head: true })
+      .eq('activa', true);
+    const capacidadPorHora = Math.max(1, totalSillas || 1);
+
+    // 2. Bloques activos configurados por el barbero para ese día
     const { data: bloques } = await supabase
       .from('horarios_disponibles')
       .select('*')
@@ -255,18 +263,32 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       .eq('activo', true)
       .order('hora_inicio', { ascending: true });
 
+    // 3. Citas reservadas para la fecha seleccionada
     const { data: citasOcupadas } = await supabase
       .from('citas')
       .select('hora_inicio')
       .eq('fecha', fechaCita)
       .neq('estado', 'cancelada');
 
-    const horasOcupadas = new Set(citasOcupadas?.map((c) => c.hora_inicio));
+    // Contar cuántas reservas existen por cada bloque horario
+    const conteoPorHora: Record<string, number> = {};
+    citasOcupadas?.forEach((c) => {
+      conteoPorHora[c.hora_inicio] = (conteoPorHora[c.hora_inicio] || 0) + 1;
+    });
 
     if (bloques) {
-      const libres = bloques.filter((b) => !horasOcupadas.has(b.hora_inicio));
+      // Solo se oculta el horario cuando alcanza el límite de sillas activas
+      const libres = bloques
+        .filter((b) => (conteoPorHora[b.hora_inicio] || 0) < capacidadPorHora)
+        .map((b) => ({
+          ...b,
+          cuposRestantes: capacidadPorHora - (conteoPorHora[b.hora_inicio] || 0),
+        }));
+
       setBloquesDisponibles(libres);
-      setHoraCitaSeleccionada((prevHora) => (horasOcupadas.has(prevHora) ? '' : prevHora));
+      setHoraCitaSeleccionada((prevHora) =>
+        prevHora && (conteoPorHora[prevHora] || 0) >= capacidadPorHora ? '' : prevHora
+      );
     }
   };
 
@@ -287,6 +309,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           cargarHorarios();
         }
       )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sillas' }, () => {
+        cargarHorarios();
+      })
       .subscribe();
 
     return () => {
@@ -1033,7 +1058,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                         key={b.id}
                         type="button"
                         onClick={() => setHoraCitaSeleccionada(b.hora_inicio)}
-                        className={`py-2.5 rounded-xl border text-sm font-black transition-all ${
+                        className={`py-2.5 rounded-xl border text-sm font-black transition-all flex flex-col items-center ${
                           selected
                             ? 'bg-[#DC2626] border-[#DC2626] text-white'
                             : isDark
@@ -1041,7 +1066,16 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                             : 'bg-slate-50 border-slate-200 text-slate-900 hover:border-slate-400'
                         }`}
                       >
-                        {horaText}
+                        <span>{horaText}</span>
+                        {sillasActivasCount > 1 && (
+                          <span
+                            className={`text-[10px] font-bold ${
+                              selected ? 'text-white/90' : 'text-[#2563EB]'
+                            }`}
+                          >
+                            {b.cuposRestantes} {b.cuposRestantes === 1 ? 'cupo' : 'cupos'}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
