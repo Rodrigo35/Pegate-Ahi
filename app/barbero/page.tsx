@@ -5,6 +5,13 @@ import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 import { APP_CONFIG } from '../../lib/config';
 
+interface Silla {
+  id: string;
+  nombre_silla: string;
+  nombre_barbero: string;
+  activa: boolean;
+}
+
 interface Turno {
   id: string;
   codigo_ticket: string;
@@ -14,6 +21,8 @@ interface Turno {
   monto: number;
   modalidad_espera?: 'local' | 'diligencia';
   estado: 'espera' | 'atendiendo' | 'finalizado' | 'cancelado' | 'ausente';
+  silla_id?: string | null;
+  nombre_barbero?: string | null;
   llamado_en?: string;
   finalizado_en?: string;
   cliente_llego?: boolean;
@@ -110,7 +119,7 @@ function BarberoPinGate({
         </div>
         <h1 className="text-2xl font-black mt-3">Acceso Barbero</h1>
         <p className="text-xs font-semibold text-slate-400 mt-1">
-          Ingresa el PIN de seguridad para gestionar la silla y las citas
+          Ingresa el PIN de seguridad para gestionar las sillas y citas
         </p>
       </div>
 
@@ -201,15 +210,20 @@ function BarberoPinGate({
 }
 
 function BarberoContent({ isDark }: { isDark: boolean }) {
+  const [sillas, setSillas] = useState<Silla[]>([]);
+  const [nuevaSillaNombre, setNuevaSillaNombre] = useState<string>('');
+  const [nuevoBarberoNombre, setNuevoBarberoNombre] = useState<string>('');
+  const [guardandoSilla, setGuardandoSilla] = useState<boolean>(false);
+
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [turnosFinalizados, setTurnosFinalizados] = useState<Turno[]>([]);
   const [citasDelDia, setCitasDelDia] = useState<Cita[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [horaActual, setHoraActual] = useState<string>('');
   const [hoyStr, setHoyStr] = useState<string>('');
-  const [minutosRestantes, setMinutosRestantes] = useState<number | null>(null);
+  const [ahoraMs, setAhoraMs] = useState<number>(Date.now());
 
-  const [tabActiva, setTabActiva] = useState<'silla' | 'citas' | 'qr' | 'horarios'>('silla');
+  const [tabActiva, setTabActiva] = useState<'silla' | 'sillas' | 'citas' | 'qr' | 'horarios'>('silla');
   const [clienteUrl, setClienteUrl] = useState<string>('');
   const [copiadoUrl, setCopiadoUrl] = useState<boolean>(false);
 
@@ -219,7 +233,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
   const [tipoServicio, setTipoServicio] = useState<string>('Corte clásico');
   const [precioServicio, setPrecioServicio] = useState<number>(10);
-  const [editandoServicio, setEditandoServicio] = useState<boolean>(false);
+  const [editandoTurnoId, setEditandoTurnoId] = useState<string | null>(null);
 
   const [nuevoTipoInput, setNuevoTipoInput] = useState<string>('Corte clásico');
   const [nuevoPrecioInput, setNuevoPrecioInput] = useState<string>('10');
@@ -237,11 +251,20 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       const ahora = new Date();
       setHoraActual(ahora.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }));
       setHoyStr(getFechaLocalStr());
+      setAhoraMs(ahora.getTime());
     };
     actualizarHora();
     const interval = setInterval(actualizarHora, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchSillas = async () => {
+    const { data } = await supabase
+      .from('sillas')
+      .select('*')
+      .order('creado_en', { ascending: true });
+    if (data) setSillas(data as Silla[]);
+  };
 
   useEffect(() => {
     const cargarBloques = async () => {
@@ -309,7 +332,16 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   };
 
   useEffect(() => {
+    fetchSillas();
     fetchTurnosYCitas();
+
+    const channelSillas = supabase
+      .channel('barbero_sillas')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sillas' }, () => {
+        fetchSillas();
+      })
+      .subscribe();
+
     const channelTurnos = supabase
       .channel('barbero_turnos')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {
@@ -325,15 +357,68 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .subscribe();
 
     return () => {
+      supabase.removeChannel(channelSillas);
       supabase.removeChannel(channelTurnos);
       supabase.removeChannel(channelCitas);
     };
   }, []);
 
+  const agregarSilla = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoBarberoNombre.trim()) return;
+
+    setGuardandoSilla(true);
+    const etiquetaSilla =
+      nuevaSillaNombre.trim() || `Silla ${sillas.length + 1}`;
+
+    await supabase.from('sillas').insert([
+      {
+        nombre_silla: etiquetaSilla,
+        nombre_barbero: nuevoBarberoNombre.trim(),
+        activa: true,
+      },
+    ]);
+
+    setNuevaSillaNombre('');
+    setNuevoBarberoNombre('');
+    await fetchSillas();
+    setGuardandoSilla(false);
+  };
+
+  const toggleSillaActiva = async (silla: Silla) => {
+    const ocupada = turnosEnAtencion.some((t) => t.silla_id === silla.id);
+    if (silla.activa && ocupada) {
+      alert('Finaliza el corte actual de esta silla antes de pausarla.');
+      return;
+    }
+    await supabase
+      .from('sillas')
+      .update({ activa: !silla.activa })
+      .eq('id', silla.id);
+    fetchSillas();
+  };
+
+  const eliminarSilla = async (id: string) => {
+    if (sillas.length <= 1) {
+      alert('Debe existir al menos una silla configurada.');
+      return;
+    }
+    const ocupada = turnosEnAtencion.some((t) => t.silla_id === id);
+    if (ocupada) {
+      alert('No puedes eliminar una silla mientras atiende a un cliente.');
+      return;
+    }
+    const ok = confirm('¿Eliminar esta silla?');
+    if (!ok) return;
+    await supabase.from('sillas').delete().eq('id', id);
+    fetchSillas();
+  };
+
   const citasDeHoy = hoyStr ? citasDelDia.filter((c) => c.fecha === hoyStr) : [];
   const citasSiguientes = hoyStr ? citasDelDia.filter((c) => c.fecha > hoyStr) : citasDelDia;
 
-  const turnoActual = turnos.find((t) => t.estado === 'atendiendo');
+  const sillasActivas = sillas.filter((s) => s.activa);
+  const turnosEnAtencion = turnos.filter((t) => t.estado === 'atendiendo');
   const colaEspera = turnos.filter((t) => t.estado === 'espera');
 
   const totalIngresos = turnosFinalizados.reduce((acc, t) => acc + (t.monto || 0), 0);
@@ -350,11 +435,17 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     return Math.round(totalMinutos / serviciosConTiempo.length);
   })();
 
-  const enviarWhatsAppTurno = (telefono: string, nombre: string, ticket: string) => {
+  const enviarWhatsAppTurno = (
+    telefono: string,
+    nombre: string,
+    ticket: string,
+    etiquetaSilla?: string | null
+  ) => {
     let numLimpio = telefono.replace(/\D/g, '');
     if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
+    const destino = etiquetaSilla ? ` en ${etiquetaSilla}` : '';
     const mensaje = encodeURIComponent(
-      `¡Hola ${nombre}! ✂️ Tu turno ${ticket} ha sido llamado en ${APP_CONFIG.nombreNegocio}. Dispones de ${APP_CONFIG.tiempoLimiteDiligenciaMin} minutos para llegar al local.`
+      `¡Hola ${nombre}! ✂️ Tu turno ${ticket} ha sido llamado${destino} en ${APP_CONFIG.nombreNegocio}. Dispones de ${APP_CONFIG.tiempoLimiteDiligenciaMin} minutos para llegar al local.`
     );
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
@@ -421,7 +512,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     }
   };
 
-  const guardarNuevoServicio = async () => {
+  const guardarNuevoServicio = async (turnoId: string) => {
     const valorPrecio = parseFloat(nuevoPrecioInput);
     if (isNaN(valorPrecio) || valorPrecio < 0) return;
 
@@ -434,103 +525,34 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .update({ precio: valorPrecio })
       .eq('id', servicioId);
 
-    if (turnoActual) {
-      await supabase
-        .from('turnos')
-        .update({
-          tipo_corte: nuevoTipoInput,
-          monto: valorPrecio,
-        })
-        .eq('id', turnoActual.id);
-      await fetchTurnosYCitas();
-    }
-
-    setTipoServicio(nuevoTipoInput);
-    setPrecioServicio(valorPrecio);
-    setEditandoServicio(false);
-  };
-
-  const desplazarPorTiempoAgotado = async (turnoExpirado: Turno) => {
     await supabase
       .from('turnos')
       .update({
-        estado: 'espera',
-        llamado_en: null,
-        creado_en: new Date().toISOString(),
+        tipo_corte: nuevoTipoInput,
+        monto: valorPrecio,
       })
-      .eq('id', turnoExpirado.id);
-
-    const colaRestante = turnos.filter(
-      (t) => t.estado === 'espera' && t.id !== turnoExpirado.id
-    );
-
-    if (colaRestante.length > 0) {
-      const clienteEnLocal = colaRestante.find((t) => t.modalidad_espera === 'local');
-      const siguiente = clienteEnLocal || colaRestante[0];
-
-      await supabase
-        .from('turnos')
-        .update({
-          estado: 'atendiendo',
-          llamado_en: new Date().toISOString(),
-        })
-        .eq('id', siguiente.id);
-
-      if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
-        enviarWhatsAppTurno(
-          siguiente.cliente_telefono,
-          siguiente.nombre_cliente,
-          siguiente.codigo_ticket
-        );
-      }
-    }
+      .eq('id', turnoId);
 
     await fetchTurnosYCitas();
+    setTipoServicio(nuevoTipoInput);
+    setPrecioServicio(valorPrecio);
+    setEditandoTurnoId(null);
   };
 
-  useEffect(() => {
-    if (turnoActual && turnoActual.modalidad_espera === 'diligencia' && turnoActual.llamado_en) {
-      const interval = setInterval(() => {
-        const horaLlamado = new Date(turnoActual.llamado_en!).getTime();
-        const ahora = new Date().getTime();
-        const transcurridoMin = Math.floor((ahora - horaLlamado) / 60000);
-        const restante = APP_CONFIG.tiempoLimiteDiligenciaMin - transcurridoMin;
-
-        if (restante <= 0) {
-          clearInterval(interval);
-          desplazarPorTiempoAgotado(turnoActual);
-        } else {
-          setMinutosRestantes(restante);
-        }
-      }, 1000);
-
-      return () => clearInterval(interval);
-    } else {
-      setMinutosRestantes(null);
-    }
-  }, [turnoActual]);
-
-  const llamarSiguiente = async () => {
+  // Llamar siguiente cliente a una silla específica
+  const llamarSiguienteParaSilla = async (silla: Silla) => {
     if (colaEspera.length === 0) return;
-
-    if (turnoActual && turnoActual.modalidad_espera === 'diligencia') {
-      await supabase
-        .from('turnos')
-        .update({
-          estado: 'espera',
-          llamado_en: null,
-          creado_en: new Date().toISOString(),
-        })
-        .eq('id', turnoActual.id);
-    }
 
     const clienteEnLocal = colaEspera.find((t) => t.modalidad_espera === 'local');
     const siguiente = clienteEnLocal || colaEspera[0];
+    const etiquetaAsignada = `${silla.nombre_silla} · ${silla.nombre_barbero}`;
 
     await supabase
       .from('turnos')
       .update({
         estado: 'atendiendo',
+        silla_id: silla.id,
+        nombre_barbero: etiquetaAsignada,
         llamado_en: new Date().toISOString(),
       })
       .eq('id', siguiente.id);
@@ -539,46 +561,51 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       enviarWhatsAppTurno(
         siguiente.cliente_telefono,
         siguiente.nombre_cliente,
-        siguiente.codigo_ticket
+        siguiente.codigo_ticket,
+        etiquetaAsignada
       );
     }
 
     fetchTurnosYCitas();
   };
 
-  const confirmarLlegadaCliente = async () => {
-    if (!turnoActual) return;
+  const confirmarLlegadaCliente = async (turnoId: string) => {
     await supabase
       .from('turnos')
       .update({ modalidad_espera: 'local', llamado_en: null })
-      .eq('id', turnoActual.id);
+      .eq('id', turnoId);
     fetchTurnosYCitas();
   };
 
-  const pasarSiguientePorAusencia = async () => {
-    if (!turnoActual) return;
-
+  const pasarSiguientePorAusencia = async (turnoAusente: Turno, silla?: Silla) => {
     await supabase
       .from('turnos')
       .update({
         estado: 'espera',
+        silla_id: null,
+        nombre_barbero: null,
         llamado_en: null,
         creado_en: new Date().toISOString(),
       })
-      .eq('id', turnoActual.id);
+      .eq('id', turnoAusente.id);
 
     const colaRestante = turnos.filter(
-      (t) => t.estado === 'espera' && t.id !== turnoActual.id
+      (t) => t.estado === 'espera' && t.id !== turnoAusente.id
     );
 
     if (colaRestante.length > 0) {
       const clienteEnLocal = colaRestante.find((t) => t.modalidad_espera === 'local');
       const siguiente = clienteEnLocal || colaRestante[0];
+      const etiquetaAsignada = silla
+        ? `${silla.nombre_silla} · ${silla.nombre_barbero}`
+        : turnoAusente.nombre_barbero || null;
 
       await supabase
         .from('turnos')
         .update({
           estado: 'atendiendo',
+          silla_id: silla?.id || turnoAusente.silla_id || null,
+          nombre_barbero: etiquetaAsignada,
           llamado_en: new Date().toISOString(),
         })
         .eq('id', siguiente.id);
@@ -587,7 +614,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         enviarWhatsAppTurno(
           siguiente.cliente_telefono,
           siguiente.nombre_cliente,
-          siguiente.codigo_ticket
+          siguiente.codigo_ticket,
+          etiquetaAsignada
         );
       }
     }
@@ -595,17 +623,17 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     await fetchTurnosYCitas();
   };
 
-  const finalizarServicio = async () => {
-    if (!turnoActual) return;
+  // Finalizar corte de un cliente específico
+  const finalizarServicio = async (turno: Turno) => {
     await supabase
       .from('turnos')
       .update({
         estado: 'finalizado',
         finalizado_en: new Date().toISOString(),
-        monto: turnoActual.monto || precioServicio,
-        tipo_corte: turnoActual.tipo_corte || tipoServicio,
+        monto: turno.monto || precioServicio,
+        tipo_corte: turno.tipo_corte || tipoServicio,
       })
-      .eq('id', turnoActual.id);
+      .eq('id', turno.id);
 
     fetchTurnosYCitas();
   };
@@ -629,21 +657,25 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     ? 'bg-slate-900/90 border-slate-800 text-slate-100'
     : 'bg-slate-50 border-slate-200 text-slate-900';
 
+  const turnosSinSilla = turnosEnAtencion.filter(
+    (t) => !t.silla_id || !sillasActivas.some((s) => s.id === t.silla_id)
+  );
+
   return (
     <div className="space-y-4">
-      {/* Perfil del barbero + indicadores */}
+      {/* Perfil + indicadores globales */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-[#2563EB]/15 border border-[#2563EB]/50 text-white flex items-center justify-center text-2xl shrink-0">
-            🧔🏻
+            💈
           </div>
           <div>
             <h1 className="text-lg font-black leading-tight">
-              {APP_CONFIG.nombreNegocio || 'Panel Barbero'}
+              {APP_CONFIG.nombreNegocio || 'Panel Barbería'}
             </h1>
             <p className="text-xs font-bold text-slate-400 flex items-center gap-1.5 mt-0.5">
               <span className="w-2 h-2 rounded-full bg-[#2563EB] animate-pulse" />
-              En línea · {horaActual}
+              {sillasActivas.length} {sillasActivas.length === 1 ? 'silla activa' : 'sillas activas'} · {horaActual}
             </p>
           </div>
         </div>
@@ -663,42 +695,40 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* Pestañas en Rojo, Blanco y Azul */}
+      {/* 5 Pestañas: Fila | Sillas | Citas | QR | Horas */}
       <div
-        className={`grid grid-cols-4 gap-1.5 p-1.5 rounded-xl border ${
+        className={`grid grid-cols-5 gap-1 p-1.5 rounded-xl border ${
           isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
         }`}
       >
         <button
           type="button"
           onClick={() => setTabActiva('silla')}
-          className={`py-2.5 rounded-lg text-xs font-black transition-all ${
+          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
             tabActiva === 'silla'
               ? 'bg-[#DC2626] text-white shadow-xs'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Silla ({colaEspera.length})
+          Fila ({colaEspera.length})
         </button>
 
         <button
           type="button"
-          onClick={() => setTabActiva('qr')}
-          className={`py-2.5 rounded-lg text-xs font-black transition-all ${
-            tabActiva === 'qr'
-              ? isDark
-                ? 'bg-white text-slate-950 shadow-xs'
-                : 'bg-slate-900 text-white shadow-xs'
+          onClick={() => setTabActiva('sillas')}
+          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+            tabActiva === 'sillas'
+              ? 'bg-[#2563EB] text-white shadow-xs'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          📷 QR Hoy
+          🪑 ({sillasActivas.length})
         </button>
 
         <button
           type="button"
           onClick={() => setTabActiva('citas')}
-          className={`py-2.5 rounded-lg text-xs font-black transition-all ${
+          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
             tabActiva === 'citas'
               ? 'bg-[#2563EB] text-white shadow-xs'
               : 'text-slate-400 hover:text-slate-200'
@@ -709,217 +739,283 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
         <button
           type="button"
+          onClick={() => setTabActiva('qr')}
+          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+            tabActiva === 'qr'
+              ? isDark
+                ? 'bg-white text-slate-950 shadow-xs'
+                : 'bg-slate-900 text-white shadow-xs'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          📷 QR
+        </button>
+
+        <button
+          type="button"
           onClick={() => setTabActiva('horarios')}
-          className={`py-2.5 rounded-lg text-xs font-black transition-all ${
+          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
             tabActiva === 'horarios'
               ? 'bg-[#1D4ED8] text-white shadow-xs'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
-          Horarios
+          Horas
         </button>
       </div>
 
-      {/* --- TAB 1: SILLA & COLA EN VIVO --- */}
+      {/* --- TAB 1: FILA DE SILLAS EN ATENCIÓN + COLA COMPARTIDA --- */}
       {tabActiva === 'silla' && (
         <div className="space-y-4">
-          <div className={`p-5 rounded-2xl border border-[#2563EB]/40 space-y-4 ${cardSurface}`}>
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-                En Silla Ahora
-              </span>
-              {turnoActual && (
-                <span className="text-xs font-black px-3 py-0.5 rounded-full bg-[#DC2626]/15 text-[#DC2626] border border-[#DC2626]/30">
-                  {turnoActual.modalidad_espera === 'diligencia' ? '🏃‍♂️ En camino' : '✂️ Atendiendo'}
-                </span>
-              )}
-            </div>
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+              Sillas en Atención ({turnosEnAtencion.length}/{sillasActivas.length} ocupadas)
+            </span>
+            <button
+              type="button"
+              onClick={() => setTabActiva('sillas')}
+              className="text-xs font-black text-[#2563EB] hover:underline"
+            >
+              + Silla
+            </button>
+          </div>
 
-            {loading ? (
-              <p className="text-center text-sm text-slate-400 py-6 animate-pulse">Cargando...</p>
-            ) : turnoActual ? (
-              <div className="space-y-4">
-                {turnoActual.cliente_llego && (
-                  <div className="p-3 rounded-xl bg-[#2563EB] text-white text-center text-xs font-black">
-                    📍 ¡El cliente ya llegó al local!
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="px-3.5 py-2.5 rounded-xl bg-[#DC2626] text-white text-base font-black shrink-0">
-                      {turnoActual.codigo_ticket}
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-black leading-tight">
-                        {turnoActual.nombre_cliente}
-                      </h3>
-                      <p className="text-sm font-semibold text-slate-400">
-                        {turnoActual.tipo_corte || tipoServicio}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-3xl font-black text-[#2563EB]">
-                      {APP_CONFIG.monedaSimbolo}
-                      {turnoActual.monto || precioServicio}
-                    </p>
-                  </div>
-                </div>
-
-                {editandoServicio ? (
-                  <div
-                    className={`p-3.5 rounded-xl border space-y-3 ${
-                      isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
-                    }`}
-                  >
-                    <div className="flex gap-2">
-                      <select
-                        value={nuevoTipoInput}
-                        onChange={handleTipoChange}
-                        className={`flex-1 px-3 py-2.5 text-sm font-bold rounded-lg border focus:outline-none ${
-                          isDark
-                            ? 'bg-slate-900 border-slate-700 text-white'
-                            : 'bg-slate-50 border-slate-300 text-slate-900'
-                        }`}
-                      >
-                        <option value="Corte clásico">Corte clásico</option>
-                        <option value="Corte + barba">Corte + barba</option>
-                        <option value="Barba">Barba</option>
-                      </select>
-                      <input
-                        type="number"
-                        step="0.5"
-                        value={nuevoPrecioInput}
-                        onChange={(e) => setNuevoPrecioInput(e.target.value)}
-                        className={`w-24 px-3 py-2.5 text-sm font-bold rounded-lg border focus:outline-none ${
-                          isDark
-                            ? 'bg-slate-900 border-slate-700 text-white'
-                            : 'bg-slate-50 border-slate-300 text-slate-900'
-                        }`}
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setEditandoServicio(false)}
-                        className="flex-1 py-2.5 rounded-lg text-xs font-bold border border-slate-700 text-slate-400"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={guardarNuevoServicio}
-                        className="flex-1 py-2.5 rounded-lg text-xs font-black bg-[#2563EB] text-white"
-                      >
-                        Guardar
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between pt-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNuevoTipoInput(turnoActual.tipo_corte || tipoServicio);
-                        setNuevoPrecioInput((turnoActual.monto || precioServicio).toString());
-                        setEditandoServicio(true);
-                      }}
-                      className="text-xs font-bold text-slate-400 hover:text-[#2563EB]"
-                    >
-                      ✏️ Cambiar servicio/monto
-                    </button>
-
-                    {turnoActual.cliente_telefono && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          enviarWhatsAppTurno(
-                            turnoActual.cliente_telefono!,
-                            turnoActual.nombre_cliente,
-                            turnoActual.codigo_ticket
+          {loading ? (
+            <p className="text-center text-sm text-slate-400 py-6 animate-pulse">Cargando...</p>
+          ) : (
+            <div className="space-y-3">
+              {sillasActivas.map((silla) => {
+                const turnoEnSilla = turnosEnAtencion.find((t) => t.silla_id === silla.id);
+                const minRestantes =
+                  turnoEnSilla &&
+                  turnoEnSilla.modalidad_espera === 'diligencia' &&
+                  turnoEnSilla.llamado_en
+                    ? Math.max(
+                        0,
+                        APP_CONFIG.tiempoLimiteDiligenciaMin -
+                          Math.floor(
+                            (ahoraMs - new Date(turnoEnSilla.llamado_en).getTime()) / 60000
                           )
-                        }
-                        className="px-3.5 py-1.5 rounded-lg bg-[#2563EB] text-white text-xs font-black"
+                      )
+                    : null;
+
+                return (
+                  <div
+                    key={silla.id}
+                    className={`p-4 rounded-2xl border space-y-3 transition-all ${
+                      turnoEnSilla
+                        ? 'border-[#DC2626]/60'
+                        : 'border-[#2563EB]/40'
+                    } ${cardSurface}`}
+                  >
+                    {/* Cabecera de la silla con nombre del barbero */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-0.5 rounded-md bg-[#2563EB] text-white text-[11px] font-black uppercase">
+                          {silla.nombre_silla}
+                        </span>
+                        <span className="text-sm font-black">{silla.nombre_barbero}</span>
+                      </div>
+
+                      {turnoEnSilla ? (
+                        <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-[#DC2626]/15 text-[#DC2626] border border-[#DC2626]/30">
+                          {turnoEnSilla.modalidad_espera === 'diligencia'
+                            ? '🏃‍♂️ En camino'
+                            : '✂️ Ocupada'}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold text-slate-400">💺 Disponible</span>
+                      )}
+                    </div>
+
+                    {turnoEnSilla ? (
+                      <div className="space-y-3">
+                        {turnoEnSilla.cliente_llego && (
+                          <div className="p-2.5 rounded-xl bg-[#2563EB] text-white text-center text-xs font-black">
+                            📍 ¡El cliente ya llegó al local!
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <div className="px-3 py-2 rounded-xl bg-[#DC2626] text-white text-sm font-black shrink-0">
+                              {turnoEnSilla.codigo_ticket}
+                            </div>
+                            <div>
+                              <h3 className="text-base font-black leading-tight">
+                                {turnoEnSilla.nombre_cliente}
+                              </h3>
+                              <p className="text-xs font-semibold text-slate-400">
+                                {turnoEnSilla.tipo_corte || tipoServicio}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-2xl font-black text-[#2563EB]">
+                            {APP_CONFIG.monedaSimbolo}
+                            {turnoEnSilla.monto || precioServicio}
+                          </p>
+                        </div>
+
+                        {editandoTurnoId === turnoEnSilla.id ? (
+                          <div
+                            className={`p-3 rounded-xl border space-y-2.5 ${
+                              isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
+                            }`}
+                          >
+                            <div className="flex gap-2">
+                              <select
+                                value={nuevoTipoInput}
+                                onChange={handleTipoChange}
+                                className={`flex-1 px-3 py-2 text-xs font-bold rounded-lg border focus:outline-none ${
+                                  isDark
+                                    ? 'bg-slate-900 border-slate-700 text-white'
+                                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                                }`}
+                              >
+                                <option value="Corte clásico">Corte clásico</option>
+                                <option value="Corte + barba">Corte + barba</option>
+                                <option value="Barba">Barba</option>
+                              </select>
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={nuevoPrecioInput}
+                                onChange={(e) => setNuevoPrecioInput(e.target.value)}
+                                className={`w-20 px-2.5 py-2 text-xs font-bold rounded-lg border focus:outline-none ${
+                                  isDark
+                                    ? 'bg-slate-900 border-slate-700 text-white'
+                                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                                }`}
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditandoTurnoId(null)}
+                                className="flex-1 py-2 rounded-lg text-xs font-bold border border-slate-700 text-slate-400"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => guardarNuevoServicio(turnoEnSilla.id)}
+                                className="flex-1 py-2 rounded-lg text-xs font-black bg-[#2563EB] text-white"
+                              >
+                                Guardar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNuevoTipoInput(turnoEnSilla.tipo_corte || tipoServicio);
+                                setNuevoPrecioInput((turnoEnSilla.monto || precioServicio).toString());
+                                setEditandoTurnoId(turnoEnSilla.id);
+                              }}
+                              className="text-xs font-bold text-slate-400 hover:text-[#2563EB]"
+                            >
+                              ✏️ Cambiar servicio/monto
+                            </button>
+
+                            {turnoEnSilla.cliente_telefono && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  enviarWhatsAppTurno(
+                                    turnoEnSilla.cliente_telefono!,
+                                    turnoEnSilla.nombre_cliente,
+                                    turnoEnSilla.codigo_ticket,
+                                    `${silla.nombre_silla} (${silla.nombre_barbero})`
+                                  )
+                                }
+                                className="px-3 py-1 rounded-lg bg-[#2563EB] text-white text-xs font-black"
+                              >
+                                📲 WhatsApp
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {turnoEnSilla.modalidad_espera === 'diligencia' &&
+                          minRestantes !== null &&
+                          !turnoEnSilla.cliente_llego && (
+                            <div
+                              className={`p-3 rounded-xl border text-center space-y-2 ${
+                                isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
+                              }`}
+                            >
+                              <p className="text-xs font-bold text-slate-400">
+                                Tiempo límite:{' '}
+                                <span className="text-[#DC2626] font-black">{minRestantes} min</span>
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => confirmarLlegadaCliente(turnoEnSilla.id)}
+                                className="w-full py-2.5 rounded-lg bg-[#2563EB] text-white font-black text-xs"
+                              >
+                                💈 Confirmar Llegada al Local
+                              </button>
+                            </div>
+                          )}
+
+                        {/* Botón individual de Finalizar / Ausente para este cliente */}
+                        <div className="flex gap-2 pt-1">
+                          {turnoEnSilla.modalidad_espera === 'diligencia' && (
+                            <button
+                              type="button"
+                              onClick={() => pasarSiguientePorAusencia(turnoEnSilla, silla)}
+                              className="flex-1 py-3 rounded-xl border border-[#DC2626] text-[#DC2626] font-black text-xs"
+                            >
+                              Ausente
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => finalizarServicio(turnoEnSilla)}
+                            className="flex-1 py-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-xs tracking-wide shadow-md active:scale-95"
+                          >
+                            ✅ Finalizar Corte
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => llamarSiguienteParaSilla(silla)}
+                        disabled={colaEspera.length === 0}
+                        className="w-full py-3.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-xs tracking-wide shadow-md active:scale-95 disabled:opacity-40"
                       >
-                        📲 WhatsApp
+                        📢 Llamar Siguiente a {silla.nombre_silla} ({colaEspera.length})
                       </button>
                     )}
                   </div>
-                )}
+                );
+              })}
 
-                {turnoActual.modalidad_espera === 'diligencia' &&
-                  minutosRestantes !== null &&
-                  !turnoActual.cliente_llego && (
-                    <div
-                      className={`p-4 rounded-xl border text-center space-y-2.5 ${
-                        isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
-                      }`}
-                    >
-                      <p className="text-xs font-bold text-slate-400">
-                        Tiempo límite:{' '}
-                        <span className="text-[#DC2626] font-black">{minutosRestantes} min</span>
-                      </p>
-                      <button
-                        type="button"
-                        onClick={confirmarLlegadaCliente}
-                        className="w-full py-3 rounded-lg bg-[#2563EB] text-white font-black text-xs"
-                      >
-                        💈 Confirmar Llegada al Local
-                      </button>
-                    </div>
-                  )}
-              </div>
-            ) : (
-              <div className="py-6 text-center space-y-1.5">
-                <span className="text-4xl block">💺</span>
-                <p className="text-base font-black">Silla disponible</p>
-                <p className="text-xs text-slate-400">
-                  Llama al siguiente cliente o muestra el QR
-                </p>
-              </div>
-            )}
-
-            <div className="pt-1">
-              {!turnoActual ? (
-                <div className="flex gap-2">
-                  <button
-                    onClick={llamarSiguiente}
-                    disabled={colaEspera.length === 0}
-                    className="flex-1 py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-sm tracking-wide shadow-md active:scale-95 disabled:opacity-40"
-                  >
-                    📢 Llamar ({colaEspera.length})
-                  </button>
+              {turnosSinSilla.map((t) => (
+                <div
+                  key={t.id}
+                  className={`p-4 rounded-2xl border border-[#DC2626]/40 flex items-center justify-between ${cardSurface}`}
+                >
+                  <div>
+                    <span className="text-xs font-black text-[#DC2626]">{t.codigo_ticket}</span>
+                    <p className="text-sm font-black">{t.nombre_cliente}</p>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => setTabActiva('qr')}
-                    className="px-4 py-4 rounded-xl bg-[#2563EB] text-white font-black text-sm active:scale-95"
+                    onClick={() => finalizarServicio(t)}
+                    className="px-4 py-2.5 rounded-xl bg-[#2563EB] text-white text-xs font-black"
                   >
-                    📷 QR
+                    ✅ Finalizar
                   </button>
                 </div>
-              ) : (
-                <div className="flex gap-2">
-                  {turnoActual.modalidad_espera === 'diligencia' && (
-                    <button
-                      onClick={pasarSiguientePorAusencia}
-                      className="flex-1 py-4 rounded-xl border border-[#DC2626] text-[#DC2626] font-black text-sm"
-                    >
-                      Ausente
-                    </button>
-                  )}
-                  <button
-                    onClick={finalizarServicio}
-                    className="flex-1 py-4 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-sm tracking-wide shadow-md active:scale-95"
-                  >
-                    ✅ Finalizar Corte
-                  </button>
-                </div>
-              )}
+              ))}
             </div>
-          </div>
+          )}
 
-          {/* Lista de Espera del mismo día */}
+          {/* Lista de Espera compartida del día */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between px-1">
               <span className="text-sm font-black">Cola de hoy ({colaEspera.length})</span>
@@ -933,14 +1029,14 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                 No hay clientes en espera hoy.
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
+              <div className="space-y-2.5 max-h-60 overflow-y-auto pr-0.5">
                 {colaEspera.map((item, idx) => (
                   <div
                     key={item.id}
-                    className={`p-4 rounded-xl border flex items-center justify-between ${cardSurface}`}
+                    className={`p-3.5 rounded-xl border flex items-center justify-between ${cardSurface}`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] flex items-center justify-center text-sm font-black shrink-0">
+                      <div className="w-9 h-9 rounded-xl bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] flex items-center justify-center text-xs font-black shrink-0">
                         #{idx + 1}
                       </div>
                       <div>
@@ -957,7 +1053,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                       </div>
                     </div>
 
-                    <span className="text-base font-black text-[#2563EB]">
+                    <span className="text-sm font-black text-[#2563EB]">
                       {APP_CONFIG.monedaSimbolo}
                       {item.monto || precioServicio}
                     </span>
@@ -969,54 +1065,110 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* --- TAB 2: QR DEL DÍA --- */}
-      {tabActiva === 'qr' && (
-        <div className={`p-6 rounded-2xl border text-center space-y-4 ${cardSurface}`}>
-          <div>
-            <span className="inline-block px-3 py-1 rounded-full bg-[#2563EB]/15 text-[#2563EB] border border-[#2563EB]/30 text-xs font-extrabold uppercase tracking-wider">
-              Registro Rápido en Local
-            </span>
-            <h3 className="text-lg font-black mt-2">Escanea para tomar tu turno hoy</h3>
-            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-              El cliente entra directo a la cola del día y sigue su turno en vivo desde su teléfono.
-            </p>
-          </div>
-
-          <div className="p-3.5 rounded-2xl bg-white border-2 border-[#2563EB] inline-block mx-auto">
-            {qrImageUrl ? (
-              <img src={qrImageUrl} alt="QR Cola Barbería" className="w-48 h-48 rounded-lg" />
-            ) : (
-              <div className="w-48 h-48 flex items-center justify-center text-sm text-slate-400">
-                Generando QR...
-              </div>
-            )}
-          </div>
-
-          <div
-            className={`p-3 rounded-lg border text-xs font-mono truncate ${
-              isDark
-                ? 'bg-slate-950 border-slate-800 text-slate-400'
-                : 'bg-white border-slate-200 text-slate-600'
-            }`}
+      {/* --- TAB 2: GESTOR DE SILLAS, BARBEROS Y DESGLOSE DE CAJA --- */}
+      {tabActiva === 'sillas' && (
+        <div className="space-y-4">
+          <form
+            onSubmit={agregarSilla}
+            className={`p-4 rounded-2xl border space-y-3 ${cardSurface}`}
           >
-            {clienteUrl}
-          </div>
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400 block">
+              ➕ Agregar Silla / Barbero
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                placeholder={`Ej: Silla ${sillas.length + 1}`}
+                value={nuevaSillaNombre}
+                onChange={(e) => setNuevaSillaNombre(e.target.value)}
+                className={`px-3 py-2.5 rounded-xl border text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
+                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                }`}
+              />
+              <input
+                type="text"
+                required
+                placeholder="Nombre del barbero *"
+                value={nuevoBarberoNombre}
+                onChange={(e) => setNuevoBarberoNombre(e.target.value)}
+                className={`px-3 py-2.5 rounded-xl border text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
+                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                }`}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={guardandoSilla || !nuevoBarberoNombre.trim()}
+              className="w-full py-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-xs uppercase tracking-wider active:scale-95 disabled:opacity-40"
+            >
+              {guardandoSilla ? 'Agregando...' : 'Agregar Silla'}
+            </button>
+          </form>
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={copiarEnlaceCliente}
-              className="flex-1 py-3.5 rounded-xl bg-[#2563EB] text-white font-black text-xs active:scale-95"
-            >
-              {copiadoUrl ? '✅ Copiado' : '📋 Copiar Enlace'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setTabActiva('silla')}
-              className="flex-1 py-3.5 rounded-xl bg-[#DC2626] text-white font-black text-xs active:scale-95"
-            >
-              Volver a Silla
-            </button>
+          <div className="space-y-2.5">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400 px-1 block">
+              Sillas y Producción de Hoy ({sillas.length})
+            </span>
+
+            {sillas.map((s) => {
+              const cortesSilla = turnosFinalizados.filter((t) => t.silla_id === s.id);
+              const cajaSilla = cortesSilla.reduce((acc, t) => acc + (t.monto || 0), 0);
+
+              return (
+                <div
+                  key={s.id}
+                  className={`p-4 rounded-xl border flex items-center justify-between gap-2 ${cardSurface} ${
+                    !s.activa ? 'opacity-60' : ''
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded bg-[#2563EB]/15 text-[#2563EB] text-xs font-black">
+                        {s.nombre_silla}
+                      </span>
+                      <span className="text-sm font-black">{s.nombre_barbero}</span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1.5 text-xs font-bold">
+                      <span className="text-slate-400">
+                        {s.activa ? '🟢 Activa' : '🔴 Pausada'}
+                      </span>
+                      <span className="text-[#2563EB]">
+                        {cortesSilla.length} cortes · {APP_CONFIG.monedaSimbolo}
+                        {cajaSilla}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => toggleSillaActiva(s)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-black border transition-all ${
+                        s.activa
+                          ? 'border-[#2563EB] text-[#2563EB]'
+                          : 'bg-[#2563EB] text-white border-[#2563EB]'
+                      }`}
+                    >
+                      {s.activa ? 'Pausar' : 'Activar'}
+                    </button>
+                    {sillas.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => eliminarSilla(s.id)}
+                        className="px-2.5 py-1.5 rounded-lg border border-[#DC2626]/40 text-[#DC2626] text-xs font-black"
+                        title="Eliminar silla"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1153,7 +1305,59 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* --- TAB 4: GESTOR DE HORARIOS --- */}
+      {/* --- TAB 4: QR DEL DÍA --- */}
+      {tabActiva === 'qr' && (
+        <div className={`p-6 rounded-2xl border text-center space-y-4 ${cardSurface}`}>
+          <div>
+            <span className="inline-block px-3 py-1 rounded-full bg-[#2563EB]/15 text-[#2563EB] border border-[#2563EB]/30 text-xs font-extrabold uppercase tracking-wider">
+              Registro Rápido en Local
+            </span>
+            <h3 className="text-lg font-black mt-2">Escanea para tomar tu turno hoy</h3>
+            <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+              El cliente entra directo a la cola del día y sigue su turno en vivo desde su teléfono.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-white border-2 border-[#2563EB] inline-block mx-auto">
+            {qrImageUrl ? (
+              <img src={qrImageUrl} alt="QR Cola Barbería" className="w-48 h-48 rounded-lg" />
+            ) : (
+              <div className="w-48 h-48 flex items-center justify-center text-sm text-slate-400">
+                Generando QR...
+              </div>
+            )}
+          </div>
+
+          <div
+            className={`p-3 rounded-lg border text-xs font-mono truncate ${
+              isDark
+                ? 'bg-slate-950 border-slate-800 text-slate-400'
+                : 'bg-white border-slate-200 text-slate-600'
+            }`}
+          >
+            {clienteUrl}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={copiarEnlaceCliente}
+              className="flex-1 py-3.5 rounded-xl bg-[#2563EB] text-white font-black text-xs active:scale-95"
+            >
+              {copiadoUrl ? '✅ Copiado' : '📋 Copiar Enlace'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTabActiva('silla')}
+              className="flex-1 py-3.5 rounded-xl bg-[#DC2626] text-white font-black text-xs active:scale-95"
+            >
+              Volver a Fila
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- TAB 5: GESTOR DE HORARIOS --- */}
       {tabActiva === 'horarios' && (
         <div className={`p-5 rounded-2xl border space-y-4 ${cardSurface}`}>
           <div className="flex items-center justify-between">
