@@ -1200,21 +1200,6 @@ export default function BarberoView() {
   const [autorizado, setAutorizado] = useState<boolean>(false);
   const [verificandoSesion, setVerificandoSesion] = useState<boolean>(true);
 
-  useEffect(() => {
-    const hora = new Date().getHours();
-    setEsNoche(hora >= 19 || hora < 6);
-
-    try {
-      const sesion = sessionStorage.getItem(AUTH_SESSION_KEY);
-      if (sesion === 'true') {
-        setAutorizado(true);
-      }
-    } catch {
-      // Ignorar
-    }
-    setVerificandoSesion(false);
-  }, []);
-
   const bloquearPanel = () => {
     try {
       sessionStorage.removeItem(AUTH_SESSION_KEY);
@@ -1223,6 +1208,42 @@ export default function BarberoView() {
     }
     setAutorizado(false);
   };
+
+  useEffect(() => {
+    const hora = new Date().getHours();
+    setEsNoche(hora >= 19 || hora < 6);
+
+    try {
+      // Solo conserva la sesión si fue una recarga directa dentro de /barbero
+      const navEntries = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+      const esRecarga = navEntries.length > 0 && navEntries[0].type === 'reload';
+      const sesion = sessionStorage.getItem(AUTH_SESSION_KEY);
+
+      if (esRecarga && sesion === 'true') {
+        setAutorizado(true);
+      } else {
+        sessionStorage.removeItem(AUTH_SESSION_KEY);
+        setAutorizado(false);
+      }
+    } catch {
+      setAutorizado(false);
+    }
+    setVerificandoSesion(false);
+
+    // Si el usuario navega hacia atrás o sale de la ruta, limpiar sesión
+    const handlePopState = () => {
+      if (window.location.pathname !== '/barbero') {
+        try {
+          sessionStorage.removeItem(AUTH_SESSION_KEY);
+        } catch {
+          // Ignorar
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   const isDark = modoTema === 'auto' ? esNoche : modoTema === 'dark';
 
@@ -1246,6 +1267,7 @@ export default function BarberoView() {
             <div className="flex items-center gap-2">
               <Link
                 href="/"
+                onClick={bloquearPanel}
                 className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all ${
                   isDark
                     ? 'bg-zinc-900 text-white border border-zinc-800 hover:border-[#C59B27]'
