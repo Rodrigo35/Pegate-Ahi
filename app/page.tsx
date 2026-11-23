@@ -1,14 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { APP_CONFIG } from '../lib/config';
 
 export default function HomeHub() {
+  const router = useRouter();
   const [clientUrl, setClientUrl] = useState<string>('');
   const [currentYear, setCurrentYear] = useState<number | null>(null);
   const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('dark');
   const [esNoche, setEsNoche] = useState<boolean>(true);
+  const [presionandoBarber, setPresionandoBarber] = useState<boolean>(false);
+
+  const timerAccesoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -18,7 +23,27 @@ export default function HomeHub() {
 
     const hora = new Date().getHours();
     setEsNoche(hora >= 19 || hora < 6);
+
+    return () => {
+      if (timerAccesoRef.current) clearTimeout(timerAccesoRef.current);
+    };
   }, []);
+
+  const iniciarToqueBarbero = () => {
+    setPresionandoBarber(true);
+    timerAccesoRef.current = setTimeout(() => {
+      setPresionandoBarber(false);
+      router.push('/barbero');
+    }, 1500);
+  };
+
+  const cancelarToqueBarbero = () => {
+    setPresionandoBarber(false);
+    if (timerAccesoRef.current) {
+      clearTimeout(timerAccesoRef.current);
+      timerAccesoRef.current = null;
+    }
+  };
 
   const isDark = modoTema === 'auto' ? esNoche : modoTema === 'dark';
 
@@ -111,7 +136,18 @@ export default function HomeHub() {
           {/* Contenido Principal */}
           <section className="text-center space-y-6">
             <div>
-              <span className="text-3xl block mb-1">💈</span>
+              <span
+                onPointerDown={iniciarToqueBarbero}
+                onPointerUp={cancelarToqueBarbero}
+                onPointerLeave={cancelarToqueBarbero}
+                onPointerCancel={cancelarToqueBarbero}
+                onContextMenu={(e) => e.preventDefault()}
+                className={`text-3xl inline-block mb-1 select-none touch-none cursor-default transition-transform duration-300 ${
+                  presionandoBarber ? 'scale-125 opacity-80' : 'scale-100'
+                }`}
+              >
+                💈
+              </span>
               <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight">
                 {APP_CONFIG.nombreNegocio || 'Pégate Ahí'}
               </h1>
@@ -145,24 +181,13 @@ export default function HomeHub() {
               </span>
             </div>
 
-            {/* Botones */}
-            <div className="space-y-3 pt-1">
+            {/* Botón único para el cliente */}
+            <div className="pt-1">
               <Link
                 href="/cliente"
                 className="block w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base tracking-wide transition-all shadow-lg active:scale-95"
               >
                 Tomar Turno o Agendar Cita
-              </Link>
-
-              <Link
-                href="/barbero"
-                className={`block w-full py-3.5 rounded-xl font-extrabold text-sm tracking-wide transition-all border active:scale-95 ${
-                  isDark
-                    ? 'bg-slate-900 hover:bg-slate-800 text-white border-[#2563EB]'
-                    : 'bg-[#1D4ED8] hover:bg-[#1E40AF] text-white border-[#1D4ED8]'
-                }`}
-              >
-                Panel del Barbero
               </Link>
             </div>
           </section>
