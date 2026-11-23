@@ -15,6 +15,8 @@ interface TurnoCliente {
   monto: number;
   modalidad_espera?: 'local' | 'diligencia';
   estado: 'espera' | 'atendiendo' | 'finalizado' | 'cancelado' | 'ausente';
+  silla_id?: string | null;
+  nombre_barbero?: string | null;
   llamado_en?: string;
   cliente_llego?: boolean;
   creado_en: string;
@@ -80,6 +82,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
   const [personasAdelante, setPersonasAdelante] = useState<number>(0);
   const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
+  const [sillasActivasCount, setSillasActivasCount] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
   const [reseteando, setReseteando] = useState<boolean>(false);
 
@@ -136,6 +139,15 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     }
   };
 
+  const cargarSillasActivas = async () => {
+    const { count } = await supabase
+      .from('sillas')
+      .select('*', { count: 'exact', head: true })
+      .eq('activa', true);
+
+    setSillasActivasCount(Math.max(1, count || 1));
+  };
+
   useEffect(() => {
     const mananaInit = getMananaLocal();
     setFechaCita((prev) => prev || mananaInit);
@@ -163,6 +175,21 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     actualizarHora();
     const interval = setInterval(actualizarHora, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    cargarSillasActivas();
+
+    const channelSillas = supabase
+      .channel('cliente_sillas_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sillas' }, () => {
+        cargarSillasActivas();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channelSillas);
+    };
   }, []);
 
   useEffect(() => {
@@ -611,7 +638,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
   // --- MONITOR DE TURNO ACTIVO EN COLA ---
   if (turno && turno.estado !== 'cancelado') {
-    const tiempoEstimado = personasAdelante * APP_CONFIG.tiempoEstimadoPorClienteMin;
+    const tiempoEstimado = Math.ceil(
+      (personasAdelante * APP_CONFIG.tiempoEstimadoPorClienteMin) / sillasActivasCount
+    );
     const porcentajeProgreso =
       turno.estado === 'atendiendo' || turno.estado === 'finalizado'
         ? 100
@@ -675,7 +704,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   Espera aprox.
                 </span>
                 <p className="text-4xl font-black text-[#2563EB] mt-1">{tiempoEstimado}m</p>
-                <span className="text-xs font-semibold text-slate-400">estimados</span>
+                <span className="text-xs font-semibold text-slate-400">
+                  {sillasActivasCount > 1 ? `${sillasActivasCount} sillas activas` : 'estimados'}
+                </span>
               </div>
             </div>
 
@@ -730,6 +761,12 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
         {turno.estado === 'atendiendo' && (
           <div className={`p-6 rounded-2xl border-2 border-[#DC2626] text-center space-y-4 ${subCardClass}`}>
+            {turno.nombre_barbero && (
+              <span className="inline-block px-3.5 py-1 rounded-full bg-[#2563EB] text-white text-xs font-black uppercase tracking-wider">
+                💺 {turno.nombre_barbero}
+              </span>
+            )}
+
             {turno.cliente_llego ? (
               <>
                 <span className="text-5xl block">💈</span>
@@ -760,7 +797,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               <>
                 <span className="text-5xl block">✂️</span>
                 <h2 className="text-2xl font-black text-[#DC2626]">¡Es tu turno!</h2>
-                <p className="text-sm font-semibold">Pasa adelante, tu silla está lista.</p>
+                <p className="text-sm font-semibold">
+                  {turno.nombre_barbero
+                    ? `Pasa adelante a ${turno.nombre_barbero}.`
+                    : 'Pasa adelante, tu silla está lista.'}
+                </p>
               </>
             )}
           </div>
