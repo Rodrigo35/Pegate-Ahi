@@ -6,6 +6,12 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 import { APP_CONFIG } from '../../lib/config';
 
+interface SillaActiva {
+  id: string;
+  nombre_silla: string;
+  nombre_barbero: string;
+}
+
 interface TurnoCliente {
   id: string;
   codigo_ticket: string;
@@ -17,6 +23,7 @@ interface TurnoCliente {
   estado: 'espera' | 'atendiendo' | 'finalizado' | 'cancelado' | 'ausente';
   silla_id?: string | null;
   nombre_barbero?: string | null;
+  barbero_preferido?: string | null;
   llamado_en?: string;
   cliente_llego?: boolean;
   creado_en: string;
@@ -31,6 +38,7 @@ interface CitaCliente {
   monto: number;
   fecha: string;
   hora_inicio: string;
+  barbero_preferido?: string | null;
   estado: string;
 }
 
@@ -77,12 +85,15 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     APP_CONFIG.servicios[0]
   );
 
+  const [sillasActivas, setSillasActivas] = useState<SillaActiva[]>([]);
+  const [barberoPreferido, setBarberoPreferido] = useState<string>('');
+  const sillasActivasCount = Math.max(1, sillasActivas.length);
+
   const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
   const [registrando, setRegistrando] = useState(false);
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
   const [personasAdelante, setPersonasAdelante] = useState<number>(0);
   const [totalInicialCola, setTotalInicialCola] = useState<number>(1);
-  const [sillasActivasCount, setSillasActivasCount] = useState<number>(1);
   const [loading, setLoading] = useState<boolean>(true);
   const [reseteando, setReseteando] = useState<boolean>(false);
 
@@ -140,12 +151,23 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   };
 
   const cargarSillasActivas = async () => {
-    const { count } = await supabase
+    const { data } = await supabase
       .from('sillas')
-      .select('*', { count: 'exact', head: true })
-      .eq('activa', true);
+      .select('id, nombre_silla, nombre_barbero')
+      .eq('activa', true)
+      .order('creado_en', { ascending: true });
 
-    setSillasActivasCount(Math.max(1, count || 1));
+    if (data) {
+      const lista = data as SillaActiva[];
+      setSillasActivas(lista);
+      setBarberoPreferido((prev) => {
+        if (!prev) return '';
+        const sigueActivo = lista.some(
+          (s) => `${s.nombre_barbero} (${s.nombre_silla})` === prev
+        );
+        return sigueActivo ? prev : '';
+      });
+    }
   };
 
   useEffect(() => {
@@ -248,14 +270,12 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     const fechaObj = new Date(fechaCita + 'T00:00:00');
     const diaSemana = fechaObj.getDay();
 
-    // 1. Obtener capacidad según sillas activas
     const { count: totalSillas } = await supabase
       .from('sillas')
       .select('*', { count: 'exact', head: true })
       .eq('activa', true);
     const capacidadPorHora = Math.max(1, totalSillas || 1);
 
-    // 2. Bloques activos configurados por el barbero para ese día
     const { data: bloques } = await supabase
       .from('horarios_disponibles')
       .select('*')
@@ -263,21 +283,18 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       .eq('activo', true)
       .order('hora_inicio', { ascending: true });
 
-    // 3. Citas reservadas para la fecha seleccionada
     const { data: citasOcupadas } = await supabase
       .from('citas')
       .select('hora_inicio')
       .eq('fecha', fechaCita)
       .neq('estado', 'cancelada');
 
-    // Contar cuántas reservas existen por cada bloque horario
     const conteoPorHora: Record<string, number> = {};
     citasOcupadas?.forEach((c) => {
       conteoPorHora[c.hora_inicio] = (conteoPorHora[c.hora_inicio] || 0) + 1;
     });
 
     if (bloques) {
-      // Solo se oculta el horario cuando alcanza el límite de sillas activas
       const libres = bloques
         .filter((b) => (conteoPorHora[b.hora_inicio] || 0) < capacidadPorHora)
         .map((b) => ({
@@ -498,6 +515,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           tipo_corte: servicioSeleccionado.nombre,
           monto: servicioSeleccionado.precio,
           modalidad_espera: modalidadEspera,
+          barbero_preferido: barberoPreferido || null,
           estado: 'espera',
         },
       ])
@@ -538,6 +556,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           monto: servicioSeleccionado.precio,
           fecha: fechaCita,
           hora_inicio: horaCitaSeleccionada,
+          barbero_preferido: barberoPreferido || null,
           estado: 'confirmada',
         },
       ])
@@ -583,6 +602,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setNombre('');
     setTelefono('');
     setHoraCitaSeleccionada('');
+    setBarberoPreferido('');
   };
 
   const cancelarTurno = async () => {
@@ -648,6 +668,14 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               {citaConfirmada.monto})
             </span>
           </div>
+          {citaConfirmada.barbero_preferido && (
+            <div className="flex justify-between">
+              <span className="text-slate-400">Barbero:</span>
+              <span className="font-black text-[#2563EB]">
+                💈 {citaConfirmada.barbero_preferido}
+              </span>
+            </div>
+          )}
         </div>
 
         <button
@@ -693,6 +721,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 {turno.tipo_corte} · {APP_CONFIG.monedaSimbolo}
                 {turno.monto}
               </p>
+              {turno.barbero_preferido && (
+                <p className="text-[11px] font-black text-[#2563EB] mt-0.5">
+                  💈 Preferencia: {turno.barbero_preferido}
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -892,6 +925,65 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           📅 Agendar Cita
         </button>
       </div>
+
+      {/* Barberos activos del turno */}
+      {sillasActivas.length > 0 && (
+        <div className={`p-3.5 rounded-xl border space-y-2.5 ${subCardClass}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+              💈 Barberos de turno ({sillasActivas.length})
+            </span>
+            <span className="text-[11px] font-bold text-[#2563EB]">
+              {barberoPreferido ? 'Elegido' : 'Toca para elegir'}
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setBarberoPreferido('')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black border transition-all ${
+                barberoPreferido === ''
+                  ? 'bg-[#2563EB] border-[#2563EB] text-white'
+                  : isDark
+                  ? 'bg-slate-950 border-slate-800 text-slate-300'
+                  : 'bg-white border-slate-300 text-slate-700'
+              }`}
+            >
+              ⚡ Cualquiera
+            </button>
+
+            {sillasActivas.map((s) => {
+              const etiqueta = `${s.nombre_barbero} (${s.nombre_silla})`;
+              const isSelected = barberoPreferido === etiqueta;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setBarberoPreferido(etiqueta)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black border transition-all ${
+                    isSelected
+                      ? 'bg-[#2563EB] border-[#2563EB] text-white'
+                      : isDark
+                      ? 'bg-slate-950 border-slate-800 text-slate-200 hover:border-[#2563EB]/50'
+                      : 'bg-white border-slate-300 text-slate-800 hover:border-[#2563EB]/50'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span>{s.nombre_barbero}</span>
+                  <span
+                    className={`text-[10px] font-bold ${
+                      isSelected ? 'text-white/90' : 'text-[#2563EB]'
+                    }`}
+                  >
+                    · {s.nombre_silla}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <form
         onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita}
