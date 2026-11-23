@@ -14,6 +14,7 @@ export default function HomeHub() {
   const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('auto');
   const [esNoche, setEsNoche] = useState<boolean>(false);
   const [presionandoBarber, setPresionandoBarber] = useState<boolean>(false);
+  const [copiadoEnlace, setCopiadoEnlace] = useState<boolean>(false);
 
   const timerAccesoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -69,6 +70,40 @@ export default function HomeHub() {
       clearTimeout(timerAccesoRef.current);
       timerAccesoRef.current = null;
     }
+  };
+
+  const copiarEnlaceCliente = async () => {
+    if (!clientUrl) return;
+    try {
+      await navigator.clipboard.writeText(clientUrl);
+      setCopiadoEnlace(true);
+      setTimeout(() => setCopiadoEnlace(false), 2000);
+    } catch {
+      // Ignorar si no hay permiso de portapapeles
+    }
+  };
+
+  const compartirEnlaceCliente = async () => {
+    if (!clientUrl) return;
+    const nombreLocal = APP_CONFIG.nombreNegocio || 'Pégate Ahí';
+    const textoCompartir = `¡Pide tu turno en vivo o agenda tu cita en ${nombreLocal} aquí! ✂️💈`;
+
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await navigator.share({
+          title: nombreLocal,
+          text: textoCompartir,
+          url: clientUrl,
+        });
+        return;
+      } catch {
+        // Si el usuario cancela el diálogo nativo, no hacer nada
+        return;
+      }
+    }
+
+    const mensajeWa = encodeURIComponent(`${textoCompartir}\n${clientUrl}`);
+    window.open(`https://wa.me/?text=${mensajeWa}`, '_blank');
   };
 
   const isDark = modoTema === 'auto' ? esNoche : modoTema === 'dark';
@@ -160,7 +195,7 @@ export default function HomeHub() {
           </header>
 
           {/* Contenido Principal */}
-          <section className="text-center space-y-6">
+          <section className="text-center space-y-5">
             <div>
               <span
                 onPointerDown={iniciarToqueBarbero}
@@ -207,14 +242,38 @@ export default function HomeHub() {
               </span>
             </div>
 
-            {/* Botón único para el cliente */}
-            <div className="pt-1">
+            {/* Acciones para cliente y compartir enlace */}
+            <div className="space-y-2.5 pt-1">
               <Link
                 href="/cliente"
                 className="block w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base tracking-wide transition-all shadow-lg active:scale-95"
               >
                 Tomar Turno o Agendar Cita
               </Link>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={copiarEnlaceCliente}
+                  className={`py-3 px-3 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
+                    isDark
+                      ? 'bg-slate-950 border-slate-800 text-slate-200 hover:border-[#2563EB]'
+                      : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-[#2563EB]'
+                  }`}
+                >
+                  <span>{copiadoEnlace ? '✅' : '📋'}</span>
+                  <span>{copiadoEnlace ? '¡Copiado!' : 'Copiar Enlace'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={compartirEnlaceCliente}
+                  className="py-3 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
+                >
+                  <span>📲</span>
+                  <span>Compartir Link</span>
+                </button>
+              </div>
             </div>
           </section>
 
