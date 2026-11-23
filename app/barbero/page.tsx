@@ -38,6 +38,10 @@ const SERVICIOS_DEFAULT = [
   { nombre: 'Barba', precio: 7 },
 ];
 
+// PIN configurable desde .env.local / Vercel (NEXT_PUBLIC_BARBER_PIN) o '1234' por defecto
+const PIN_BARBERO = process.env.NEXT_PUBLIC_BARBER_PIN || '1234';
+const AUTH_SESSION_KEY = 'pegate_ahi_barbero_auth';
+
 const getFechaLocalStr = () => {
   const d = new Date();
   const year = d.getFullYear();
@@ -45,6 +49,157 @@ const getFechaLocalStr = () => {
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 };
+
+function BarberoPinGate({
+  isDark,
+  onUnlock,
+}: {
+  isDark: boolean;
+  onUnlock: () => void;
+}) {
+  const [pinIngresado, setPinIngresado] = useState<string>('');
+  const [errorPin, setErrorPin] = useState<boolean>(false);
+
+  const verificarPin = (codigo: string) => {
+    if (codigo === PIN_BARBERO) {
+      try {
+        sessionStorage.setItem(AUTH_SESSION_KEY, 'true');
+      } catch {
+        // Ignorar si sessionStorage está restringido
+      }
+      onUnlock();
+    } else {
+      setErrorPin(true);
+      setTimeout(() => {
+        setPinIngresado('');
+        setErrorPin(false);
+      }, 650);
+    }
+  };
+
+  const agregarDigito = (digito: string) => {
+    if (errorPin || pinIngresado.length >= PIN_BARBERO.length) return;
+    const nuevo = pinIngresado + digito;
+    setPinIngresado(nuevo);
+    if (nuevo.length === PIN_BARBERO.length) {
+      verificarPin(nuevo);
+    }
+  };
+
+  const borrarDigito = () => {
+    if (errorPin) return;
+    setPinIngresado((prev) => prev.slice(0, -1));
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        agregarDigito(e.key);
+      } else if (e.key === 'Backspace') {
+        borrarDigito();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
+  return (
+    <div className="py-4 text-center space-y-6">
+      <div>
+        <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-[#C59B27]/60 text-white flex items-center justify-center text-3xl mx-auto shadow-md">
+          🔐
+        </div>
+        <h1 className="text-2xl font-black mt-3">Acceso Barbero</h1>
+        <p className="text-xs font-semibold text-zinc-400 mt-1">
+          Ingresa el PIN de seguridad para gestionar la silla y las citas
+        </p>
+      </div>
+
+      {/* Indicadores de dígitos */}
+      <div className="flex items-center justify-center gap-3.5">
+        {Array.from({ length: PIN_BARBERO.length }).map((_, idx) => {
+          const lleno = idx < pinIngresado.length;
+          return (
+            <div
+              key={idx}
+              className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
+                errorPin
+                  ? 'bg-[#DC2626] border-[#DC2626] scale-110'
+                  : lleno
+                  ? 'bg-[#C59B27] border-[#C59B27] scale-110'
+                  : isDark
+                  ? 'border-zinc-700 bg-zinc-950'
+                  : 'border-zinc-300 bg-zinc-100'
+              }`}
+            />
+          );
+        })}
+      </div>
+
+      {errorPin ? (
+        <p className="text-xs font-black text-[#DC2626] uppercase tracking-wider">
+          PIN incorrecto · Intenta de nuevo
+        </p>
+      ) : (
+        <p className="text-xs text-zinc-500">PIN de {PIN_BARBERO.length} dígitos</p>
+      )}
+
+      {/* Teclado numérico táctil */}
+      <div className="grid grid-cols-3 gap-2.5 max-w-[270px] mx-auto">
+        {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
+          <button
+            key={num}
+            type="button"
+            onClick={() => agregarDigito(num)}
+            className={`h-14 rounded-2xl border text-xl font-black transition-all active:scale-95 ${
+              isDark
+                ? 'bg-zinc-900/90 border-zinc-800 text-white hover:border-[#C59B27]'
+                : 'bg-zinc-50 border-zinc-200 text-zinc-900 hover:border-zinc-400'
+            }`}
+          >
+            {num}
+          </button>
+        ))}
+
+        <button
+          type="button"
+          onClick={() => setPinIngresado('')}
+          className={`h-14 rounded-2xl border text-xs font-extrabold uppercase transition-all active:scale-95 ${
+            isDark
+              ? 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:text-white'
+              : 'bg-zinc-100 border-zinc-200 text-zinc-500'
+          }`}
+        >
+          Limpiar
+        </button>
+
+        <button
+          type="button"
+          onClick={() => agregarDigito('0')}
+          className={`h-14 rounded-2xl border text-xl font-black transition-all active:scale-95 ${
+            isDark
+              ? 'bg-zinc-900/90 border-zinc-800 text-white hover:border-[#C59B27]'
+              : 'bg-zinc-50 border-zinc-200 text-zinc-900 hover:border-zinc-400'
+          }`}
+        >
+          0
+        </button>
+
+        <button
+          type="button"
+          onClick={borrarDigito}
+          className={`h-14 rounded-2xl border text-base font-black transition-all active:scale-95 ${
+            isDark
+              ? 'bg-zinc-950 border-zinc-800 text-[#DC2626] hover:border-[#DC2626]'
+              : 'bg-zinc-100 border-zinc-200 text-[#DC2626]'
+          }`}
+        >
+          ⌫
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function BarberoContent({ isDark }: { isDark: boolean }) {
   const [turnos, setTurnos] = useState<Turno[]>([]);
@@ -1042,11 +1197,32 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 export default function BarberoView() {
   const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('dark');
   const [esNoche, setEsNoche] = useState<boolean>(true);
+  const [autorizado, setAutorizado] = useState<boolean>(false);
+  const [verificandoSesion, setVerificandoSesion] = useState<boolean>(true);
 
   useEffect(() => {
     const hora = new Date().getHours();
     setEsNoche(hora >= 19 || hora < 6);
+
+    try {
+      const sesion = sessionStorage.getItem(AUTH_SESSION_KEY);
+      if (sesion === 'true') {
+        setAutorizado(true);
+      }
+    } catch {
+      // Ignorar
+    }
+    setVerificandoSesion(false);
   }, []);
+
+  const bloquearPanel = () => {
+    try {
+      sessionStorage.removeItem(AUTH_SESSION_KEY);
+    } catch {
+      // Ignorar
+    }
+    setAutorizado(false);
+  };
 
   const isDark = modoTema === 'auto' ? esNoche : modoTema === 'dark';
 
@@ -1067,16 +1243,29 @@ export default function BarberoView() {
               isDark ? 'border-zinc-800' : 'border-zinc-200'
             }`}
           >
-            <Link
-              href="/"
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all ${
-                isDark
-                  ? 'bg-zinc-900 text-white border border-zinc-800 hover:border-[#C59B27]'
-                  : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
-              }`}
-            >
-              ← Inicio
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/"
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all ${
+                  isDark
+                    ? 'bg-zinc-900 text-white border border-zinc-800 hover:border-[#C59B27]'
+                    : 'bg-zinc-100 text-zinc-900 hover:bg-zinc-200'
+                }`}
+              >
+                ← Inicio
+              </Link>
+
+              {autorizado && (
+                <button
+                  type="button"
+                  onClick={bloquearPanel}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-[#DC2626]/15 border border-[#DC2626]/30 text-[#DC2626] hover:bg-[#DC2626] hover:text-white text-xs font-extrabold transition-all"
+                  title="Bloquear panel con PIN"
+                >
+                  🔒 Bloquear
+                </button>
+              )}
+            </div>
 
             <div
               className={`flex items-center gap-1 p-1 rounded-full border text-xs font-bold ${
@@ -1110,7 +1299,13 @@ export default function BarberoView() {
             </div>
           </div>
 
-          <BarberoContent isDark={isDark} />
+          {verificandoSesion ? (
+            <p className="text-center text-sm text-zinc-400 py-10">Verificando acceso...</p>
+          ) : autorizado ? (
+            <BarberoContent isDark={isDark} />
+          ) : (
+            <BarberoPinGate isDark={isDark} onUnlock={() => setAutorizado(true)} />
+          )}
         </div>
       </div>
     </main>
