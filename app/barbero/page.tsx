@@ -246,6 +246,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       descripcion: '',
     }))
   );
+  const [servicioExpandidoId, setServicioExpandidoId] = useState<string | null>(null);
   const [nuevoSrvNombre, setNuevoSrvNombre] = useState<string>('');
   const [nuevoSrvPrecio, setNuevoSrvPrecio] = useState<string>('');
   const [nuevoSrvDesc, setNuevoSrvDesc] = useState<string>('');
@@ -436,6 +437,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         .eq('id', srv.id);
     }
     await cargarServiciosConfig();
+    setServicioExpandidoId(null);
     setGuardandoTarifas(false);
     setTarifasGuardadasOk(true);
     setTimeout(() => setTarifasGuardadasOk(false), 2500);
@@ -481,6 +483,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     if (!confirmar) return;
 
     await supabase.from('servicios_config').delete().eq('id', id);
+    if (servicioExpandidoId === id) {
+      setServicioExpandidoId(null);
+    }
     cargarServiciosConfig();
   };
 
@@ -1321,81 +1326,132 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* --- TAB 3: GESTIÓN DE SERVICIOS Y TARIFAS --- */}
+      {/* --- TAB 3: GESTIÓN DE SERVICIOS Y TARIFAS (CON DESPLIEGUE) --- */}
       {tabActiva === 'servicios' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-              Tarifas activas
+              Tarifas activas ({serviciosLista.length})
             </span>
             {tarifasGuardadasOk && (
               <span className="text-xs font-black text-emerald-400">✅ Guardado</span>
             )}
           </div>
 
-          <div className="space-y-2.5">
-            {serviciosLista.map((srv) => (
-              <div
-                key={srv.id}
-                className={`p-3 rounded-2xl border space-y-2 ${cardSurface}`}
-              >
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={srv.nombre}
-                    placeholder="Nombre del servicio"
-                    onChange={(e) =>
-                      actualizarCampoServicio(srv.id, 'nombre', e.target.value)
-                    }
-                    className={`flex-1 px-3 py-2 rounded-xl border text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
-                      isDark
-                        ? 'bg-slate-950 border-slate-800 text-white'
-                        : 'bg-white border-slate-300 text-slate-900'
-                    }`}
-                  />
-                  <div className="relative w-24">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-[#2563EB]">
-                      {APP_CONFIG.monedaSimbolo}
-                    </span>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={srv.precio}
-                      onChange={(e) =>
-                        actualizarCampoServicio(srv.id, 'precio', e.target.value)
-                      }
-                      className={`w-full pl-6 pr-2 py-2 rounded-xl border text-xs font-black focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
-                        isDark
-                          ? 'bg-slate-950 border-slate-800 text-white'
-                          : 'bg-white border-slate-300 text-slate-900'
-                      }`}
-                    />
-                  </div>
+          <div className="space-y-2">
+            {serviciosLista.map((srv) => {
+              const estaAbierto = servicioExpandidoId === srv.id;
+
+              return (
+                <div
+                  key={srv.id}
+                  className={`rounded-2xl border overflow-hidden transition-all ${
+                    estaAbierto ? 'border-[#2563EB]/60' : ''
+                  } ${cardSurface}`}
+                >
+                  {/* Fila compacta siempre visible */}
                   <button
                     type="button"
-                    onClick={() => eliminarServicio(srv.id, srv.nombre)}
-                    title="Eliminar servicio"
-                    className="px-2.5 py-2 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white text-xs font-black transition-all"
+                    onClick={() =>
+                      setServicioExpandidoId(estaAbierto ? null : srv.id)
+                    }
+                    className="w-full p-3.5 flex items-center justify-between gap-2 text-left transition-colors"
                   >
-                    ✕
-                  </button>
-                </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-black truncate">{srv.nombre}</p>
+                      {srv.descripcion && !estaAbierto && (
+                        <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                          {srv.descripcion}
+                        </p>
+                      )}
+                    </div>
 
-                <input
-                  type="text"
-                  value={srv.descripcion || ''}
-                  placeholder="Descripción breve (opcional)"
-                  onChange={(e) =>
-                    actualizarCampoServicio(srv.id, 'descripcion', e.target.value)
-                  }
-                  className={`w-full px-3 py-1.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
-                    isDark
-                      ? 'bg-slate-950 border-slate-800 text-slate-300 placeholder-slate-600'
-                      : 'bg-white border-slate-300 text-slate-700 placeholder-slate-400'
-                  }`}
-                />
-              </div>
-            ))}
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <span className="px-2.5 py-1 rounded-lg bg-[#2563EB]/15 text-[#2563EB] text-xs font-black">
+                        {APP_CONFIG.monedaSimbolo}
+                        {srv.precio}
+                      </span>
+                      <span
+                        className={`w-7 h-7 rounded-lg border flex items-center justify-center text-xs font-black transition-transform ${
+                          estaAbierto
+                            ? 'rotate-180 bg-[#2563EB] border-[#2563EB] text-white'
+                            : isDark
+                            ? 'bg-slate-950 border-slate-800 text-slate-400'
+                            : 'bg-white border-slate-200 text-slate-500'
+                        }`}
+                      >
+                        ▾
+                      </span>
+                    </div>
+                  </button>
+
+                  {/* Panel desplegable de edición */}
+                  {estaAbierto && (
+                    <div
+                      className={`px-3.5 pb-3.5 pt-2.5 border-t space-y-2.5 ${
+                        isDark ? 'border-slate-800/80' : 'border-slate-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={srv.nombre}
+                          placeholder="Nombre del servicio"
+                          onChange={(e) =>
+                            actualizarCampoServicio(srv.id, 'nombre', e.target.value)
+                          }
+                          className={`flex-1 px-3 py-2 rounded-xl border text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                            isDark
+                              ? 'bg-slate-950 border-slate-800 text-white'
+                              : 'bg-white border-slate-300 text-slate-900'
+                          }`}
+                        />
+                        <div className="relative w-24">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-[#2563EB]">
+                            {APP_CONFIG.monedaSimbolo}
+                          </span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            value={srv.precio}
+                            onChange={(e) =>
+                              actualizarCampoServicio(srv.id, 'precio', e.target.value)
+                            }
+                            className={`w-full pl-6 pr-2 py-2 rounded-xl border text-xs font-black focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                              isDark
+                                ? 'bg-slate-950 border-slate-800 text-white'
+                                : 'bg-white border-slate-300 text-slate-900'
+                            }`}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => eliminarServicio(srv.id, srv.nombre)}
+                          title="Eliminar servicio"
+                          className="px-2.5 py-2 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white text-xs font-black transition-all"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      <input
+                        type="text"
+                        value={srv.descripcion || ''}
+                        placeholder="Descripción breve (opcional)"
+                        onChange={(e) =>
+                          actualizarCampoServicio(srv.id, 'descripcion', e.target.value)
+                        }
+                        className={`w-full px-3 py-1.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                          isDark
+                            ? 'bg-slate-950 border-slate-800 text-slate-300 placeholder-slate-600'
+                            : 'bg-white border-slate-300 text-slate-700 placeholder-slate-400'
+                        }`}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {serviciosLista.length > 0 && (
