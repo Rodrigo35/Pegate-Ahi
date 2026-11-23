@@ -277,14 +277,17 @@ export default function HomeHub() {
             </div>
           </section>
 
-          <footer
+         <footer
             className={`text-center text-xs pt-3 border-t space-y-1 ${
               isDark
                 ? 'text-slate-500 border-slate-800/80'
                 : 'text-slate-400 border-slate-200'
             }`}
           >
-            <p>© {currentYear || 2026} {APP_CONFIG.nombreNegocio || 'Pégate Ahí'} · Barbería</p>
+            <p>
+              © {currentYear || 2026} {APP_CONFIG.nombreNegocio || 'Pégate Ahí'} · Barbería ·{' '}
+              <span className="font-bold">v1.0.0</span>
+            </p>
             <p className="text-[11px] font-semibold">
               Desarrollado por{' '}
               <a
@@ -293,7 +296,7 @@ export default function HomeHub() {
                 rel="noopener noreferrer"
                 className="font-extrabold text-[#2563EB] hover:underline"
               >
-                (@cest.rodrigo.pmv)
+               (@cest.rodrigo.pmv)
               </a>{' '}
               & Max
             </p>
