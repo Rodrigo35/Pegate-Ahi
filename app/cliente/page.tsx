@@ -47,6 +47,7 @@ interface ServicioOption {
   nombre: string;
   precio: number;
   icono: string;
+  descripcion?: string;
 }
 
 const STORAGE_KEY = 'pegate_ahi_registro_activo';
@@ -240,6 +241,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             nombre: s.nombre,
             precio: Number(s.precio),
             icono,
+            descripcion: s.descripcion || '',
           });
         });
 
@@ -1024,6 +1026,24 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               );
             })}
           </div>
+
+          {servicioSeleccionado?.descripcion && (
+            <div
+              className={`mt-2.5 p-3 rounded-xl border text-xs leading-relaxed flex items-start gap-2 ${
+                isDark
+                  ? 'bg-slate-950/90 border-[#2563EB]/40 text-slate-300'
+                  : 'bg-blue-50/70 border-[#2563EB]/30 text-slate-700'
+              }`}
+            >
+              <span className="text-sm shrink-0">ℹ️</span>
+              <div>
+                <span className="font-extrabold text-[#2563EB] block">
+                  {servicioSeleccionado.nombre}:
+                </span>
+                <span>{servicioSeleccionado.descripcion}</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="space-y-3">
