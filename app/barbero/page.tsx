@@ -12,6 +12,13 @@ interface Silla {
   activa: boolean;
 }
 
+interface ServicioConfigItem {
+  id: string;
+  nombre: string;
+  precio: number;
+  descripcion?: string;
+}
+
 interface Turno {
   id: string;
   codigo_ticket: string;
@@ -23,6 +30,7 @@ interface Turno {
   estado: 'espera' | 'atendiendo' | 'finalizado' | 'cancelado' | 'ausente';
   silla_id?: string | null;
   nombre_barbero?: string | null;
+  barbero_preferido?: string | null;
   llamado_en?: string;
   finalizado_en?: string;
   cliente_llego?: boolean;
@@ -38,14 +46,9 @@ interface Cita {
   monto: number;
   fecha: string;
   hora_inicio: string;
+  barbero_preferido?: string | null;
   estado: string;
 }
-
-const SERVICIOS_DEFAULT = [
-  { nombre: 'Corte clásico', precio: 10 },
-  { nombre: 'Corte + barba', precio: 15 },
-  { nombre: 'Barba', precio: 7 },
-];
 
 const PIN_BARBERO = process.env.NEXT_PUBLIC_BARBER_PIN || '1234';
 const AUTH_SESSION_KEY = 'pegate_ahi_barbero_auth';
@@ -223,13 +226,30 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [hoyStr, setHoyStr] = useState<string>('');
   const [ahoraMs, setAhoraMs] = useState<number>(Date.now());
 
-  const [tabActiva, setTabActiva] = useState<'silla' | 'sillas' | 'citas' | 'qr' | 'horarios'>('silla');
+  const [tabActiva, setTabActiva] = useState<
+    'silla' | 'sillas' | 'servicios' | 'citas' | 'qr' | 'horarios'
+  >('silla');
   const [clienteUrl, setClienteUrl] = useState<string>('');
   const [copiadoUrl, setCopiadoUrl] = useState<boolean>(false);
 
   const [diaSeleccionado, setDiaSeleccionado] = useState<number>(1);
   const [bloques, setBloques] = useState<any[]>([]);
   const diasNombres = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+  // Gestión de servicios
+  const [serviciosLista, setServiciosLista] = useState<ServicioConfigItem[]>(
+    APP_CONFIG.servicios.map((s) => ({
+      id: s.id,
+      nombre: s.nombre,
+      precio: s.precio,
+      descripcion: '',
+    }))
+  );
+  const [nuevoSrvNombre, setNuevoSrvNombre] = useState<string>('');
+  const [nuevoSrvPrecio, setNuevoSrvPrecio] = useState<string>('');
+  const [nuevoSrvDesc, setNuevoSrvDesc] = useState<string>('');
+  const [guardandoTarifas, setGuardandoTarifas] = useState<boolean>(false);
+  const [tarifasGuardadasOk, setTarifasGuardadasOk] = useState<boolean>(false);
 
   const [tipoServicio, setTipoServicio] = useState<string>('Corte clásico');
   const [precioServicio, setPrecioServicio] = useState<number>(10);
@@ -266,6 +286,29 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     if (data) setSillas(data as Silla[]);
   };
 
+  const cargarServiciosConfig = async () => {
+    const { data } = await supabase
+      .from('servicios_config')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (data && data.length > 0) {
+      const mapeados: ServicioConfigItem[] = data.map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        precio: Number(s.precio),
+        descripcion: s.descripcion || '',
+      }));
+      setServiciosLista(mapeados);
+
+      const servicioActual = mapeados.find((s) => s.nombre === tipoServicio) || mapeados[0];
+      if (servicioActual) {
+        setTipoServicio(servicioActual.nombre);
+        setPrecioServicio(servicioActual.precio);
+      }
+    }
+  };
+
   useEffect(() => {
     const cargarBloques = async () => {
       const { data } = await supabase
@@ -285,17 +328,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .update({ activo: !estadoActual })
       .eq('id', id);
   };
-
-  useEffect(() => {
-    const cargarPreciosBase = async () => {
-      const { data } = await supabase.from('servicios_config').select('*');
-      if (data && data.length > 0) {
-        const servicioActual = data.find((s) => s.nombre === tipoServicio);
-        if (servicioActual) setPrecioServicio(Number(servicioActual.precio));
-      }
-    };
-    cargarPreciosBase();
-  }, [tipoServicio]);
 
   const fetchTurnosYCitas = async () => {
     const { data: activos } = await supabase
@@ -333,12 +365,20 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
   useEffect(() => {
     fetchSillas();
+    cargarServiciosConfig();
     fetchTurnosYCitas();
 
     const channelSillas = supabase
       .channel('barbero_sillas')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sillas' }, () => {
         fetchSillas();
+      })
+      .subscribe();
+
+    const channelServicios = supabase
+      .channel('barbero_servicios_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'servicios_config' }, () => {
+        cargarServiciosConfig();
       })
       .subscribe();
 
@@ -358,18 +398,97 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
     return () => {
       supabase.removeChannel(channelSillas);
+      supabase.removeChannel(channelServicios);
       supabase.removeChannel(channelTurnos);
       supabase.removeChannel(channelCitas);
     };
   }, []);
+
+  const actualizarCampoServicio = (
+    id: string,
+    campo: 'nombre' | 'precio' | 'descripcion',
+    valor: string
+  ) => {
+    setServiciosLista((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              [campo]: campo === 'precio' ? parseFloat(valor) || 0 : valor,
+            }
+          : s
+      )
+    );
+  };
+
+  const guardarTodasLasTarifas = async () => {
+    setGuardandoTarifas(true);
+    for (const srv of serviciosLista) {
+      if (!srv.nombre.trim()) continue;
+      await supabase
+        .from('servicios_config')
+        .update({
+          nombre: srv.nombre.trim(),
+          precio: srv.precio,
+          descripcion: srv.descripcion?.trim() || null,
+        })
+        .eq('id', srv.id);
+    }
+    await cargarServiciosConfig();
+    setGuardandoTarifas(false);
+    setTarifasGuardadasOk(true);
+    setTimeout(() => setTarifasGuardadasOk(false), 2500);
+  };
+
+  const agregarNuevoServicio = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoSrvNombre.trim() || !nuevoSrvPrecio) return;
+
+    const slugId =
+      nuevoSrvNombre
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_|_$/g, '') +
+      '_' +
+      Math.floor(Math.random() * 900 + 100);
+
+    const { error } = await supabase.from('servicios_config').insert([
+      {
+        id: slugId,
+        nombre: nuevoSrvNombre.trim(),
+        precio: parseFloat(nuevoSrvPrecio) || 0,
+        descripcion: nuevoSrvDesc.trim() || null,
+      },
+    ]);
+
+    if (!error) {
+      setNuevoSrvNombre('');
+      setNuevoSrvPrecio('');
+      setNuevoSrvDesc('');
+      cargarServiciosConfig();
+    }
+  };
+
+  const eliminarServicio = async (id: string, nombre: string) => {
+    if (serviciosLista.length <= 1) {
+      alert('Debe quedar al menos un servicio activo.');
+      return;
+    }
+    const confirmar = confirm(`¿Eliminar el servicio "${nombre}"?`);
+    if (!confirmar) return;
+
+    await supabase.from('servicios_config').delete().eq('id', id);
+    cargarServiciosConfig();
+  };
 
   const agregarSilla = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevoBarberoNombre.trim()) return;
 
     setGuardandoSilla(true);
-    const etiquetaSilla =
-      nuevaSillaNombre.trim() || `Silla ${sillas.length + 1}`;
+    const etiquetaSilla = nuevaSillaNombre.trim() || `Silla ${sillas.length + 1}`;
 
     await supabase.from('sillas').insert([
       {
@@ -474,6 +593,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           tipo_corte: cita.tipo_corte,
           monto: cita.monto,
           modalidad_espera: 'local',
+          barbero_preferido: cita.barbero_preferido || null,
           estado: 'espera',
         },
       ]);
@@ -492,23 +612,13 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnosYCitas();
   };
 
-  const handleTipoChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+  const handleTipoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const seleccionado = e.target.value;
     setNuevoTipoInput(seleccionado);
 
-    const { data } = await supabase
-      .from('servicios_config')
-      .select('precio')
-      .eq('nombre', seleccionado)
-      .maybeSingle();
-
-    if (data) {
-      setNuevoPrecioInput(data.precio.toString());
-    } else {
-      const servicioEncontrado = SERVICIOS_DEFAULT.find((s) => s.nombre === seleccionado);
-      if (servicioEncontrado) {
-        setNuevoPrecioInput(servicioEncontrado.precio.toString());
-      }
+    const servicioEncontrado = serviciosLista.find((s) => s.nombre === seleccionado);
+    if (servicioEncontrado) {
+      setNuevoPrecioInput(servicioEncontrado.precio.toString());
     }
   };
 
@@ -516,14 +626,13 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     const valorPrecio = parseFloat(nuevoPrecioInput);
     if (isNaN(valorPrecio) || valorPrecio < 0) return;
 
-    let servicioId = 'corte_clasico';
-    if (nuevoTipoInput === 'Corte + barba') servicioId = 'corte_barba';
-    if (nuevoTipoInput === 'Barba') servicioId = 'barba';
-
-    await supabase
-      .from('servicios_config')
-      .update({ precio: valorPrecio })
-      .eq('id', servicioId);
+    const servicioEncontrado = serviciosLista.find((s) => s.nombre === nuevoTipoInput);
+    if (servicioEncontrado) {
+      await supabase
+        .from('servicios_config')
+        .update({ precio: valorPrecio })
+        .eq('id', servicioEncontrado.id);
+    }
 
     await supabase
       .from('turnos')
@@ -534,6 +643,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .eq('id', turnoId);
 
     await fetchTurnosYCitas();
+    await cargarServiciosConfig();
     setTipoServicio(nuevoTipoInput);
     setPrecioServicio(valorPrecio);
     setEditandoTurnoId(null);
@@ -695,16 +805,16 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       </div>
 
-      {/* 5 Pestañas: Fila | Sillas | Citas | QR | Horas */}
+      {/* 6 Pestañas: Fila | Sillas | Servicios | Citas | QR | Horas */}
       <div
-        className={`grid grid-cols-5 gap-1 p-1.5 rounded-xl border ${
+        className={`grid grid-cols-6 gap-1 p-1.5 rounded-xl border ${
           isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
         }`}
       >
         <button
           type="button"
           onClick={() => setTabActiva('silla')}
-          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
             tabActiva === 'silla'
               ? 'bg-[#DC2626] text-white shadow-xs'
               : 'text-slate-400 hover:text-slate-200'
@@ -716,7 +826,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         <button
           type="button"
           onClick={() => setTabActiva('sillas')}
-          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
             tabActiva === 'sillas'
               ? 'bg-[#2563EB] text-white shadow-xs'
               : 'text-slate-400 hover:text-slate-200'
@@ -727,8 +837,21 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
         <button
           type="button"
+          onClick={() => setTabActiva('servicios')}
+          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
+            tabActiva === 'servicios'
+              ? 'bg-[#2563EB] text-white shadow-xs'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+          title="Servicios y Tarifas"
+        >
+          ✂️ ({serviciosLista.length})
+        </button>
+
+        <button
+          type="button"
           onClick={() => setTabActiva('citas')}
-          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
             tabActiva === 'citas'
               ? 'bg-[#2563EB] text-white shadow-xs'
               : 'text-slate-400 hover:text-slate-200'
@@ -740,7 +863,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         <button
           type="button"
           onClick={() => setTabActiva('qr')}
-          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
             tabActiva === 'qr'
               ? isDark
                 ? 'bg-white text-slate-950 shadow-xs'
@@ -754,7 +877,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         <button
           type="button"
           onClick={() => setTabActiva('horarios')}
-          className={`py-2 rounded-lg text-[11px] font-black transition-all ${
+          className={`py-2 rounded-lg text-[10px] font-black transition-all ${
             tabActiva === 'horarios'
               ? 'bg-[#1D4ED8] text-white shadow-xs'
               : 'text-slate-400 hover:text-slate-200'
@@ -872,9 +995,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                                     : 'bg-slate-50 border-slate-300 text-slate-900'
                                 }`}
                               >
-                                <option value="Corte clásico">Corte clásico</option>
-                                <option value="Corte + barba">Corte + barba</option>
-                                <option value="Barba">Barba</option>
+                                {serviciosLista.map((srv) => (
+                                  <option key={srv.id} value={srv.nombre}>
+                                    {srv.nombre}
+                                  </option>
+                                ))}
                               </select>
                               <input
                                 type="number"
@@ -1050,6 +1175,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                           {item.tipo_corte} ·{' '}
                           {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 Local'}
                         </p>
+                        {item.barbero_preferido && (
+                          <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
+                            💈 Pidió: {item.barbero_preferido}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1173,7 +1303,150 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* --- TAB 3: AGENDA DE CITAS --- */}
+      {/* --- TAB 3: GESTIÓN DE SERVICIOS Y TARIFAS --- */}
+      {tabActiva === 'servicios' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-sm font-black">✂️ Servicios y Tarifas</span>
+            {tarifasGuardadasOk && (
+              <span className="text-xs font-black text-emerald-400">✅ Guardado</span>
+            )}
+          </div>
+
+          <div className="space-y-2.5 max-h-64 overflow-y-auto pr-0.5">
+            {serviciosLista.map((srv) => (
+              <div
+                key={srv.id}
+                className={`p-3.5 rounded-2xl border space-y-2 ${cardSurface}`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={srv.nombre}
+                    placeholder="Nombre del servicio"
+                    onChange={(e) =>
+                      actualizarCampoServicio(srv.id, 'nombre', e.target.value)
+                    }
+                    className={`flex-1 px-3 py-2 rounded-xl border text-xs font-extrabold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                      isDark
+                        ? 'bg-slate-950 border-slate-800 text-white'
+                        : 'bg-white border-slate-300 text-slate-900'
+                    }`}
+                  />
+                  <div className="relative w-24">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-[#2563EB]">
+                      {APP_CONFIG.monedaSimbolo}
+                    </span>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={srv.precio}
+                      onChange={(e) =>
+                        actualizarCampoServicio(srv.id, 'precio', e.target.value)
+                      }
+                      className={`w-full pl-6 pr-2 py-2 rounded-xl border text-xs font-black focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                        isDark
+                          ? 'bg-slate-950 border-slate-800 text-white'
+                          : 'bg-white border-slate-300 text-slate-900'
+                      }`}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => eliminarServicio(srv.id, srv.nombre)}
+                    title="Eliminar servicio"
+                    className="px-2.5 py-2 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white text-xs font-black transition-all"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <input
+                  type="text"
+                  value={srv.descripcion || ''}
+                  placeholder="Descripción breve (opcional, visible al cliente)"
+                  onChange={(e) =>
+                    actualizarCampoServicio(srv.id, 'descripcion', e.target.value)
+                  }
+                  className={`w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                    isDark
+                      ? 'bg-slate-950 border-slate-800 text-slate-300 placeholder-slate-600'
+                      : 'bg-white border-slate-300 text-slate-700 placeholder-slate-400'
+                  }`}
+                />
+              </div>
+            ))}
+          </div>
+
+          {serviciosLista.length > 0 && (
+            <button
+              type="button"
+              onClick={guardarTodasLasTarifas}
+              disabled={guardandoTarifas}
+              className="w-full py-3.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-xs uppercase tracking-wider shadow-md active:scale-95 disabled:opacity-40"
+            >
+              {guardandoTarifas ? 'Guardando...' : '💾 Guardar Cambios en Servicios'}
+            </button>
+          )}
+
+          {/* Crear nuevo servicio */}
+          <form
+            onSubmit={agregarNuevoServicio}
+            className={`p-3.5 rounded-2xl border border-dashed space-y-2.5 ${cardSurface}`}
+          >
+            <span className="block text-xs font-extrabold uppercase tracking-wider text-slate-400">
+              ➕ Agregar nuevo servicio
+            </span>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                required
+                placeholder="Ej: Corte + Vapor de Ozono"
+                value={nuevoSrvNombre}
+                onChange={(e) => setNuevoSrvNombre(e.target.value)}
+                className={`flex-1 px-3 py-2 rounded-xl border text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
+                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                }`}
+              />
+              <input
+                type="number"
+                step="0.5"
+                required
+                placeholder="Precio"
+                value={nuevoSrvPrecio}
+                onChange={(e) => setNuevoSrvPrecio(e.target.value)}
+                className={`w-24 px-3 py-2 rounded-xl border text-xs font-black focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
+                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+                }`}
+              />
+            </div>
+            <input
+              type="text"
+              placeholder="Descripción del servicio (opcional)"
+              value={nuevoSrvDesc}
+              onChange={(e) => setNuevoSrvDesc(e.target.value)}
+              className={`w-full px-3 py-2 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                isDark
+                  ? 'bg-slate-950 border-slate-800 text-slate-300 placeholder-slate-500'
+                  : 'bg-white border-slate-300 text-slate-700 placeholder-slate-400'
+              }`}
+            />
+            <button
+              type="submit"
+              disabled={!nuevoSrvNombre.trim() || !nuevoSrvPrecio}
+              className="w-full py-3 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-xs uppercase tracking-wider active:scale-95 disabled:opacity-40"
+            >
+              + Añadir Servicio
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* --- TAB 4: AGENDA DE CITAS --- */}
       {tabActiva === 'citas' && (
         <div className="space-y-4 max-h-[480px] overflow-y-auto pr-0.5">
           <div className="space-y-2.5">
@@ -1209,6 +1482,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                           {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
                           {cita.monto}
                         </p>
+                        {cita.barbero_preferido && (
+                          <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
+                            💈 Pidió: {cita.barbero_preferido}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1274,6 +1552,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                           {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
                           {cita.monto}
                         </p>
+                        {cita.barbero_preferido && (
+                          <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
+                            💈 Pidió: {cita.barbero_preferido}
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1305,7 +1588,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* --- TAB 4: QR DEL DÍA --- */}
+      {/* --- TAB 5: QR DEL DÍA --- */}
       {tabActiva === 'qr' && (
         <div className={`p-6 rounded-2xl border text-center space-y-4 ${cardSurface}`}>
           <div>
@@ -1357,7 +1640,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* --- TAB 5: GESTOR DE HORARIOS --- */}
+      {/* --- TAB 6: GESTOR DE HORARIOS --- */}
       {tabActiva === 'horarios' && (
         <div className={`p-5 rounded-2xl border space-y-4 ${cardSurface}`}>
           <div className="flex items-center justify-between">
