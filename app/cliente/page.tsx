@@ -628,7 +628,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return (
       <div className="p-12 text-center space-y-3">
         <div className="w-9 h-9 border-2 border-[#2563EB] border-t-transparent rounded-full animate-spin mx-auto" />
-        <p className="text-sm font-bold text-slate-400">Cargando tu turno...</p>
+        <p className="text-base font-bold text-slate-400">Cargando tu turno...</p>
       </div>
     );
   }
@@ -641,16 +641,16 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           📅
         </div>
         <div>
-          <span className="inline-block px-3 py-1 rounded-full bg-[#2563EB]/15 text-[#2563EB] border border-[#2563EB]/30 text-xs font-extrabold uppercase tracking-wider">
+          <span className="inline-block px-3.5 py-1 rounded-full bg-[#2563EB]/15 text-[#2563EB] border border-[#2563EB]/30 text-sm font-extrabold uppercase tracking-wider">
             Cita Confirmada
           </span>
           <h2 className="text-4xl font-black text-[#DC2626] mt-2">
             {citaConfirmada.codigo_ticket}
           </h2>
-          <p className="text-base font-bold mt-1">{citaConfirmada.nombre_cliente}</p>
+          <p className="text-lg font-bold mt-1">{citaConfirmada.nombre_cliente}</p>
         </div>
 
-        <div className={`p-4 rounded-2xl border text-sm space-y-2.5 text-left ${subCardClass}`}>
+        <div className={`p-4 rounded-2xl border text-base space-y-2.5 text-left ${subCardClass}`}>
           <div className="flex justify-between">
             <span className="text-slate-400">Fecha:</span>
             <span className="font-bold">{citaConfirmada.fecha}</span>
@@ -681,7 +681,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         <button
           type="button"
           onClick={volverAlInicio}
-          className="w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-sm uppercase tracking-wider shadow-md active:scale-95"
+          className="w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base uppercase tracking-wider shadow-md active:scale-95"
         >
           Volver al Inicio
         </button>
@@ -709,20 +709,20 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       <div className="pt-4 space-y-5">
         <div className={`flex items-center justify-between p-4 rounded-2xl border ${subCardClass}`}>
           <div className="flex items-center gap-3.5">
-            <div className="px-3.5 py-2.5 rounded-xl bg-[#DC2626] text-white text-lg font-black shrink-0">
+            <div className="px-4 py-3 rounded-xl bg-[#DC2626] text-white text-xl font-black shrink-0">
               {turno.codigo_ticket}
             </div>
             <div>
-              <span className="text-xs font-bold text-slate-400 block">
+              <span className="text-sm font-bold text-slate-400 block">
                 Tu Turno · {horaActual}
               </span>
-              <h2 className="text-lg font-black leading-tight">{turno.nombre_cliente}</h2>
-              <p className="text-xs font-semibold text-slate-400 mt-0.5">
+              <h2 className="text-xl font-black leading-tight mt-0.5">{turno.nombre_cliente}</h2>
+              <p className="text-sm font-semibold text-slate-400 mt-0.5">
                 {turno.tipo_corte} · {APP_CONFIG.monedaSimbolo}
                 {turno.monto}
               </p>
               {turno.barbero_preferido && (
-                <p className="text-[11px] font-black text-[#2563EB] mt-0.5">
+                <p className="text-sm font-black text-[#2563EB] mt-1">
                   💈 Preferencia: {turno.barbero_preferido}
                 </p>
               )}
@@ -733,12 +733,12 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         {turno.estado === 'espera' && (
           <>
             <div className={`p-4 rounded-2xl border space-y-2.5 ${subCardClass}`}>
-              <div className="flex justify-between text-sm font-extrabold">
+              <div className="flex justify-between text-base font-extrabold">
                 <span>Progreso de fila</span>
                 <span className="text-[#2563EB]">{porcentajeProgreso}%</span>
               </div>
               <div
-                className={`w-full h-3 rounded-full overflow-hidden ${
+                className={`w-full h-3.5 rounded-full overflow-hidden ${
                   isDark ? 'bg-slate-800' : 'bg-slate-200'
                 }`}
               >
@@ -751,28 +751,28 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
             <div className="grid grid-cols-2 gap-3">
               <div className={`p-4 rounded-2xl border text-center ${subCardClass}`}>
-                <span className="text-xs font-bold text-slate-400 uppercase block">
+                <span className="text-sm font-bold text-slate-400 uppercase block">
                   Delante de ti
                 </span>
-                <p className="text-4xl font-black text-[#DC2626] mt-1">{personasAdelante}</p>
-                <span className="text-xs font-semibold text-slate-400">clientes</span>
+                <p className="text-4xl font-black text-[#DC2626] mt-1.5">{personasAdelante}</p>
+                <span className="text-sm font-semibold text-slate-400 mt-1 block">clientes</span>
               </div>
               <div className={`p-4 rounded-2xl border text-center ${subCardClass}`}>
-                <span className="text-xs font-bold text-slate-400 uppercase block">
+                <span className="text-sm font-bold text-slate-400 uppercase block">
                   Espera aprox.
                 </span>
-                <p className="text-4xl font-black text-[#2563EB] mt-1">{tiempoEstimado}m</p>
-                <span className="text-xs font-semibold text-slate-400">
+                <p className="text-4xl font-black text-[#2563EB] mt-1.5">{tiempoEstimado}m</p>
+                <span className="text-sm font-semibold text-slate-400 mt-1 block">
                   {sillasActivasCount > 1 ? `${sillasActivasCount} sillas activas` : 'estimados'}
                 </span>
               </div>
             </div>
 
-            <div className={`p-4 rounded-2xl border space-y-3 ${subCardClass}`}>
-              <div className="flex items-center justify-between text-sm">
+            <div className={`p-4 rounded-2xl border space-y-3.5 ${subCardClass}`}>
+              <div className="flex items-center justify-between text-base">
                 <span className="font-bold text-slate-400">Modalidad:</span>
                 <span
-                  className={`px-3 py-1 rounded-lg font-bold text-xs border ${
+                  className={`px-3.5 py-1.5 rounded-lg font-extrabold text-sm border ${
                     isDark
                       ? 'bg-slate-800 text-white border-slate-700'
                       : 'bg-white text-slate-900 border-slate-300'
@@ -786,7 +786,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <button
                   type="button"
                   onClick={() => cambiarModalidadEnVivo('diligencia')}
-                  className="w-full py-3 rounded-xl border border-[#2563EB] text-[#2563EB] hover:bg-[#2563EB] hover:text-white font-extrabold text-sm transition-all"
+                  className="w-full py-3.5 rounded-xl border-2 border-[#2563EB] text-[#2563EB] hover:bg-[#2563EB] hover:text-white font-extrabold text-base transition-all"
                 >
                   Salgo a diligencia ({APP_CONFIG.tiempoLimiteDiligenciaMin} min tolerancia)
                 </button>
@@ -794,14 +794,14 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <button
                   type="button"
                   onClick={() => cambiarModalidadEnVivo('local')}
-                  className="w-full py-3 rounded-xl bg-[#2563EB] text-white font-extrabold text-sm"
+                  className="w-full py-3.5 rounded-xl bg-[#2563EB] text-white font-extrabold text-base"
                 >
                   Ya regresé a la barbería
                 </button>
               )}
 
               {distanciaKm !== null && turno.modalidad_espera === 'diligencia' && (
-                <p className="text-xs text-center text-slate-400">
+                <p className="text-sm text-center text-slate-400">
                   📍 Distancia al local: <strong>~{distanciaKm} km</strong>
                 </p>
               )}
@@ -810,7 +810,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             <button
               type="button"
               onClick={cancelarTurno}
-              className="w-full py-3.5 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-extrabold text-sm transition-all"
+              className="w-full py-4 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-extrabold text-base transition-all"
             >
               Cancelar mi turno
             </button>
@@ -820,7 +820,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         {turno.estado === 'atendiendo' && (
           <div className={`p-6 rounded-2xl border-2 border-[#DC2626] text-center space-y-4 ${subCardClass}`}>
             {turno.nombre_barbero && (
-              <span className="inline-block px-3.5 py-1 rounded-full bg-[#2563EB] text-white text-xs font-black uppercase tracking-wider">
+              <span className="inline-block px-4 py-1.5 rounded-full bg-[#2563EB] text-white text-sm font-black uppercase tracking-wider">
                 💺 {turno.nombre_barbero}
               </span>
             )}
@@ -829,14 +829,14 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               <>
                 <span className="text-5xl block">💈</span>
                 <h2 className="text-2xl font-black text-[#DC2626]">¡Ya estás reportado!</h2>
-                <p className="text-sm font-semibold">El barbero sabe que estás listo en el local.</p>
+                <p className="text-base font-semibold">El barbero sabe que estás listo en el local.</p>
               </>
             ) : turno.modalidad_espera === 'diligencia' && tiempoRestanteSegundos !== null ? (
               <>
                 <span className="text-5xl block">🏃‍♂️</span>
                 <h2 className="text-xl font-black text-[#DC2626]">¡El barbero te está llamando!</h2>
                 <div className="py-3 px-5 rounded-xl bg-slate-950 border border-slate-800 text-white">
-                  <span className="text-xs uppercase font-bold text-slate-400 block">
+                  <span className="text-sm uppercase font-bold text-slate-400 block">
                     Tiempo para llegar
                   </span>
                   <p className="text-4xl font-black font-mono mt-1 text-[#2563EB]">
@@ -846,7 +846,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <button
                   type="button"
                   onClick={notificarLlegadaPresencial}
-                  className="w-full py-4 rounded-xl bg-[#DC2626] text-white font-black text-sm uppercase tracking-wider shadow-md active:scale-95"
+                  className="w-full py-4 rounded-xl bg-[#DC2626] text-white font-black text-base uppercase tracking-wider shadow-md active:scale-95"
                 >
                   📍 ¡Ya llegué al local!
                 </button>
@@ -855,7 +855,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               <>
                 <span className="text-5xl block">✂️</span>
                 <h2 className="text-2xl font-black text-[#DC2626]">¡Es tu turno!</h2>
-                <p className="text-sm font-semibold">
+                <p className="text-base font-semibold">
                   {turno.nombre_barbero
                     ? `Pasa adelante a ${turno.nombre_barbero}.`
                     : 'Pasa adelante, tu silla está lista.'}
@@ -874,7 +874,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             <button
               type="button"
               onClick={volverAlInicio}
-              className="w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-sm uppercase tracking-wider active:scale-95"
+              className="w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base uppercase tracking-wider active:scale-95"
             >
               Solicitar nuevo turno
             </button>
@@ -930,10 +930,10 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       {sillasActivas.length > 0 && (
         <div className={`p-3.5 rounded-xl border space-y-2.5 ${subCardClass}`}>
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
               💈 Barberos de turno ({sillasActivas.length})
             </span>
-            <span className="text-[11px] font-bold text-[#2563EB]">
+            <span className="text-xs font-bold text-[#2563EB]">
               {barberoPreferido ? 'Elegido' : 'Toca para elegir'}
             </span>
           </div>
@@ -942,7 +942,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             <button
               type="button"
               onClick={() => setBarberoPreferido('')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black border transition-all ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-black border transition-all ${
                 barberoPreferido === ''
                   ? 'bg-[#2563EB] border-[#2563EB] text-white'
                   : isDark
@@ -961,7 +961,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   key={s.id}
                   type="button"
                   onClick={() => setBarberoPreferido(etiqueta)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black border transition-all ${
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-black border transition-all ${
                     isSelected
                       ? 'bg-[#2563EB] border-[#2563EB] text-white'
                       : isDark
@@ -972,7 +972,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
                   <span>{s.nombre_barbero}</span>
                   <span
-                    className={`text-[10px] font-bold ${
+                    className={`text-xs font-bold ${
                       isSelected ? 'text-white/90' : 'text-[#2563EB]'
                     }`}
                   >
@@ -990,7 +990,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         className="space-y-5"
       >
         <div>
-          <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">
+          <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-2">
             1. Selecciona tu servicio
           </label>
           <div className="grid grid-cols-3 gap-2.5">
@@ -1010,9 +1010,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   }`}
                 >
                   <span className="text-2xl mb-1">{srv.icono}</span>
-                  <span className="text-xs font-extrabold leading-snug">{srv.nombre}</span>
+                  <span className="text-sm font-extrabold leading-snug">{srv.nombre}</span>
                   <span
-                    className={`text-sm font-black mt-0.5 ${
+                    className={`text-base font-black mt-0.5 ${
                       selected ? 'text-white' : 'text-[#2563EB]'
                     }`}
                   >
@@ -1026,7 +1026,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         </div>
 
         <div className="space-y-3">
-          <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-400">
+          <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400">
             2. Tus datos de contacto
           </label>
           <input
@@ -1035,7 +1035,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             placeholder="Tu nombre completo *"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className={`w-full px-4 py-3 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+            className={`w-full px-4 py-3 rounded-xl border text-base font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
               isDark
                 ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
                 : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
@@ -1047,7 +1047,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             placeholder="WhatsApp (Ej: 04141234567) *"
             value={telefono}
             onChange={(e) => setTelefono(e.target.value)}
-            className={`w-full px-4 py-3 rounded-xl border text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+            className={`w-full px-4 py-3 rounded-xl border text-base font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
               isDark
                 ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
                 : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
@@ -1057,7 +1057,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
         {modoRegistro === 'cola' && (
           <div>
-            <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">
+            <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-2">
               3. ¿Dónde esperarás tu turno?
             </label>
             <div className="grid grid-cols-2 gap-3">
@@ -1072,8 +1072,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                     : 'bg-slate-50 border-slate-200 text-slate-700'
                 }`}
               >
-                <p className="text-sm font-black">💈 En el Local</p>
-                <p className="text-xs opacity-80 mt-0.5">Espero en barbería</p>
+                <p className="text-base font-black">💈 En el Local</p>
+                <p className="text-sm opacity-80 mt-0.5">Espero en barbería</p>
               </button>
 
               <button
@@ -1090,8 +1090,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                     : 'bg-slate-50 border-slate-200 text-slate-700'
                 }`}
               >
-                <p className="text-sm font-black">🏃‍♂️ Diligencia</p>
-                <p className="text-xs opacity-80 mt-0.5">
+                <p className="text-base font-black">🏃‍♂️ Diligencia</p>
+                <p className="text-sm opacity-80 mt-0.5">
                   {APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)
                 </p>
               </button>
@@ -1102,7 +1102,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         {modoRegistro === 'cita' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">
+              <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-2">
                 3. Elige el día
               </label>
               <div className="grid grid-cols-6 gap-1.5 text-center">
@@ -1125,7 +1125,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                       }`}
                     >
                       <span className="text-xs font-bold">{d.diaCorto}</span>
-                      <span className="text-sm font-black mt-0.5">{d.numDia}</span>
+                      <span className="text-base font-black mt-0.5">{d.numDia}</span>
                     </button>
                   );
                 })}
@@ -1133,11 +1133,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             </div>
 
             <div>
-              <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-2">
+              <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-2">
                 4. Elige la hora disponible
               </label>
               {bloquesDisponibles.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-4 border border-dashed border-slate-700 rounded-xl">
+                <p className="text-sm text-slate-400 text-center py-4 border border-dashed border-slate-700 rounded-xl">
                   Sin horarios disponibles para este día.
                 </p>
               ) : (
@@ -1150,7 +1150,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                         key={b.id}
                         type="button"
                         onClick={() => setHoraCitaSeleccionada(b.hora_inicio)}
-                        className={`py-2.5 rounded-xl border text-sm font-black transition-all flex flex-col items-center ${
+                        className={`py-2.5 rounded-xl border text-base font-black transition-all flex flex-col items-center ${
                           selected
                             ? 'bg-[#DC2626] border-[#DC2626] text-white'
                             : isDark
@@ -1161,7 +1161,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                         <span>{horaText}</span>
                         {sillasActivasCount > 1 && (
                           <span
-                            className={`text-[10px] font-bold ${
+                            className={`text-xs font-bold ${
                               selected ? 'text-white/90' : 'text-[#2563EB]'
                             }`}
                           >
@@ -1228,7 +1228,7 @@ export default function ClienteView() {
           >
             <Link
               href="/"
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all active:scale-95 ${
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-extrabold transition-all active:scale-95 ${
                 isDark
                   ? 'bg-slate-900 text-white border border-slate-800 hover:border-[#2563EB]'
                   : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
@@ -1238,13 +1238,13 @@ export default function ClienteView() {
             </Link>
 
             <div
-              className={`flex items-center gap-1 p-1 rounded-full border text-xs font-bold ${
+              className={`flex items-center gap-1 p-1 rounded-full border text-sm font-bold ${
                 isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
               }`}
             >
               <button
                 onClick={() => setModoTema('light')}
-                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'light' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400'
                 }`}
               >
@@ -1252,7 +1252,7 @@ export default function ClienteView() {
               </button>
               <button
                 onClick={() => setModoTema('dark')}
-                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'dark' ? 'bg-[#2563EB] text-white shadow-xs' : 'text-slate-400'
                 }`}
               >
@@ -1260,7 +1260,7 @@ export default function ClienteView() {
               </button>
               <button
                 onClick={() => setModoTema('auto')}
-                className={`px-2.5 h-7 rounded-full transition-all ${
+                className={`px-3 h-8 rounded-full transition-all ${
                   modoTema === 'auto' ? 'bg-[#DC2626] text-white shadow-xs' : 'text-slate-400'
                 }`}
               >
@@ -1269,7 +1269,7 @@ export default function ClienteView() {
             </div>
           </div>
 
-          <Suspense fallback={<p className="text-center text-sm py-10">Cargando...</p>}>
+          <Suspense fallback={<p className="text-center text-base py-10">Cargando...</p>}>
             <ClienteContent isDark={isDark} />
           </Suspense>
         </div>
