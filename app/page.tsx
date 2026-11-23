@@ -5,15 +5,26 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { APP_CONFIG } from '../lib/config';
 
+const THEME_STORAGE_KEY = 'pegate_ahi_tema';
+
 export default function HomeHub() {
   const router = useRouter();
   const [clientUrl, setClientUrl] = useState<string>('');
   const [currentYear, setCurrentYear] = useState<number | null>(null);
-  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('dark');
-  const [esNoche, setEsNoche] = useState<boolean>(true);
+  const [modoTema, setModoTema] = useState<'auto' | 'light' | 'dark'>('auto');
+  const [esNoche, setEsNoche] = useState<boolean>(false);
   const [presionandoBarber, setPresionandoBarber] = useState<boolean>(false);
 
   const timerAccesoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cambiarTema = (nuevoModo: 'auto' | 'light' | 'dark') => {
+    setModoTema(nuevoModo);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, nuevoModo);
+    } catch {
+      // Ignorar si localStorage está bloqueado
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -21,10 +32,25 @@ export default function HomeHub() {
     }
     setCurrentYear(new Date().getFullYear());
 
-    const hora = new Date().getHours();
-    setEsNoche(hora >= 19 || hora < 6);
+    try {
+      const guardado = localStorage.getItem(THEME_STORAGE_KEY) as 'auto' | 'light' | 'dark' | null;
+      if (guardado === 'auto' || guardado === 'light' || guardado === 'dark') {
+        setModoTema(guardado);
+      }
+    } catch {
+      // Ignorar
+    }
+
+    const verificarHora = () => {
+      const hora = new Date().getHours();
+      setEsNoche(hora >= 19 || hora < 6);
+    };
+
+    verificarHora();
+    const intervalHora = setInterval(verificarHora, 60000);
 
     return () => {
+      clearInterval(intervalHora);
       if (timerAccesoRef.current) clearTimeout(timerAccesoRef.current);
     };
   }, []);
@@ -97,7 +123,7 @@ export default function HomeHub() {
             >
               <button
                 type="button"
-                onClick={() => setModoTema('light')}
+                onClick={() => cambiarTema('light')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'light'
                     ? 'bg-white text-slate-900 shadow-xs'
@@ -109,7 +135,7 @@ export default function HomeHub() {
               </button>
               <button
                 type="button"
-                onClick={() => setModoTema('dark')}
+                onClick={() => cambiarTema('dark')}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'dark'
                     ? 'bg-[#2563EB] text-white shadow-xs'
@@ -121,7 +147,7 @@ export default function HomeHub() {
               </button>
               <button
                 type="button"
-                onClick={() => setModoTema('auto')}
+                onClick={() => cambiarTema('auto')}
                 className={`px-2.5 h-7 rounded-full transition-all ${
                   modoTema === 'auto'
                     ? 'bg-[#DC2626] text-white shadow-xs'
