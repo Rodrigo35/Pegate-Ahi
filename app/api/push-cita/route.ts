@@ -11,12 +11,12 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const record = body.record || body;
+    const esTurnoFila = record.tipo === 'turno' || (!record.hora_inicio && record.codigo_ticket);
 
-    if (!record?.nombre_cliente || !record?.hora_inicio) {
+    if (!record?.nombre_cliente) {
       return NextResponse.json({ error: 'Datos incompletos' }, { status: 400 });
     }
 
-    // Configurar VAPID
     const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     const privateKey = process.env.VAPID_PRIVATE_KEY;
     const subject = process.env.VAPID_SUBJECT || 'mailto:rodrigo@pegateahi.app';
@@ -27,7 +27,6 @@ export async function POST(req: Request) {
 
     webpush.setVapidDetails(subject, publicKey, privateKey);
 
-    // Leer todos los dispositivos suscritos
     const { data: subs, error } = await supabaseAdmin
       .from('push_subscriptions')
       .select('id, endpoint, p256dh, auth');
@@ -40,11 +39,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, enviados: 0 });
     }
 
-    const horaCorta = String(record.hora_inicio).substring(0, 5);
     const barberoTexto = record.barbero_preferido ? ` con ${record.barbero_preferido}` : '';
+    let title = '📅 Nueva Cita · Pégate Ahí';
+    let messageBody = '';
+
+    if (esTurnoFila) {
+      title = '💈 Nuevo Turno Hoy · Pégate Ahí';
+      const ticket = record.codigo_ticket ? ` (${record.codigo_ticket})` : '';
+      const modalidad = record.modalidad_espera === 'diligencia' ? ' · Diligencia' : ' · En local';
+      messageBody = `${record.nombre_cliente}${ticket} entró a la fila para ${record.tipo_corte || 'corte'}${barberoTexto}${modalidad}`;
+    } else {
+      const horaCorta = String(record.hora_inicio || '').substring(0, 5);
+      messageBody = `${record.nombre_cliente} reservó ${record.tipo_corte || 'servicio'}${barberoTexto} para el ${record.fecha} a las ${horaCorta}`;
+    }
+
     const payload = JSON.stringify({
-      title: '💈 Nueva Cita · Pégate Ahí',
-      body: `${record.nombre_cliente} reservó ${record.tipo_corte || 'servicio'}${barberoTexto} para el ${record.fecha} a las ${horaCorta}`,
+      title,
+      body: messageBody,
       url: '/barbero',
     });
 
@@ -60,7 +71,6 @@ export async function POST(req: Request) {
         );
         enviados++;
       } catch (err: any) {
-        // Si la suscripción expiró o fue revocada (410/404), limpiarla
         if (err?.statusCode === 410 || err?.statusCode === 404) {
           await supabaseAdmin.from('push_subscriptions').delete().eq('id', sub.id);
         }
