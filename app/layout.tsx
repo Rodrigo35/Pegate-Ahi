@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { APP_CONFIG } from "../lib/config";
@@ -15,11 +15,21 @@ const geistMono = Geist_Mono({
 
 const nombreNegocio = APP_CONFIG.nombreNegocio || "Pégate Ahí";
 
+export const viewport: Viewport = {
+  themeColor: "#2563EB",
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://pegate-ahi.vercel.app"),
+  manifest: "/manifest.json",
   title: `${nombreNegocio} · Turnos en Vivo y Citas`,
   description:
     "Toma tu turno en la fila del día o agenda tu cita en la barbería sin esperas.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: nombreNegocio,
+  },
   openGraph: {
     title: `${nombreNegocio} · Turnos en Vivo y Citas`,
     description:
