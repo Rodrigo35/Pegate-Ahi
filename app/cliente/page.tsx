@@ -124,7 +124,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
   const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
   const [horaLlegadaLocal, setHoraLlegadaLocal] = useState<string>('ahora');
-  const bloquesHoy = generarBloquesHoy();
+  const [horasOcupadasHoy, setHorasOcupadasHoy] = useState<string[]>([]);
 
   const [registrando, setRegistrando] = useState(false);
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
@@ -144,6 +144,48 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [horaActual, setHoraActual] = useState<string>('');
   const [tiempoRestanteSegundos, setTiempoRestanteSegundos] = useState<number | null>(null);
   const [distanciaKm, setDistanciaKm] = useState<number | null>(null);
+
+  const cargarHorasOcupadasHoy = async () => {
+    const inicioDia = `${getHoyLocal()}T00:00:00`;
+    const { data } = await supabase
+      .from('turnos')
+      .select('nombre_cliente')
+      .in('estado', ['espera', 'atendiendo'])
+      .gte('creado_en', inicioDia);
+
+    if (data) {
+      const ocupadas: string[] = [];
+      data.forEach((t) => {
+        const match = t.nombre_cliente?.match(/· 🕒 (.+)$/);
+        if (match && match[1]) {
+          ocupadas.push(match[1].trim());
+        }
+      });
+      setHorasOcupadasHoy(ocupadas);
+      setHoraLlegadaLocal((prev) =>
+        prev !== 'ahora' && ocupadas.includes(prev) ? 'ahora' : prev
+      );
+    }
+  };
+
+  useEffect(() => {
+    cargarHorasOcupadasHoy();
+
+    const channelHorasHoy = supabase
+      .channel('cliente_horas_ocupadas_hoy')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {
+        cargarHorasOcupadasHoy();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channelHorasHoy);
+    };
+  }, []);
+
+  const bloquesHoy = generarBloquesHoy().filter(
+    (b) => !horasOcupadasHoy.includes(b.etiqueta)
+  );
 
   const guardarPersistencia = (tipo: 'turno' | 'cita', codigo: string) => {
     try {
@@ -554,13 +596,32 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     if (!nombre.trim() || !telefono.trim()) return;
 
     setRegistrando(true);
-    const numero = Math.floor(Math.random() * 900) + 100;
-    const codigo = `B-${numero}`;
 
     const etiquetaHora =
       modalidadEspera === 'local' && horaLlegadaLocal !== 'ahora'
-        ? bloquesHoy.find((b) => b.valor === horaLlegadaLocal)?.etiqueta || horaLlegadaLocal
+        ? horaLlegadaLocal
         : '';
+
+    if (etiquetaHora) {
+      const inicioDia = `${getHoyLocal()}T00:00:00`;
+      const { data: yaExiste } = await supabase
+        .from('turnos')
+        .select('id')
+        .in('estado', ['espera', 'atendiendo'])
+        .gte('creado_en', inicioDia)
+        .ilike('nombre_cliente', `%· 🕒 ${etiquetaHora}%`)
+        .limit(1);
+
+      if (yaExiste && yaExiste.length > 0) {
+        alert(`Lo sentimos, la hora ${etiquetaHora} acaba de ser tomada por otro cliente. Elige otro horario.`);
+        await cargarHorasOcupadasHoy();
+        setRegistrando(false);
+        return;
+      }
+    }
+
+    const numero = Math.floor(Math.random() * 900) + 100;
+    const codigo = `B-${numero}`;
 
     const nombreConHora = etiquetaHora
       ? `${nombre.trim()} · 🕒 ${etiquetaHora}`
@@ -1238,12 +1299,12 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   </button>
 
                   {bloquesHoy.map((b) => {
-                    const selected = horaLlegadaLocal === b.valor;
+                    const selected = horaLlegadaLocal === b.etiqueta;
                     return (
                       <button
                         key={b.valor}
                         type="button"
-                        onClick={() => setHoraLlegadaLocal(b.valor)}
+                        onClick={() => setHoraLlegadaLocal(b.etiqueta)}
                         className={`py-2 px-2 rounded-lg border text-xs font-black transition-all ${
                           selected
                             ? 'bg-[#DC2626] border-[#DC2626] text-white'
