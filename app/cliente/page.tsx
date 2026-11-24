@@ -70,6 +70,37 @@ const getHoyLocal = () => {
   return `${year}-${month}-${day}`;
 };
 
+const generarBloquesHoy = () => {
+  const ahora = new Date();
+  const minutosActuales = ahora.getHours() * 60 + ahora.getMinutes();
+  const bloques: { valor: string; etiqueta: string }[] = [];
+
+  for (let h = 9; h <= 20; h++) {
+    const mins00 = h * 60;
+    if (mins00 > minutosActuales) {
+      const h12 = h > 12 ? h - 12 : h;
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      bloques.push({
+        valor: `${String(h).padStart(2, '0')}:00`,
+        etiqueta: `${h12}:00 ${ampm}`,
+      });
+    }
+
+    if (h < 20) {
+      const mins30 = h * 60 + 30;
+      if (mins30 > minutosActuales) {
+        const h12 = h > 12 ? h - 12 : h;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        bloques.push({
+          valor: `${String(h).padStart(2, '0')}:30`,
+          etiqueta: `${h12}:30 ${ampm}`,
+        });
+      }
+    }
+  }
+  return bloques;
+};
+
 function ClienteContent({ isDark }: { isDark: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -92,6 +123,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const sillasActivasCount = Math.max(1, sillasActivas.length);
 
   const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
+  const [horaLlegadaLocal, setHoraLlegadaLocal] = useState<string>('ahora');
+  const bloquesHoy = generarBloquesHoy();
+
   const [registrando, setRegistrando] = useState(false);
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
   const [personasAdelante, setPersonasAdelante] = useState<number>(0);
@@ -523,12 +557,21 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     const numero = Math.floor(Math.random() * 900) + 100;
     const codigo = `B-${numero}`;
 
+    const etiquetaHora =
+      modalidadEspera === 'local' && horaLlegadaLocal !== 'ahora'
+        ? bloquesHoy.find((b) => b.valor === horaLlegadaLocal)?.etiqueta || horaLlegadaLocal
+        : '';
+
+    const nombreConHora = etiquetaHora
+      ? `${nombre.trim()} · 🕒 ${etiquetaHora}`
+      : nombre.trim();
+
     const { data, error } = await supabase
       .from('turnos')
       .insert([
         {
           codigo_ticket: codigo,
-          nombre_cliente: nombre,
+          nombre_cliente: nombreConHora,
           cliente_telefono: telefono,
           tipo_corte: servicioSeleccionado.nombre,
           monto: servicioSeleccionado.precio,
@@ -648,6 +691,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setTelefono('');
     setHoraCitaSeleccionada('');
     setBarberoPreferido('');
+    setHoraLlegadaLocal('ahora');
   };
 
   const cancelarTurno = async () => {
@@ -823,7 +867,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                       : 'bg-white text-slate-900 border-slate-300'
                   }`}
                 >
-                  {turno.modalidad_espera === 'diligencia' ? '🏃‍♂️ Diligencia' : '💈 En el local'}
+                  {turno.modalidad_espera === 'diligencia' ? '🏃♂️ Diligencia' : '💈 En el local'}
                 </span>
               </div>
 
@@ -878,7 +922,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               </>
             ) : turno.modalidad_espera === 'diligencia' && tiempoRestanteSegundos !== null ? (
               <>
-                <span className="text-5xl block">🏃‍♂️</span>
+                <span className="text-5xl block">🏃♂️</span>
                 <h2 className="text-xl font-black text-[#DC2626]">¡El barbero te está llamando!</h2>
                 <div className="py-3 px-5 rounded-xl bg-slate-950 border border-slate-800 text-white">
                   <span className="text-sm uppercase font-bold text-slate-400 block">
@@ -1119,8 +1163,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         </div>
 
         {modoRegistro === 'cola' && (
-          <div>
-            <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-2">
+          <div className="space-y-3">
+            <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400">
               3. ¿Dónde esperarás tu turno?
             </label>
             <div className="grid grid-cols-2 gap-3">
@@ -1136,13 +1180,14 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 }`}
               >
                 <p className="text-base font-black">💈 En el Local</p>
-                <p className="text-sm opacity-80 mt-0.5">Espero en barbería</p>
+                <p className="text-sm opacity-80 mt-0.5">Elige hora de llegada</p>
               </button>
 
               <button
                 type="button"
                 onClick={() => {
                   setModalidadEspera('diligencia');
+                  setHoraLlegadaLocal('ahora');
                   obtenerUbicacionGPS();
                 }}
                 className={`p-3.5 rounded-xl border-2 text-left transition-all ${
@@ -1153,12 +1198,67 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                     : 'bg-slate-50 border-slate-200 text-slate-700'
                 }`}
               >
-                <p className="text-base font-black">🏃‍♂️ Diligencia</p>
+                <p className="text-base font-black">🏃♂️ Diligencia</p>
                 <p className="text-sm opacity-80 mt-0.5">
                   {APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)
                 </p>
               </button>
             </div>
+
+            {modalidadEspera === 'local' && (
+              <div
+                className={`p-3 rounded-xl border space-y-2 ${
+                  isDark
+                    ? 'bg-slate-950/90 border-slate-800'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                    🕒 ¿A qué hora vienes al local?
+                  </span>
+                  <span className="text-xs font-bold text-[#2563EB]">
+                    9:00 AM – 8:00 PM
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 max-h-36 overflow-y-auto pr-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setHoraLlegadaLocal('ahora')}
+                    className={`py-2 px-2 rounded-lg border text-xs font-black transition-all ${
+                      horaLlegadaLocal === 'ahora'
+                        ? 'bg-[#DC2626] border-[#DC2626] text-white'
+                        : isDark
+                        ? 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-600'
+                        : 'bg-white border-slate-300 text-slate-800 hover:border-slate-400'
+                    }`}
+                  >
+                    ⚡ Ahora mismo
+                  </button>
+
+                  {bloquesHoy.map((b) => {
+                    const selected = horaLlegadaLocal === b.valor;
+                    return (
+                      <button
+                        key={b.valor}
+                        type="button"
+                        onClick={() => setHoraLlegadaLocal(b.valor)}
+                        className={`py-2 px-2 rounded-lg border text-xs font-black transition-all ${
+                          selected
+                            ? 'bg-[#DC2626] border-[#DC2626] text-white'
+                            : isDark
+                            ? 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-600'
+                            : 'bg-white border-slate-300 text-slate-800 hover:border-slate-400'
+                        }`}
+                      >
+                        {b.etiqueta}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
