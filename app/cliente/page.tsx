@@ -541,6 +541,19 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       .single();
 
     if (!error && data) {
+      fetch('/api/push-cita', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'turno',
+          codigo_ticket: data.codigo_ticket,
+          nombre_cliente: data.nombre_cliente,
+          tipo_corte: data.tipo_corte,
+          modalidad_espera: data.modalidad_espera,
+          barbero_preferido: data.barbero_preferido,
+        }),
+      }).catch(() => {});
+
       setTurno(data as TurnoCliente);
       guardarPersistencia('turno', data.codigo_ticket);
       cargarTurnoYPosicion(data.codigo_ticket);
@@ -582,6 +595,20 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       .single();
 
     if (!error && data) {
+      fetch('/api/push-cita', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: 'cita',
+          codigo_ticket: data.codigo_ticket,
+          nombre_cliente: data.nombre_cliente,
+          tipo_corte: data.tipo_corte,
+          fecha: data.fecha,
+          hora_inicio: data.hora_inicio,
+          barbero_preferido: data.barbero_preferido,
+        }),
+      }).catch(() => {});
+
       setCitaConfirmada(data as CitaCliente);
       guardarPersistencia('cita', data.codigo_ticket);
       cargarHorarios();
