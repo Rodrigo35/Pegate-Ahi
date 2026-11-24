@@ -242,6 +242,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   // Estados Web Push
   const [pushEstado, setPushEstado] = useState<'verificando' | 'inactivo' | 'activo' | 'no_soportado'>('verificando');
   const [activandoPush, setActivandoPush] = useState<boolean>(false);
+  const [mensajePush, setMensajePush] = useState<string | null>(null);
 
   const [tabActiva, setTabActiva] = useState<
     'silla' | 'sillas' | 'servicios' | 'citas' | 'qr' | 'horarios'
@@ -305,7 +306,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     verificarPush();
   }, []);
 
-  const activarNotificacionesPush = async () => {
+  const activarNotificacionesPush = async (forzarRenovacion = false) => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       alert('Este navegador no soporta notificaciones push. En iPhone recuerda añadir la app a la pantalla de inicio primero.');
       return;
@@ -317,6 +318,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     }
 
     setActivandoPush(true);
+    setMensajePush(null);
+
     try {
       const permiso = await Notification.requestPermission();
       if (permiso !== 'granted') {
@@ -326,9 +329,18 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       }
 
       const reg = await navigator.serviceWorker.register('/sw.js');
+      await reg.update();
       await navigator.serviceWorker.ready;
 
       let sub = await reg.pushManager.getSubscription();
+
+      if (forzarRenovacion && sub) {
+        const oldEndpoint = sub.endpoint;
+        await sub.unsubscribe();
+        await supabase.from('push_subscriptions').delete().eq('endpoint', oldEndpoint);
+        sub = null;
+      }
+
       if (!sub) {
         sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
@@ -353,11 +365,39 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           alert('No se pudo guardar la suscripción en la base de datos.');
         } else {
           setPushEstado('activo');
+          if (forzarRenovacion) {
+            setMensajePush('✅ Dispositivo re-sincronizado');
+            setTimeout(() => setMensajePush(null), 2500);
+          }
         }
       }
     } catch (err) {
       console.error('Error al activar Push:', err);
-      alert('Ocurrió un error al activar las notificaciones.');
+      alert('Ocurrió un error al sincronizar las notificaciones.');
+    } finally {
+      setActivandoPush(false);
+    }
+  };
+
+  const desactivarNotificacionesPush = async () => {
+    setActivandoPush(true);
+    setMensajePush(null);
+    try {
+      if ('serviceWorker' in navigator) {
+        const reg =
+          (await navigator.serviceWorker.getRegistration('/sw.js')) ||
+          (await navigator.serviceWorker.ready);
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          const endpointActual = sub.endpoint;
+          await sub.unsubscribe();
+          await supabase.from('push_subscriptions').delete().eq('endpoint', endpointActual);
+        }
+      }
+      setPushEstado('inactivo');
+    } catch (err) {
+      console.error('Error al desactivar Push:', err);
+      alert('No se pudo desactivar la suscripción.');
     } finally {
       setActivandoPush(false);
     }
@@ -916,7 +956,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       {pushEstado === 'inactivo' && (
         <button
           type="button"
-          onClick={activarNotificacionesPush}
+          onClick={() => activarNotificacionesPush(false)}
           disabled={activandoPush}
           className="w-full py-2.5 px-3 rounded-xl bg-[#2563EB]/15 hover:bg-[#2563EB]/25 border border-[#2563EB]/50 text-[#2563EB] font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
         >
@@ -931,20 +971,35 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
       {pushEstado === 'activo' && (
         <div
-          className={`py-1.5 px-3 rounded-xl border flex items-center justify-between text-[11px] font-bold ${
+          className={`py-2 px-3 rounded-xl border flex items-center justify-between gap-2 text-[11px] font-bold ${
             isDark
               ? 'bg-emerald-950/30 border-emerald-800/50 text-emerald-400'
               : 'bg-emerald-50 border-emerald-200 text-emerald-700'
           }`}
         >
-          <span>🔔 Alertas push activas en este dispositivo</span>
-          <button
-            type="button"
-            onClick={activarNotificacionesPush}
-            className="underline font-black ml-2"
-          >
-            Re-sincronizar
-          </button>
+          <span className="truncate">
+            {activandoPush
+              ? '⏳ Procesando...'
+              : mensajePush || '🔔 Alertas activas en este equipo'}
+          </span>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              type="button"
+              disabled={activandoPush}
+              onClick={() => activarNotificacionesPush(true)}
+              className="underline font-black hover:opacity-80 disabled:opacity-40"
+            >
+              Re-sincronizar
+            </button>
+            <button
+              type="button"
+              disabled={activandoPush}
+              onClick={desactivarNotificacionesPush}
+              className="px-2 py-0.5 rounded-md bg-[#DC2626]/20 border border-[#DC2626]/40 text-[#DC2626] font-black hover:bg-[#DC2626] hover:text-white transition-all disabled:opacity-40"
+            >
+              Desactivar
+            </button>
+          </div>
         </div>
       )}
 
