@@ -4,75 +4,71 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 export async function POST(req: Request) {
   try {
-    const authHeader = req.headers.get('x-webhook-secret');
-    if (
-      process.env.PUSH_WEBHOOK_SECRET &&
-      authHeader !== process.env.PUSH_WEBHOOK_SECRET
-    ) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    const body = await req.json();
+    const record = body.record || body;
+
+    if (!record?.nombre_cliente || !record?.hora_inicio) {
+      return NextResponse.json({ error: 'Datos incompletos' }, { status: 400 });
     }
 
-    webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT || 'mailto:admin@pegateahi.app',
-      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-      process.env.VAPID_PRIVATE_KEY!
-    );
+    // Configurar VAPID
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    const privateKey = process.env.VAPID_PRIVATE_KEY;
+    const subject = process.env.VAPID_SUBJECT || 'mailto:rodrigo@pegateahi.app';
 
-    const body = await req.json();
-    // Soporta tanto Database Webhook de Supabase (body.record) como llamada directa
-    const cita = body.record || body;
+    if (!publicKey || !privateKey) {
+      return NextResponse.json({ error: 'Faltan llaves VAPID en Vercel' }, { status: 500 });
+    }
 
-    const horaCorta = cita?.hora_inicio ? cita.hora_inicio.substring(0, 5) : '';
-    const fechaCorta = cita?.fecha ? cita.fecha.slice(5) : '';
+    webpush.setVapidDetails(subject, publicKey, privateKey);
 
-    const payload = JSON.stringify({
-      title: '💈 Nueva Cita · Pégate Ahí',
-      body: `${cita.nombre_cliente || 'Un cliente'} agendó ${cita.tipo_corte || 'servicio'} (${fechaCorta} · ${horaCorta})`,
-      url: '/barbero',
-    });
-
-    const { data: suscripciones } = await supabaseAdmin
+    // Leer todos los dispositivos suscritos
+    const { data: subs, error } = await supabaseAdmin
       .from('push_subscriptions')
-      .select('*');
+      .select('id, endpoint, p256dh, auth');
 
-    if (!suscripciones || suscripciones.length === 0) {
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (!subs || subs.length === 0) {
       return NextResponse.json({ ok: true, enviados: 0 });
     }
 
+    const horaCorta = String(record.hora_inicio).substring(0, 5);
+    const barberoTexto = record.barbero_preferido ? ` con ${record.barbero_preferido}` : '';
+    const payload = JSON.stringify({
+      title: '💈 Nueva Cita · Pégate Ahí',
+      body: `${record.nombre_cliente} reservó ${record.tipo_corte || 'servicio'}${barberoTexto} para el ${record.fecha} a las ${horaCorta}`,
+      url: '/barbero',
+    });
+
     let enviados = 0;
-    for (const sub of suscripciones) {
+    for (const sub of subs) {
       try {
         await webpush.sendNotification(
           {
             endpoint: sub.endpoint,
-            keys: {
-              p256dh: sub.p256dh,
-              auth: sub.auth,
-            },
+            keys: { p256dh: sub.p256dh, auth: sub.auth },
           },
           payload
         );
         enviados++;
-      } catch (err: unknown) {
-        const statusCode = (err as { statusCode?: number })?.statusCode;
-        // Eliminar suscripción si expiró o fue revocada
-        if (statusCode === 404 || statusCode === 410) {
-          await supabaseAdmin
-            .from('push_subscriptions')
-            .delete()
-            .eq('id', sub.id);
+      } catch (err: any) {
+        // Si la suscripción expiró o fue revocada (410/404), limpiarla
+        if (err?.statusCode === 410 || err?.statusCode === 404) {
+          await supabaseAdmin.from('push_subscriptions').delete().eq('id', sub.id);
         }
       }
     }
 
     return NextResponse.json({ ok: true, enviados });
-  } catch (error) {
-    console.error('Error enviando Web Push:', error);
-    return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Error interno' }, { status: 500 });
   }
 }
