@@ -762,7 +762,32 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     const confirmar = confirm('¿Seguro que deseas cancelar tu turno en la cola?');
     if (!confirmar) return;
 
-    await supabase.from('turnos').update({ estado: 'cancelado' }).eq('id', turno.id);
+    const turnoCancelado = { ...turno };
+
+    const { error } = await supabase
+      .from('turnos')
+      .update({ estado: 'cancelado' })
+      .eq('id', turnoCancelado.id);
+
+    if (!error) {
+      try {
+        await fetch('/api/push-cita', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+          body: JSON.stringify({
+            tipo: 'cancelacion',
+            codigo_ticket: turnoCancelado.codigo_ticket,
+            nombre_cliente: turnoCancelado.nombre_cliente,
+            tipo_corte: turnoCancelado.tipo_corte,
+            barbero_preferido: turnoCancelado.barbero_preferido,
+          }),
+        });
+      } catch (err) {
+        console.error('Error enviando push de cancelación:', err);
+      }
+    }
+
     volverAlInicio();
   };
 
