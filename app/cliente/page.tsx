@@ -598,8 +598,10 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setRegistrando(true);
 
     const etiquetaHora =
-      modalidadEspera === 'local' && horaLlegadaLocal !== 'ahora'
-        ? horaLlegadaLocal
+      modalidadEspera === 'local'
+        ? horaLlegadaLocal !== 'ahora'
+          ? horaLlegadaLocal
+          : bloquesHoy[0]?.etiqueta || ''
         : '';
 
     if (etiquetaHora) {
