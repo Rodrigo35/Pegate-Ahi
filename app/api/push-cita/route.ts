@@ -11,7 +11,6 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const record = body.record || body;
-    const esTurnoFila = record.tipo === 'turno' || (!record.hora_inicio && record.codigo_ticket);
 
     if (!record?.nombre_cliente) {
       return NextResponse.json({ error: 'Datos incompletos' }, { status: 400 });
@@ -39,13 +38,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, enviados: 0 });
     }
 
+    const esCancelacion =
+      record.tipo === 'cancelacion' ||
+      record.estado === 'cancelado' ||
+      record.estado === 'cancelada';
+
+    const esTurnoFila =
+      record.tipo === 'turno' || (!record.hora_inicio && Boolean(record.codigo_ticket));
+
     const barberoTexto = record.barbero_preferido ? ` con ${record.barbero_preferido}` : '';
+    const ticket = record.codigo_ticket ? ` (${record.codigo_ticket})` : '';
+
     let title = '📅 Nueva Cita · Pégate Ahí';
     let messageBody = '';
 
-    if (esTurnoFila) {
+    if (esCancelacion) {
+      title = '❌ Cancelación · Pégate Ahí';
+      if (record.hora_inicio) {
+        const horaCorta = String(record.hora_inicio).substring(0, 5);
+        messageBody = `${record.nombre_cliente}${ticket} canceló su cita del ${record.fecha} a las ${horaCorta}${barberoTexto}`;
+      } else {
+        messageBody = `${record.nombre_cliente}${ticket} canceló su turno${barberoTexto}`;
+      }
+    } else if (esTurnoFila) {
       title = '💈 Nuevo Turno Hoy · Pégate Ahí';
-      const ticket = record.codigo_ticket ? ` (${record.codigo_ticket})` : '';
       const modalidad = record.modalidad_espera === 'diligencia' ? ' · Diligencia' : ' · En local';
       messageBody = `${record.nombre_cliente}${ticket} entró a la fila para ${record.tipo_corte || 'corte'}${barberoTexto}${modalidad}`;
     } else {
