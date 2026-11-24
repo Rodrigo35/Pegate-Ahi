@@ -761,6 +761,25 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnosYCitas();
   };
 
+  const cancelarCitaBarbero = async (cita: Cita) => {
+    const confirmar = confirm(
+      `¿Cancelar la cita de ${cita.nombre_cliente} (${cita.codigo_ticket}) del ${cita.fecha} a las ${cita.hora_inicio.substring(0, 5)}?`
+    );
+    if (!confirmar) return;
+
+    const { error } = await supabase
+      .from('citas')
+      .update({ estado: 'cancelada' })
+      .eq('id', cita.id);
+
+    if (error) {
+      alert('No se pudo cancelar la cita. Verifica los permisos UPDATE en Supabase.');
+      return;
+    }
+
+    fetchTurnosYCitas();
+  };
+
   const handleTipoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const seleccionado = e.target.value;
     setNuevoTipoInput(seleccionado);
@@ -1726,50 +1745,61 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                     key={cita.id}
                     className={`p-4 rounded-xl border border-l-4 border-l-[#DC2626] flex items-center justify-between gap-2 ${cardSurface}`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className="px-3 py-2 rounded-lg bg-[#DC2626] text-white text-center shrink-0">
                         <span className="text-[11px] font-black uppercase block">HOY</span>
                         <span className="text-sm font-black">
                           {cita.hora_inicio.substring(0, 5)}
                         </span>
                       </div>
-                      <div>
-                        <p className="text-sm font-black leading-tight">
+                      <div className="min-w-0">
+                        <p className="text-sm font-black leading-tight truncate">
                           {cita.nombre_cliente}{' '}
                           <span className="text-[#DC2626]">({cita.codigo_ticket})</span>
                         </p>
-                        <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                        <p className="text-xs text-slate-400 font-semibold mt-0.5 truncate">
                           {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
                           {cita.monto}
                         </p>
                         {cita.barbero_preferido && (
-                          <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
+                          <span className="block text-[11px] font-black text-[#2563EB] mt-0.5 truncate">
                             💈 Pidió: {cita.barbero_preferido}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {cita.cliente_telefono ? (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {cita.cliente_telefono ? (
+                        <button
+                          type="button"
+                          onClick={() => procesarNotificacionCitaWA(cita)}
+                          className="px-3 py-2.5 rounded-lg bg-[#2563EB] text-white font-black text-xs active:scale-95"
+                        >
+                          📲 Cola + WA
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
+                            if (num) procesarNotificacionCitaWA(cita, num);
+                          }}
+                          className="px-3 py-2.5 rounded-lg bg-[#DC2626] text-white font-black text-xs"
+                        >
+                          ➕ Tlf
+                        </button>
+                      )}
+
                       <button
                         type="button"
-                        onClick={() => procesarNotificacionCitaWA(cita)}
-                        className="px-3.5 py-2.5 rounded-lg bg-[#2563EB] text-white font-black text-xs shrink-0 active:scale-95"
+                        onClick={() => cancelarCitaBarbero(cita)}
+                        title="Cancelar cita"
+                        className="px-2.5 py-2.5 rounded-lg border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all active:scale-95"
                       >
-                        📲 Cola + WA
+                        ✕
                       </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
-                          if (num) procesarNotificacionCitaWA(cita, num);
-                        }}
-                        className="px-3.5 py-2.5 rounded-lg bg-[#DC2626] text-white font-black text-xs shrink-0"
-                      >
-                        ➕ Tlf
-                      </button>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1794,7 +1824,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                     key={cita.id}
                     className={`p-4 rounded-xl border flex items-center justify-between gap-2 ${cardSurface}`}
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white text-center shrink-0">
                         <span className="text-[11px] font-bold text-slate-400 block">
                           {cita.fecha.slice(5)}
@@ -1803,43 +1833,54 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                           {cita.hora_inicio.substring(0, 5)}
                         </span>
                       </div>
-                      <div>
-                        <p className="text-sm font-black leading-tight">
+                      <div className="min-w-0">
+                        <p className="text-sm font-black leading-tight truncate">
                           {cita.nombre_cliente}{' '}
                           <span className="text-[#2563EB]">({cita.codigo_ticket})</span>
                         </p>
-                        <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                        <p className="text-xs text-slate-400 font-semibold mt-0.5 truncate">
                           {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
                           {cita.monto}
                         </p>
                         {cita.barbero_preferido && (
-                          <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
+                          <span className="block text-[11px] font-black text-[#2563EB] mt-0.5 truncate">
                             💈 Pidió: {cita.barbero_preferido}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {cita.cliente_telefono ? (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {cita.cliente_telefono ? (
+                        <button
+                          type="button"
+                          onClick={() => procesarNotificacionCitaWA(cita)}
+                          className="px-3 py-2.5 rounded-lg bg-[#2563EB] text-white font-black text-xs active:scale-95"
+                        >
+                          📲 WA
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
+                            if (num) procesarNotificacionCitaWA(cita, num);
+                          }}
+                          className="px-3 py-2.5 rounded-lg bg-[#2563EB] text-white font-black text-xs"
+                        >
+                          ➕ Tlf
+                        </button>
+                      )}
+
                       <button
                         type="button"
-                        onClick={() => procesarNotificacionCitaWA(cita)}
-                        className="px-3.5 py-2.5 rounded-lg bg-[#DC2626] text-white font-black text-xs shrink-0 active:scale-95"
+                        onClick={() => cancelarCitaBarbero(cita)}
+                        title="Cancelar cita"
+                        className="px-2.5 py-2.5 rounded-lg border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all active:scale-95"
                       >
-                        📲 WA
+                        ✕
                       </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
-                          if (num) procesarNotificacionCitaWA(cita, num);
-                        }}
-                        className="px-3.5 py-2.5 rounded-lg bg-[#2563EB] text-white font-black text-xs shrink-0"
-                      >
-                        ➕ Tlf
-                      </button>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
