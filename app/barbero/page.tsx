@@ -53,6 +53,18 @@ interface Cita {
 const PIN_BARBERO = process.env.NEXT_PUBLIC_BARBER_PIN || '1234';
 const AUTH_SESSION_KEY = 'pegate_ahi_barbero_auth';
 const THEME_STORAGE_KEY = 'pegate_ahi_tema';
+const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 const getFechaLocalStr = () => {
   const d = new Date();
@@ -227,6 +239,10 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [hoyStr, setHoyStr] = useState<string>('');
   const [ahoraMs, setAhoraMs] = useState<number>(Date.now());
 
+  // Estados Web Push
+  const [pushEstado, setPushEstado] = useState<'verificando' | 'inactivo' | 'activo' | 'no_soportado'>('verificando');
+  const [activandoPush, setActivandoPush] = useState<boolean>(false);
+
   const [tabActiva, setTabActiva] = useState<
     'silla' | 'sillas' | 'servicios' | 'citas' | 'qr' | 'horarios'
   >('silla');
@@ -259,6 +275,93 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
   const [nuevoTipoInput, setNuevoTipoInput] = useState<string>('Corte clásico');
   const [nuevoPrecioInput, setNuevoPrecioInput] = useState<string>('10');
+
+  // Verificar estado inicial de Web Push + Service Worker
+  useEffect(() => {
+    const verificarPush = async () => {
+      if (
+        typeof window === 'undefined' ||
+        !('serviceWorker' in navigator) ||
+        !('PushManager' in window) ||
+        !VAPID_PUBLIC_KEY
+      ) {
+        setPushEstado('no_soportado');
+        return;
+      }
+
+      try {
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        const sub = await reg.pushManager.getSubscription();
+        if (sub && Notification.permission === 'granted') {
+          setPushEstado('activo');
+        } else {
+          setPushEstado('inactivo');
+        }
+      } catch {
+        setPushEstado('inactivo');
+      }
+    };
+
+    verificarPush();
+  }, []);
+
+  const activarNotificacionesPush = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      alert('Este navegador no soporta notificaciones push. En iPhone recuerda añadir la app a la pantalla de inicio primero.');
+      return;
+    }
+
+    if (!VAPID_PUBLIC_KEY) {
+      alert('Falta configurar NEXT_PUBLIC_VAPID_PUBLIC_KEY en Vercel.');
+      return;
+    }
+
+    setActivandoPush(true);
+    try {
+      const permiso = await Notification.requestPermission();
+      if (permiso !== 'granted') {
+        alert('Debes permitir las notificaciones en tu navegador para recibir alertas de citas.');
+        setActivandoPush(false);
+        return;
+      }
+
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      await navigator.serviceWorker.ready;
+
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+
+      const subJson = sub.toJSON();
+      if (subJson.endpoint && subJson.keys?.p256dh && subJson.keys?.auth) {
+        const { error } = await supabase.from('push_subscriptions').upsert(
+          {
+            endpoint: subJson.endpoint,
+            p256dh: subJson.keys.p256dh,
+            auth: subJson.keys.auth,
+            user_agent: navigator.userAgent,
+          },
+          { onConflict: 'endpoint' }
+        );
+
+        if (error) {
+          console.error('Error guardando suscripción:', error);
+          alert('No se pudo guardar la suscripción en la base de datos.');
+        } else {
+          setPushEstado('activo');
+        }
+      }
+    } catch (err) {
+      console.error('Error al activar Push:', err);
+      alert('Ocurrió un error al activar las notificaciones.');
+    } finally {
+      setActivandoPush(false);
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -655,7 +758,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     setEditandoTurnoId(null);
   };
 
-  // Llamar siguiente cliente a una silla específica
   const llamarSiguienteParaSilla = async (silla: Silla) => {
     if (colaEspera.length === 0) return;
 
@@ -739,7 +841,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     await fetchTurnosYCitas();
   };
 
-  // Finalizar corte de un cliente específico
   const finalizarServicio = async (turno: Turno) => {
     await supabase
       .from('turnos')
@@ -810,6 +911,42 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
           </div>
         </div>
       </div>
+
+      {/* Control de Notificaciones Push en Pantalla */}
+      {pushEstado === 'inactivo' && (
+        <button
+          type="button"
+          onClick={activarNotificacionesPush}
+          disabled={activandoPush}
+          className="w-full py-2.5 px-3 rounded-xl bg-[#2563EB]/15 hover:bg-[#2563EB]/25 border border-[#2563EB]/50 text-[#2563EB] font-black text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+        >
+          <span>📲</span>
+          <span>
+            {activandoPush
+              ? 'Activando alertas...'
+              : 'Activar alertas de citas en pantalla de bloqueo'}
+          </span>
+        </button>
+      )}
+
+      {pushEstado === 'activo' && (
+        <div
+          className={`py-1.5 px-3 rounded-xl border flex items-center justify-between text-[11px] font-bold ${
+            isDark
+              ? 'bg-emerald-950/30 border-emerald-800/50 text-emerald-400'
+              : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+          }`}
+        >
+          <span>🔔 Alertas push activas en este dispositivo</span>
+          <button
+            type="button"
+            onClick={activarNotificacionesPush}
+            className="underline font-black ml-2"
+          >
+            Re-sincronizar
+          </button>
+        </div>
+      )}
 
       {/* 6 Pestañas en cuadrícula 3x2 amplia y táctil */}
       <div
@@ -954,7 +1091,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                         : 'border-[#2563EB]/40'
                     } ${cardSurface}`}
                   >
-                    {/* Cabecera de la silla con nombre del barbero */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <span className="px-2.5 py-0.5 rounded-md bg-[#2563EB] text-white text-[11px] font-black uppercase">
@@ -1108,7 +1244,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                             </div>
                           )}
 
-                        {/* Botón individual de Finalizar / Ausente para este cliente */}
                         <div className="flex gap-2 pt-1">
                           {turnoEnSilla.modalidad_espera === 'diligencia' && (
                             <button
@@ -1326,7 +1461,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* --- TAB 3: GESTIÓN DE SERVICIOS Y TARIFAS (CON DESPLIEGUE) --- */}
+      {/* --- TAB 3: GESTIÓN DE SERVICIOS Y TARIFAS --- */}
       {tabActiva === 'servicios' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
@@ -1349,7 +1484,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                     estaAbierto ? 'border-[#2563EB]/60' : ''
                   } ${cardSurface}`}
                 >
-                  {/* Fila compacta siempre visible */}
                   <button
                     type="button"
                     onClick={() =>
@@ -1385,7 +1519,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                     </div>
                   </button>
 
-                  {/* Panel desplegable de edición */}
                   {estaAbierto && (
                     <div
                       className={`px-3.5 pb-3.5 pt-2.5 border-t space-y-2.5 ${
@@ -1465,7 +1598,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             </button>
           )}
 
-          {/* Crear nuevo servicio */}
           <form
             onSubmit={agregarNuevoServicio}
             className={`p-3.5 rounded-2xl border border-dashed space-y-2.5 ${cardSurface}`}
