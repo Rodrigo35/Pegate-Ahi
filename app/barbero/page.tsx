@@ -240,6 +240,12 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [hoyStr, setHoyStr] = useState<string>('');
   const [ahoraMs, setAhoraMs] = useState<number>(Date.now());
 
+  // Estados para reprogramación puntual de cita (regla del barbero: sin arrastre automático a la fila)
+  const [reprogramandoCitaId, setReprogramandoCitaId] = useState<string | null>(null);
+  const [nuevaFechaCita, setNuevaFechaCita] = useState<string>('');
+  const [nuevaHoraCita, setNuevaHoraCita] = useState<string>('');
+  const [guardandoReprogramacion, setGuardandoReprogramacion] = useState<boolean>(false);
+
   // Estados para arrastrar y reordenar cola (móvil y PC sin conflictos de scroll)
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -711,6 +717,15 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     ? turnosEnAtencion.find((t) => t.silla_id === sillaActual.id)
     : undefined;
 
+  // Verifica si una cita de hoy ya superó su hora pautada (tolerancia de 15 min)
+  const citaHoraPasada = (cita: Cita) => {
+    if (cita.fecha !== hoyStr) return false;
+    const [hh, mm] = cita.hora_inicio.split(':').map(Number);
+    const fechaCita = new Date();
+    fechaCita.setHours(hh, (mm || 0) + 15, 0, 0);
+    return ahoraMs > fechaCita.getTime();
+  };
+
   // --- Lógica de arrastrar y reordenar cola ---
   const reordenarCola = async (fromIdx: number, toIdx: number) => {
     if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= colaEspera.length || toIdx >= colaEspera.length) {
@@ -883,7 +898,36 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnosYCitas();
   };
 
-  const procesarNotificacionCitaWA = async (cita: Cita, telefonoEspecifico?: string) => {
+  // Ingresa a fila únicamente cuando el cliente de la cita llegó puntual o el barbero lo autoriza
+  const ingresarCitaAFila = async (cita: Cita, telefonoEspecifico?: string) => {
+    const telefonoFinal = telefonoEspecifico || cita.cliente_telefono || null;
+
+    await supabase.from('turnos').insert([
+      {
+        codigo_ticket: cita.codigo_ticket,
+        nombre_cliente: cita.nombre_cliente,
+        cliente_telefono: telefonoFinal,
+        tipo_corte: cita.tipo_corte,
+        monto: cita.monto,
+        modalidad_espera: 'local',
+        barbero_preferido: cita.barbero_preferido || null,
+        estado: 'espera',
+      },
+    ]);
+
+    await supabase
+      .from('citas')
+      .update({
+        estado: 'atendida',
+        ...(telefonoFinal ? { cliente_telefono: telefonoFinal } : {}),
+      })
+      .eq('id', cita.id);
+
+    fetchTurnosYCitas();
+  };
+
+  // Recordatorio por WhatsApp sin mover ni alterar la fila ni los bloques agendados
+  const enviarRecordatorioCitaWA = async (cita: Cita, telefonoEspecifico?: string) => {
     const telefonoFinal = telefonoEspecifico || cita.cliente_telefono;
     if (!telefonoFinal) return;
 
@@ -894,35 +938,57 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     let numLimpio = telefonoFinal.replace(/\D/g, '');
     if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
     const mensaje = encodeURIComponent(
-      `¡Hola ${cita.nombre_cliente}! 📅 Te recordamos tu cita agendada (${cita.codigo_ticket}) para ${textoCuando} a las ${cita.hora_inicio.substring(0, 5)} hrs en ${APP_CONFIG.nombreNegocio}. ¡Te esperamos!`
+      `¡Hola ${cita.nombre_cliente}! 📅 Te recordamos tu cita agendada (${cita.codigo_ticket}) para ${textoCuando} a las ${cita.hora_inicio.substring(0, 5)} hrs en ${APP_CONFIG.nombreNegocio}. ¡Te esperamos puntual!`
     );
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
 
-    if (esHoy) {
-      await supabase.from('turnos').insert([
-        {
-          codigo_ticket: cita.codigo_ticket,
-          nombre_cliente: cita.nombre_cliente,
-          cliente_telefono: telefonoFinal,
-          tipo_corte: cita.tipo_corte,
-          monto: cita.monto,
-          modalidad_espera: 'local',
-          barbero_preferido: cita.barbero_preferido || null,
-          estado: 'espera',
-        },
-      ]);
-
-      await supabase
-        .from('citas')
-        .update({ estado: 'atendida', cliente_telefono: telefonoFinal })
-        .eq('id', cita.id);
-    } else if (telefonoEspecifico) {
+    if (telefonoEspecifico) {
       await supabase
         .from('citas')
         .update({ cliente_telefono: telefonoEspecifico })
         .eq('id', cita.id);
+      fetchTurnosYCitas();
+    }
+  };
+
+  // Reasignar hora cuando el cliente perdió su bloque o pidió cambio (sujeto a disponibilidad real del barbero)
+  const guardarReprogramacionCita = async (cita: Cita) => {
+    if (!nuevaFechaCita || !nuevaHoraCita) {
+      alert('Selecciona la nueva fecha y hora disponible.');
+      return;
     }
 
+    setGuardandoReprogramacion(true);
+    const horaFormateada = nuevaHoraCita.length === 5 ? `${nuevaHoraCita}:00` : nuevaHoraCita;
+
+    const { error } = await supabase
+      .from('citas')
+      .update({
+        fecha: nuevaFechaCita,
+        hora_inicio: horaFormateada,
+        estado: 'pendiente',
+      })
+      .eq('id', cita.id);
+
+    setGuardandoReprogramacion(false);
+
+    if (error) {
+      alert('No se pudo reasignar la cita.');
+      return;
+    }
+
+    if (cita.cliente_telefono) {
+      let numLimpio = cita.cliente_telefono.replace(/\D/g, '');
+      if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
+      const esMismoDia = nuevaFechaCita === getFechaLocalStr();
+      const cuandoTexto = esMismoDia ? 'hoy' : `el ${nuevaFechaCita}`;
+      const mensaje = encodeURIComponent(
+        `¡Hola ${cita.nombre_cliente}! ✂️ Como no pudiste asistir a tu hora anterior (${cita.codigo_ticket}), tengo disponibilidad para atenderte ${cuandoTexto} a las ${nuevaHoraCita.substring(0, 5)} hrs en ${APP_CONFIG.nombreNegocio}. Confírmame si te sirve ese bloque.`
+      );
+      window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
+    }
+
+    setReprogramandoCitaId(null);
     fetchTurnosYCitas();
   };
 
@@ -1991,7 +2057,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
             <div className="space-y-2.5">
               <div className="flex items-center justify-between px-1">
                 <span className="text-sm font-black">📅 Citas de Hoy ({citasDeHoy.length})</span>
-                <span className="text-xs text-slate-400">Pasar a cola al llegar</span>
+                <span className="text-[11px] font-bold text-slate-400">
+                  Hora perdida = reasignar bloque
+                </span>
               </div>
 
               {citasDeHoy.length === 0 ? (
@@ -2000,68 +2068,189 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {citasDeHoy.map((cita) => (
-                    <div
-                      key={cita.id}
-                      className={`p-3.5 rounded-2xl border border-l-4 border-l-[#DC2626] flex items-center justify-between gap-2 ${cardSurface}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="px-3 py-2 rounded-xl bg-[#DC2626] text-white text-center shrink-0">
-                          <span className="text-[11px] font-black uppercase block">HOY</span>
-                          <span className="text-sm font-black">
-                            {cita.hora_inicio.substring(0, 5)}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-black leading-snug break-words">
-                            {cita.nombre_cliente}{' '}
-                            <span className="text-[#DC2626]">({cita.codigo_ticket})</span>
-                          </p>
-                          <p className="text-xs text-slate-400 font-semibold leading-snug mt-0.5">
-                            {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
-                            {cita.monto}
-                          </p>
-                          {cita.barbero_preferido && (
-                            <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
-                              💈 Pidió: {cita.barbero_preferido}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                  {citasDeHoy.map((cita) => {
+                    const perdida = citaHoraPasada(cita);
+                    const enReprogramacion = reprogramandoCitaId === cita.id;
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {cita.cliente_telefono ? (
-                          <button
-                            type="button"
-                            onClick={() => procesarNotificacionCitaWA(cita)}
-                            className="px-3 py-2.5 rounded-xl bg-[#2563EB] text-white font-black text-xs active:scale-95"
+                    return (
+                      <div
+                        key={cita.id}
+                        className={`p-3.5 rounded-2xl border border-l-4 space-y-2.5 ${
+                          perdida ? 'border-l-amber-500' : 'border-l-[#DC2626]'
+                        } ${cardSurface}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div
+                              className={`px-3 py-2 rounded-xl text-white text-center shrink-0 ${
+                                perdida ? 'bg-amber-600' : 'bg-[#DC2626]'
+                              }`}
+                            >
+                              <span className="text-[10px] font-black uppercase block">
+                                {perdida ? 'PASADA' : 'HOY'}
+                              </span>
+                              <span className="text-sm font-black">
+                                {cita.hora_inicio.substring(0, 5)}
+                              </span>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-black leading-snug break-words">
+                                {cita.nombre_cliente}{' '}
+                                <span className="text-[#DC2626]">({cita.codigo_ticket})</span>
+                              </p>
+                              <p className="text-xs text-slate-400 font-semibold leading-snug mt-0.5">
+                                {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
+                                {cita.monto}
+                              </p>
+                              {cita.barbero_preferido && (
+                                <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
+                                  💈 Pidió: {cita.barbero_preferido}
+                                </span>
+                              )}
+                              {perdida && (
+                                <span className="block text-[11px] font-black text-amber-500 mt-0.5">
+                                  ⚠️ Hora incumplida · Sujeta a hueco libre
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-1.5 shrink-0">
+                            {!perdida ? (
+                              <button
+                                type="button"
+                                onClick={() => ingresarCitaAFila(cita)}
+                                title="Cliente llegó puntual: pasar a la fila"
+                                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs active:scale-95"
+                              >
+                                ✅ Llegó · Fila
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (enReprogramacion) {
+                                    setReprogramandoCitaId(null);
+                                  } else {
+                                    setReprogramandoCitaId(cita.id);
+                                    setNuevaFechaCita(cita.fecha);
+                                    setNuevaHoraCita(cita.hora_inicio.substring(0, 5));
+                                  }
+                                }}
+                                className="px-3 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black text-xs active:scale-95"
+                              >
+                                🕒 Reasignar
+                              </button>
+                            )}
+
+                            <div className="flex items-center gap-1.5">
+                              {cita.cliente_telefono ? (
+                                <button
+                                  type="button"
+                                  onClick={() => enviarRecordatorioCitaWA(cita)}
+                                  title="Recordar cita por WhatsApp"
+                                  className="px-2.5 py-1.5 rounded-xl bg-[#2563EB] text-white font-black text-xs active:scale-95"
+                                >
+                                  📲 WA
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
+                                    if (num) enviarRecordatorioCitaWA(cita, num);
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-xl bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] font-black text-xs"
+                                >
+                                  ➕ Tlf
+                                </button>
+                              )}
+
+                              {!perdida && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (enReprogramacion) {
+                                      setReprogramandoCitaId(null);
+                                    } else {
+                                      setReprogramandoCitaId(cita.id);
+                                      setNuevaFechaCita(cita.fecha);
+                                      setNuevaHoraCita(cita.hora_inicio.substring(0, 5));
+                                    }
+                                  }}
+                                  title="Mover hora de cita"
+                                  className="px-2.5 py-1.5 rounded-xl border border-[#2563EB]/40 text-[#2563EB] font-black text-xs"
+                                >
+                                  🕒
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => cancelarCitaBarbero(cita)}
+                                title="Cancelar cita"
+                                className="px-2.5 py-1.5 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all active:scale-95"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {enReprogramacion && (
+                          <div
+                            className={`p-3 rounded-xl border space-y-2 ${
+                              isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
+                            }`}
                           >
-                            📲 Cola + WA
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
-                              if (num) procesarNotificacionCitaWA(cita, num);
-                            }}
-                            className="px-3 py-2.5 rounded-xl bg-[#DC2626] text-white font-black text-xs"
-                          >
-                            ➕ Tlf
-                          </button>
+                            <p className="text-[11px] font-black text-slate-400 uppercase">
+                              Asignar bloque libre real:
+                            </p>
+                            <div className="flex gap-2">
+                              <input
+                                type="date"
+                                value={nuevaFechaCita}
+                                min={hoyStr}
+                                onChange={(e) => setNuevaFechaCita(e.target.value)}
+                                className={`flex-1 px-2.5 py-1.5 rounded-lg border text-xs font-bold focus:outline-none ${
+                                  isDark
+                                    ? 'bg-slate-900 border-slate-700 text-white'
+                                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                                }`}
+                              />
+                              <input
+                                type="time"
+                                value={nuevaHoraCita}
+                                onChange={(e) => setNuevaHoraCita(e.target.value)}
+                                className={`w-28 px-2.5 py-1.5 rounded-lg border text-xs font-bold focus:outline-none ${
+                                  isDark
+                                    ? 'bg-slate-900 border-slate-700 text-white'
+                                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                                }`}
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setReprogramandoCitaId(null)}
+                                className="flex-1 py-1.5 rounded-lg border border-slate-700 text-xs font-bold text-slate-400"
+                              >
+                                Cerrar
+                              </button>
+                              <button
+                                type="button"
+                                disabled={guardandoReprogramacion}
+                                onClick={() => guardarReprogramacionCita(cita)}
+                                className="flex-1 py-1.5 rounded-lg bg-[#2563EB] text-white text-xs font-black"
+                              >
+                                {guardandoReprogramacion ? 'Guardando...' : 'Guardar + WA'}
+                              </button>
+                            </div>
+                          </div>
                         )}
-
-                        <button
-                          type="button"
-                          onClick={() => cancelarCitaBarbero(cita)}
-                          title="Cancelar cita"
-                          className="px-2.5 py-2.5 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all active:scale-95"
-                        >
-                          ✕
-                        </button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -2079,70 +2268,142 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                 </div>
               ) : (
                 <div className="space-y-2.5">
-                  {citasSiguientes.map((cita) => (
-                    <div
-                      key={cita.id}
-                      className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 ${cardSurface}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-center shrink-0">
-                          <span className="text-[11px] font-bold text-slate-400 block">
-                            {cita.fecha.slice(5)}
-                          </span>
-                          <span className="text-sm font-black text-[#2563EB]">
-                            {cita.hora_inicio.substring(0, 5)}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-sm font-black leading-snug break-words">
-                            {cita.nombre_cliente}{' '}
-                            <span className="text-[#2563EB]">({cita.codigo_ticket})</span>
-                          </p>
-                          <p className="text-xs text-slate-400 font-semibold leading-snug mt-0.5">
-                            {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
-                            {cita.monto}
-                          </p>
-                          {cita.barbero_preferido && (
-                            <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
-                              💈 Pidió: {cita.barbero_preferido}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                  {citasSiguientes.map((cita) => {
+                    const enReprogramacion = reprogramandoCitaId === cita.id;
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {cita.cliente_telefono ? (
-                          <button
-                            type="button"
-                            onClick={() => procesarNotificacionCitaWA(cita)}
-                            className="px-3 py-2.5 rounded-xl bg-[#2563EB] text-white font-black text-xs active:scale-95"
+                    return (
+                      <div
+                        key={cita.id}
+                        className={`p-3.5 rounded-2xl border space-y-2.5 ${cardSurface}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-3">
+                            <div className="px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-white text-center shrink-0">
+                              <span className="text-[11px] font-bold text-slate-400 block">
+                                {cita.fecha.slice(5)}
+                              </span>
+                              <span className="text-sm font-black text-[#2563EB]">
+                                {cita.hora_inicio.substring(0, 5)}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-sm font-black leading-snug break-words">
+                                {cita.nombre_cliente}{' '}
+                                <span className="text-[#2563EB]">({cita.codigo_ticket})</span>
+                              </p>
+                              <p className="text-xs text-slate-400 font-semibold leading-snug mt-0.5">
+                                {cita.tipo_corte} · {APP_CONFIG.monedaSimbolo}
+                                {cita.monto}
+                              </p>
+                              {cita.barbero_preferido && (
+                                <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
+                                  💈 Pidió: {cita.barbero_preferido}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {cita.cliente_telefono ? (
+                              <button
+                                type="button"
+                                onClick={() => enviarRecordatorioCitaWA(cita)}
+                                className="px-3 py-2 rounded-xl bg-[#2563EB] text-white font-black text-xs active:scale-95"
+                              >
+                                📲 WA
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
+                                  if (num) enviarRecordatorioCitaWA(cita, num);
+                                }}
+                                className="px-3 py-2 rounded-xl bg-[#2563EB] text-white font-black text-xs"
+                              >
+                                ➕ Tlf
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (enReprogramacion) {
+                                  setReprogramandoCitaId(null);
+                                } else {
+                                  setReprogramandoCitaId(cita.id);
+                                  setNuevaFechaCita(cita.fecha);
+                                  setNuevaHoraCita(cita.hora_inicio.substring(0, 5));
+                                }
+                              }}
+                              title="Reasignar fecha/hora"
+                              className="px-2.5 py-2 rounded-xl border border-[#2563EB]/40 text-[#2563EB] font-black text-xs"
+                            >
+                              🕒
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => cancelarCitaBarbero(cita)}
+                              title="Cancelar cita"
+                              className="px-2.5 py-2 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all active:scale-95"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+
+                        {enReprogramacion && (
+                          <div
+                            className={`p-3 rounded-xl border space-y-2 ${
+                              isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
+                            }`}
                           >
-                            📲 WA
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const num = prompt(`Teléfono WhatsApp para ${cita.nombre_cliente}:`);
-                              if (num) procesarNotificacionCitaWA(cita, num);
-                            }}
-                            className="px-3 py-2.5 rounded-xl bg-[#2563EB] text-white font-black text-xs"
-                          >
-                            ➕ Tlf
-                          </button>
+                            <div className="flex gap-2">
+                              <input
+                                type="date"
+                                value={nuevaFechaCita}
+                                min={hoyStr}
+                                onChange={(e) => setNuevaFechaCita(e.target.value)}
+                                className={`flex-1 px-2.5 py-1.5 rounded-lg border text-xs font-bold focus:outline-none ${
+                                  isDark
+                                    ? 'bg-slate-900 border-slate-700 text-white'
+                                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                                }`}
+                              />
+                              <input
+                                type="time"
+                                value={nuevaHoraCita}
+                                onChange={(e) => setNuevaHoraCita(e.target.value)}
+                                className={`w-28 px-2.5 py-1.5 rounded-lg border text-xs font-bold focus:outline-none ${
+                                  isDark
+                                    ? 'bg-slate-900 border-slate-700 text-white'
+                                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                                }`}
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setReprogramandoCitaId(null)}
+                                className="flex-1 py-1.5 rounded-lg border border-slate-700 text-xs font-bold text-slate-400"
+                              >
+                                Cerrar
+                              </button>
+                              <button
+                                type="button"
+                                disabled={guardandoReprogramacion}
+                                onClick={() => guardarReprogramacionCita(cita)}
+                                className="flex-1 py-1.5 rounded-lg bg-[#2563EB] text-white text-xs font-black"
+                              >
+                                {guardandoReprogramacion ? 'Guardando...' : 'Guardar + WA'}
+                              </button>
+                            </div>
+                          </div>
                         )}
-
-                        <button
-                          type="button"
-                          onClick={() => cancelarCitaBarbero(cita)}
-                          title="Cancelar cita"
-                          className="px-2.5 py-2.5 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all active:scale-95"
-                        >
-                          ✕
-                        </button>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
