@@ -54,6 +54,7 @@ const PIN_BARBERO = process.env.NEXT_PUBLIC_BARBER_PIN || '1234';
 const AUTH_SESSION_KEY = 'pegate_ahi_barbero_auth';
 const THEME_STORAGE_KEY = 'pegate_ahi_tema';
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
+const MAX_TOLERANCIA_SEGUNDOS = 15 * 60;
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -240,7 +241,13 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [hoyStr, setHoyStr] = useState<string>('');
   const [ahoraMs, setAhoraMs] = useState<number>(Date.now());
 
-  // Estados para reprogramación puntual de cita (regla del barbero: sin arrastre automático a la fila)
+  // Estados para aviso previo WA (15 min máx), Ausente y Reprogramar en fila
+  const [avisosTimestamp, setAvisosTimestamp] = useState<Record<string, number>>({});
+  const [reprogramandoTurnoId, setReprogramandoTurnoId] = useState<string | null>(null);
+  const [nuevaHoraTurnoHoy, setNuevaHoraTurnoHoy] = useState<string>('');
+  const [guardandoReprogTurno, setGuardandoReprogTurno] = useState<boolean>(false);
+
+  // Estados para reprogramación puntual de cita
   const [reprogramandoCitaId, setReprogramandoCitaId] = useState<string | null>(null);
   const [nuevaFechaCita, setNuevaFechaCita] = useState<string>('');
   const [nuevaHoraCita, setNuevaHoraCita] = useState<string>('');
@@ -575,6 +582,160 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const sillaActual =
     sillasActivas.find((s) => s.id === sillaSeleccionadaId) || sillasActivas[0] || null;
 
+  const citasDeHoy = hoyStr ? citasDelDia.filter((c) => c.fecha === hoyStr) : [];
+  const citasSiguientes = hoyStr ? citasDelDia.filter((c) => c.fecha > hoyStr) : citasDelDia;
+
+  const turnosEnAtencion = turnos.filter((t) => t.estado === 'atendiendo');
+  const colaEspera = turnos.filter((t) => t.estado === 'espera');
+  const turnoEnSillaActual = sillaActual
+    ? turnosEnAtencion.find((t) => t.silla_id === sillaActual.id)
+    : undefined;
+
+  // Cancelación automática a los 15 min tras enviar aviso por WhatsApp
+  useEffect(() => {
+    const entries = Object.entries(avisosTimestamp);
+    if (entries.length === 0) return;
+
+    entries.forEach(async ([idRegistro, inicioMs]) => {
+      const transcurridoSeg = Math.floor((ahoraMs - inicioMs) / 1000);
+      if (transcurridoSeg >= MAX_TOLERANCIA_SEGUNDOS) {
+        setAvisosTimestamp((prev) => {
+          const copia = { ...prev };
+          delete copia[idRegistro];
+          return copia;
+        });
+
+        const esTurnoEnEspera = colaEspera.some((t) => t.id === idRegistro);
+        if (esTurnoEnEspera) {
+          await supabase
+            .from('turnos')
+            .update({ estado: 'cancelado' })
+            .eq('id', idRegistro);
+          fetchTurnosYCitas();
+          return;
+        }
+
+        const esCitaActiva = citasDeHoy.some((c) => c.id === idRegistro);
+        if (esCitaActiva) {
+          await supabase
+            .from('citas')
+            .update({ estado: 'cancelada' })
+            .eq('id', idRegistro);
+          fetchTurnosYCitas();
+        }
+      }
+    });
+  }, [ahoraMs, avisosTimestamp, colaEspera, citasDeHoy]);
+
+  const formatearContador15Min = (inicioMs: number) => {
+    const transcurrido = Math.floor((ahoraMs - inicioMs) / 1000);
+    const restante = Math.max(0, MAX_TOLERANCIA_SEGUNDOS - transcurrido);
+    const mins = String(Math.floor(restante / 60)).padStart(2, '0');
+    const secs = String(restante % 60).padStart(2, '0');
+    return `${mins}:${secs}`;
+  };
+
+  const enviarAvisoPrevio15MinWA = async (turno: Turno, telefonoManual?: string) => {
+    const tel = telefonoManual || turno.cliente_telefono;
+    if (!tel) return;
+
+    if (telefonoManual) {
+      await supabase
+        .from('turnos')
+        .update({ cliente_telefono: telefonoManual })
+        .eq('id', turno.id);
+      fetchTurnosYCitas();
+    }
+
+    let numLimpio = tel.replace(/\D/g, '');
+    if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
+
+    const mensaje = encodeURIComponent(
+      `¡Hola ${turno.nombre_cliente}! 💈 Te escribimos de ${APP_CONFIG.nombreNegocio}. Ya pasó tu hora / te toca tu turno (${turno.codigo_ticket}) y no te vemos en el local. ¿Sigues afuera? Tienes un máximo de 15 minutos para llegar o confirmar; de lo contrario se cancelará y deberás volver a programar.`
+    );
+
+    window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
+
+    setAvisosTimestamp((prev) => ({
+      ...prev,
+      [turno.id]: Date.now(),
+    }));
+  };
+
+  const marcarTurnoAusenteTrasAviso = async (turno: Turno) => {
+    const confirmar = confirm(
+      `¿Marcar como AUSENTE a ${turno.nombre_cliente} (${turno.codigo_ticket})? Deberá volver a programar.`
+    );
+    if (!confirmar) return;
+
+    setAvisosTimestamp((prev) => {
+      const copia = { ...prev };
+      delete copia[turno.id];
+      return copia;
+    });
+
+    const { error } = await supabase
+      .from('turnos')
+      .update({ estado: 'ausente' })
+      .eq('id', turno.id);
+
+    if (error) {
+      alert('No se pudo marcar como ausente.');
+      return;
+    }
+
+    fetchTurnosYCitas();
+  };
+
+  const guardarReprogramacionTurnoHoy = async (turno: Turno) => {
+    if (!nuevaHoraTurnoHoy) {
+      alert('Selecciona la nueva hora para hoy.');
+      return;
+    }
+
+    setGuardandoReprogTurno(true);
+    const nombreBase = turno.nombre_cliente.replace(/\s*·\s*🕒.*$/, '').trim();
+    const [hh, mm] = nuevaHoraTurnoHoy.split(':').map(Number);
+    const h12 = hh > 12 ? hh - 12 : hh === 0 ? 12 : hh;
+    const ampm = hh >= 12 ? 'PM' : 'AM';
+    const etiquetaHora12 = `${h12}:${String(mm || 0).padStart(2, '0')} ${ampm}`;
+    const nuevoNombre = `${nombreBase} · 🕒 ${etiquetaHora12}`;
+
+    const { error } = await supabase
+      .from('turnos')
+      .update({
+        nombre_cliente: nuevoNombre,
+        creado_en: new Date().toISOString(),
+      })
+      .eq('id', turno.id);
+
+    setGuardandoReprogTurno(false);
+
+    if (error) {
+      alert('No se pudo reprogramar el turno.');
+      return;
+    }
+
+    setAvisosTimestamp((prev) => {
+      const copia = { ...prev };
+      delete copia[turno.id];
+      return copia;
+    });
+
+    if (turno.cliente_telefono) {
+      let numLimpio = turno.cliente_telefono.replace(/\D/g, '');
+      if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
+      const mensaje = encodeURIComponent(
+        `¡Hola ${nombreBase}! ✂️ Reprogramamos tu turno (${turno.codigo_ticket}) en ${APP_CONFIG.nombreNegocio} para hoy a las ${etiquetaHora12}. ¡Te esperamos puntual!`
+      );
+      window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
+    }
+
+    setReprogramandoTurnoId(null);
+    setNuevaHoraTurnoHoy('');
+    fetchTurnosYCitas();
+  };
+
   const actualizarCampoServicio = (
     id: string,
     campo: 'nombre' | 'precio' | 'descripcion',
@@ -708,15 +869,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchSillas();
   };
 
-  const citasDeHoy = hoyStr ? citasDelDia.filter((c) => c.fecha === hoyStr) : [];
-  const citasSiguientes = hoyStr ? citasDelDia.filter((c) => c.fecha > hoyStr) : citasDelDia;
-
-  const turnosEnAtencion = turnos.filter((t) => t.estado === 'atendiendo');
-  const colaEspera = turnos.filter((t) => t.estado === 'espera');
-  const turnoEnSillaActual = sillaActual
-    ? turnosEnAtencion.find((t) => t.silla_id === sillaActual.id)
-    : undefined;
-
   // Verifica si una cita de hoy ya superó su hora pautada (tolerancia de 15 min)
   const citaHoraPasada = (cita: Cita) => {
     if (cita.fecha !== hoyStr) return false;
@@ -752,7 +904,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
     const nuevoIso = new Date(nuevoCreadoEnMs).toISOString();
 
-    // Actualización optimista inmediata en pantalla
     setTurnos((prev) =>
       prev
         .map((t) => (t.id === movido.id ? { ...t, creado_en: nuevoIso } : t))
@@ -866,39 +1017,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
   };
 
-  const confirmarAsistenciaWhatsApp = (turno: Turno, telefonoEspecifico?: string) => {
-    const telefonoFinal = telefonoEspecifico || turno.cliente_telefono;
-    if (!telefonoFinal) return;
-
-    let numLimpio = telefonoFinal.replace(/\D/g, '');
-    if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
-
-    const mensaje = encodeURIComponent(
-      `¡Hola ${turno.nombre_cliente}! 💈 Te escribimos de ${APP_CONFIG.nombreNegocio}. Tu turno (${turno.codigo_ticket}) ya está próximo en la fila. ¿Nos confirmas si vas a asistir al local?`
-    );
-    window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
-  };
-
-  const cancelarTurnoEnEspera = async (turno: Turno) => {
-    const confirmar = confirm(
-      `¿Cancelar el turno de ${turno.nombre_cliente} (${turno.codigo_ticket})?`
-    );
-    if (!confirmar) return;
-
-    const { error } = await supabase
-      .from('turnos')
-      .update({ estado: 'cancelado' })
-      .eq('id', turno.id);
-
-    if (error) {
-      alert('No se pudo cancelar el turno.');
-      return;
-    }
-
-    fetchTurnosYCitas();
-  };
-
-  // Ingresa a fila únicamente cuando el cliente de la cita llegó puntual o el barbero lo autoriza
   const ingresarCitaAFila = async (cita: Cita, telefonoEspecifico?: string) => {
     const telefonoFinal = telefonoEspecifico || cita.cliente_telefono || null;
 
@@ -926,7 +1044,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     fetchTurnosYCitas();
   };
 
-  // Recordatorio por WhatsApp sin mover ni alterar la fila ni los bloques agendados
   const enviarRecordatorioCitaWA = async (cita: Cita, telefonoEspecifico?: string) => {
     const telefonoFinal = telefonoEspecifico || cita.cliente_telefono;
     if (!telefonoFinal) return;
@@ -951,7 +1068,6 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     }
   };
 
-  // Reasignar hora cuando el cliente perdió su bloque o pidió cambio (sujeto a disponibilidad real del barbero)
   const guardarReprogramacionCita = async (cita: Cita) => {
     if (!nuevaFechaCita || !nuevaHoraCita) {
       alert('Selecciona la nueva fecha y hora disponible.');
@@ -1054,6 +1170,12 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       alert(`${silla.nombre_silla} (${silla.nombre_barbero}) ya está atendiendo un corte.`);
       return;
     }
+
+    setAvisosTimestamp((prev) => {
+      const copia = { ...prev };
+      delete copia[turno.id];
+      return copia;
+    });
 
     const etiquetaAsignada = `${silla.nombre_silla} · ${silla.nombre_barbero}`;
 
@@ -1600,7 +1722,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
               </>
             )}
 
-            {/* Lista de Espera compartida del día (Arrastrar desde ⋮⋮ para reordenar) */}
+            {/* Lista de Espera compartida del día (Arrastrar desde ⋮⋮ para reordenar + Aviso WA 15m -> Ausente / Reprogramar) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs font-black uppercase text-slate-400">
@@ -1618,11 +1740,14 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   No hay clientes en espera hoy.
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-0.5">
+                <div className="space-y-2 max-h-[330px] overflow-y-auto pr-0.5">
                   {colaEspera.map((item, idx) => {
                     const siendoArrastrado = dragIdx === idx;
                     const destinoArrastre =
                       dragIdx !== null && hoverIdx === idx && dragIdx !== idx;
+                    const inicioAvisoMs = avisosTimestamp[item.id];
+                    const yaAvisadoWa = Boolean(inicioAvisoMs);
+                    const abriendoReprog = reprogramandoTurnoId === item.id;
 
                     return (
                       <div
@@ -1636,7 +1761,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                             : undefined,
                           zIndex: siendoArrastrado ? 30 : 1,
                         }}
-                        className={`relative p-3 rounded-2xl border flex items-center justify-between gap-2 select-none ${cardSurface} ${
+                        className={`relative p-3 rounded-2xl border space-y-2.5 select-none ${cardSurface} ${
                           siendoArrastrado
                             ? 'border-[#2563EB] ring-2 ring-[#2563EB]/50 shadow-xl opacity-95 transition-none'
                             : destinoArrastre
@@ -1644,106 +1769,167 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                             : 'transition-all'
                         }`}
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          {colaEspera.length > 1 && (
-                            <div
-                              onPointerDown={(e) => iniciarArrastreDirecto(idx, e)}
-                              onPointerMove={moverArrastre}
-                              onPointerUp={finalizarArrastre}
-                              onPointerCancel={finalizarArrastre}
-                              style={{ touchAction: 'none' }}
-                              className="touch-none py-2 px-1.5 -ml-1 rounded-lg text-slate-400 hover:text-[#2563EB] active:text-[#2563EB] font-black text-base leading-none cursor-grab active:cursor-grabbing shrink-0"
-                              title="Arrastra arriba o abajo para reordenar"
-                            >
-                              ⋮⋮
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {colaEspera.length > 1 && (
+                              <div
+                                onPointerDown={(e) => iniciarArrastreDirecto(idx, e)}
+                                onPointerMove={moverArrastre}
+                                onPointerUp={finalizarArrastre}
+                                onPointerCancel={finalizarArrastre}
+                                style={{ touchAction: 'none' }}
+                                className="touch-none py-2 px-1.5 -ml-1 rounded-lg text-slate-400 hover:text-[#2563EB] active:text-[#2563EB] font-black text-base leading-none cursor-grab active:cursor-grabbing shrink-0"
+                                title="Arrastra arriba o abajo para reordenar"
+                              >
+                                ⋮⋮
+                              </div>
+                            )}
+                            <div className="w-8 h-8 rounded-full bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] flex items-center justify-center text-xs font-black shrink-0">
+                              #{idx + 1}
                             </div>
-                          )}
-                          <div className="w-8 h-8 rounded-full bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] flex items-center justify-center text-xs font-black shrink-0">
-                            #{idx + 1}
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-1">
+                                <span className="text-sm font-black leading-snug break-words">
+                                  {item.nombre_cliente}
+                                </span>
+                                <span className="text-xs font-black text-[#DC2626]">
+                                  ({item.codigo_ticket})
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-400 font-semibold leading-snug">
+                                {item.tipo_corte} ·{' '}
+                                {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 Local'} ·{' '}
+                                <span className="text-[#2563EB] font-black">
+                                  {APP_CONFIG.monedaSimbolo}
+                                  {item.monto || precioServicio}
+                                </span>
+                              </p>
+                              {item.barbero_preferido && (
+                                <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
+                                  💈 Pidió: {item.barbero_preferido}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-1">
-                              <span className="text-sm font-black leading-snug break-words">
-                                {item.nombre_cliente}
-                              </span>
-                              <span className="text-xs font-black text-[#DC2626]">
-                                ({item.codigo_ticket})
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-400 font-semibold leading-snug">
-                              {item.tipo_corte} ·{' '}
-                              {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 Local'} ·{' '}
-                              <span className="text-[#2563EB] font-black">
-                                {APP_CONFIG.monedaSimbolo}
-                                {item.monto || precioServicio}
-                              </span>
-                            </p>
-                            {item.barbero_preferido && (
-                              <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
-                                💈 Pidió: {item.barbero_preferido}
-                              </span>
+
+                          <div className="flex flex-col items-end gap-1.5 shrink-0">
+                            {sillaActual && (
+                              <button
+                                type="button"
+                                onClick={() => llamarClienteParaSilla(item, sillaActual)}
+                                disabled={Boolean(turnoEnSillaActual)}
+                                title={
+                                  turnoEnSillaActual
+                                    ? 'Finaliza el corte actual de esta silla primero'
+                                    : `Pasar a ${sillaActual.nombre_silla}`
+                                }
+                                className="px-3 py-1.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-xs shadow-xs transition-all active:scale-95 disabled:opacity-40"
+                              >
+                                📢 Llamar
+                              </button>
                             )}
                           </div>
                         </div>
 
-                        <div className="flex flex-col items-end gap-1.5 shrink-0">
-                          {sillaActual && (
-                            <button
-                              type="button"
-                              onClick={() => llamarClienteParaSilla(item, sillaActual)}
-                              disabled={Boolean(turnoEnSillaActual)}
-                              title={
-                                turnoEnSillaActual
-                                  ? 'Finaliza el corte actual de esta silla primero'
-                                  : `Pasar a ${sillaActual.nombre_silla}`
+                        {/* Fila de acciones por cliente: Aviso WA previo (15m máx) -> Reprogramar / Ausente */}
+                        <div
+                          className={`pt-2 border-t flex flex-wrap items-center justify-between gap-1.5 ${
+                            isDark ? 'border-slate-800/80' : 'border-slate-200'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (item.cliente_telefono) {
+                                enviarAvisoPrevio15MinWA(item);
+                              } else {
+                                const num = prompt(`Teléfono WhatsApp para ${item.nombre_cliente}:`);
+                                if (num) enviarAvisoPrevio15MinWA(item, num);
                               }
-                              className="w-full px-3 py-1.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-xs shadow-xs transition-all active:scale-95 disabled:opacity-40"
-                            >
-                              📢 Llamar
-                            </button>
-                          )}
+                            }}
+                            className={`px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all active:scale-95 ${
+                              yaAvisadoWa
+                                ? 'bg-amber-500/20 border border-amber-500/50 text-amber-400'
+                                : 'bg-[#2563EB] hover:bg-[#1D4ED8] text-white'
+                            }`}
+                          >
+                            <span>{yaAvisadoWa ? '⏳' : '📲'}</span>
+                            <span>
+                              {yaAvisadoWa
+                                ? `Cancela en ${formatearContador15Min(inicioAvisoMs)}`
+                                : '¿Sigues afuera? (15m)'}
+                            </span>
+                          </button>
 
                           <div className="flex items-center gap-1.5">
-                            {item.cliente_telefono ? (
-                              <button
-                                type="button"
-                                onClick={() => confirmarAsistenciaWhatsApp(item)}
-                                title="Confirmar asistencia por WhatsApp"
-                                className="px-2.5 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-xs transition-all active:scale-95"
-                              >
-                                📲 WA
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  const num = prompt(`Teléfono WhatsApp para ${item.nombre_cliente}:`);
-                                  if (num) {
-                                    await supabase
-                                      .from('turnos')
-                                      .update({ cliente_telefono: num })
-                                      .eq('id', item.id);
-                                    confirmarAsistenciaWhatsApp(item, num);
-                                    fetchTurnosYCitas();
-                                  }
-                                }}
-                                title="Agregar teléfono y enviar WhatsApp"
-                                className="px-2.5 py-1.5 rounded-xl bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] font-black text-xs transition-all active:scale-95"
-                              >
-                                ➕ Tlf
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              disabled={!yaAvisadoWa}
+                              onClick={() => {
+                                if (abriendoReprog) {
+                                  setReprogramandoTurnoId(null);
+                                } else {
+                                  setReprogramandoTurnoId(item.id);
+                                  setNuevaHoraTurnoHoy('');
+                                }
+                              }}
+                              title={
+                                yaAvisadoWa
+                                  ? 'Reprogramar dentro de los 15 min'
+                                  : 'Envía primero el mensaje de WhatsApp'
+                              }
+                              className="px-2.5 py-1.5 rounded-xl border border-[#2563EB]/50 text-[#2563EB] hover:bg-[#2563EB] hover:text-white font-black text-xs transition-all disabled:opacity-35 disabled:pointer-events-none"
+                            >
+                              🕒 Reprogramar
+                            </button>
 
                             <button
                               type="button"
-                              onClick={() => cancelarTurnoEnEspera(item)}
-                              title="Cancelar turno"
-                              className="px-2.5 py-1.5 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all active:scale-95"
+                              disabled={!yaAvisadoWa}
+                              onClick={() => marcarTurnoAusenteTrasAviso(item)}
+                              title={
+                                yaAvisadoWa
+                                  ? 'Marcar como ausente (deberá volver a programar)'
+                                  : 'Envía primero el mensaje de WhatsApp'
+                              }
+                              className="px-2.5 py-1.5 rounded-xl border border-[#DC2626]/50 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all disabled:opacity-35 disabled:pointer-events-none"
                             >
-                              ✕
+                              🚫 Ausente
                             </button>
                           </div>
                         </div>
+
+                        {abriendoReprog && (
+                          <div
+                            className={`p-2.5 rounded-xl border space-y-2 ${
+                              isDark ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
+                            }`}
+                          >
+                            <span className="text-[11px] font-black uppercase text-slate-400 block">
+                              Nueva hora hoy:
+                            </span>
+                            <div className="flex gap-2">
+                              <input
+                                type="time"
+                                value={nuevaHoraTurnoHoy}
+                                onChange={(e) => setNuevaHoraTurnoHoy(e.target.value)}
+                                className={`flex-1 px-2.5 py-1.5 rounded-lg border text-xs font-bold focus:outline-none ${
+                                  isDark
+                                    ? 'bg-slate-900 border-slate-700 text-white'
+                                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                                }`}
+                              />
+                              <button
+                                type="button"
+                                disabled={guardandoReprogTurno || !nuevaHoraTurnoHoy}
+                                onClick={() => guardarReprogramacionTurnoHoy(item)}
+                                className="px-3 py-1.5 rounded-lg bg-[#2563EB] text-white text-xs font-black disabled:opacity-40"
+                              >
+                                {guardandoReprogTurno ? '...' : 'Guardar + WA'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
