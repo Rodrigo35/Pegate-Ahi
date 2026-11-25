@@ -15,6 +15,7 @@ export default function HomeHub() {
   const [esNoche, setEsNoche] = useState<boolean>(false);
   const [presionandoBarber, setPresionandoBarber] = useState<boolean>(false);
   const [copiadoEnlace, setCopiadoEnlace] = useState<boolean>(false);
+  const [mostrarQrModal, setMostrarQrModal] = useState<boolean>(false);
 
   const timerAccesoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -97,7 +98,6 @@ export default function HomeHub() {
         });
         return;
       } catch {
-        // Si el usuario cancela el diálogo nativo, no hacer nada
         return;
       }
     }
@@ -109,25 +109,25 @@ export default function HomeHub() {
   const isDark = modoTema === 'auto' ? esNoche : modoTema === 'dark';
 
   const qrCodeImageUrl = clientUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=10&color=0F172A&bgcolor=FFFFFF&data=${encodeURIComponent(clientUrl)}`
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=10&color=0F172A&bgcolor=FFFFFF&data=${encodeURIComponent(clientUrl)}`
     : '';
 
   return (
     <main
-      className={`min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 transition-colors duration-300 ${
+      className={`min-h-[100dvh] flex flex-col items-center justify-center p-3 sm:p-5 transition-colors duration-300 ${
         isDark ? 'bg-[#080D1A] text-white' : 'bg-[#F1F5F9] text-slate-900'
       }`}
     >
       <div
-        className={`w-full max-w-[440px] rounded-3xl p-3 sm:p-4 shadow-2xl border transition-colors ${
+        className={`w-full max-w-[430px] rounded-3xl p-2.5 sm:p-3.5 shadow-2xl border transition-colors ${
           isDark
             ? 'bg-[#0F172A] border-slate-800'
             : 'bg-white border-slate-200'
         }`}
       >
-        <div className="rounded-2xl border-2 border-[#2563EB]/60 p-5 sm:p-6 flex flex-col justify-between space-y-6">
+        <div className="rounded-2xl border-2 border-[#2563EB]/60 p-4 sm:p-5 flex flex-col justify-between gap-4">
           {/* Cabecera */}
-          <header className="flex items-center justify-between">
+          <header className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <div
                 className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${
@@ -141,7 +141,7 @@ export default function HomeHub() {
                 <span className="w-2 h-2 rounded-full bg-[#2563EB]" />
               </div>
               <span
-                className={`text-xs font-extrabold uppercase tracking-widest ${
+                className={`text-xs font-extrabold uppercase tracking-wider ${
                   isDark ? 'text-slate-400' : 'text-slate-500'
                 }`}
               >
@@ -194,98 +194,105 @@ export default function HomeHub() {
             </div>
           </header>
 
-          {/* Contenido Principal */}
-          <section className="text-center space-y-5">
-            <div>
-              <span
-                onPointerDown={iniciarToqueBarbero}
-                onPointerUp={cancelarToqueBarbero}
-                onPointerLeave={cancelarToqueBarbero}
-                onPointerCancel={cancelarToqueBarbero}
-                onContextMenu={(e) => e.preventDefault()}
-                className={`text-3xl inline-block mb-1 select-none touch-none cursor-default transition-transform duration-300 ${
-                  presionandoBarber ? 'scale-125 opacity-80' : 'scale-100'
-                }`}
-              >
-                💈
+          {/* Hero Central estilo tarjeta nativa sin scroll */}
+          <section className="text-center flex flex-col items-center gap-3.5 py-1">
+            {/* Emblema circular grande con acceso oculto barbero (1.5s) */}
+            <button
+              type="button"
+              onPointerDown={iniciarToqueBarbero}
+              onPointerUp={cancelarToqueBarbero}
+              onPointerLeave={cancelarToqueBarbero}
+              onPointerCancel={cancelarToqueBarbero}
+              onContextMenu={(e) => e.preventDefault()}
+              aria-label="Emblema Barbería"
+              className={`relative w-24 h-24 rounded-full bg-gradient-to-br from-[#2563EB]/20 via-[#2563EB]/10 to-[#DC2626]/20 border-[3px] border-[#2563EB] flex items-center justify-center shadow-xl select-none touch-none transition-transform duration-300 ${
+                presionandoBarber ? 'scale-110 border-[#DC2626]' : 'scale-100'
+              }`}
+            >
+              <span className="text-5xl leading-none">💈</span>
+              <span className="absolute -bottom-1.5 px-2.5 py-0.5 rounded-full bg-[#DC2626] text-white text-[10px] font-black uppercase tracking-wider shadow">
+                En Vivo
               </span>
-              <h1 className="text-3xl sm:text-4xl font-black tracking-tight leading-tight">
+            </button>
+
+            <div className="space-y-1">
+              <h1 className="text-3xl font-black tracking-tight leading-none break-words">
                 {APP_CONFIG.nombreNegocio || 'Pégate Ahí'}
               </h1>
-              <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-[#2563EB] mt-1.5">
+              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-[#2563EB]">
                 Turnos en Vivo · Citas
               </p>
               <p
-                className={`text-sm mt-3 max-w-[300px] mx-auto leading-relaxed ${
+                className={`text-xs max-w-[290px] mx-auto leading-snug pt-0.5 ${
                   isDark ? 'text-slate-400' : 'text-slate-600'
                 }`}
               >
-                Escanea el código QR para entrar a la fila del día o agendar tu corte sin esperas.
+                Entra a la fila del día o agenda tu corte sin hacer espera en el local.
               </p>
             </div>
 
-            {/* Tarjeta QR */}
-            <div className="inline-flex flex-col items-center p-4 rounded-2xl bg-white border-2 border-[#2563EB] shadow-lg">
-              {qrCodeImageUrl ? (
-                <img
-                  src={qrCodeImageUrl}
-                  alt="Código QR para tomar turno"
-                  className="w-48 h-48 rounded-xl"
-                />
-              ) : (
-                <div className="w-48 h-48 bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-slate-900 text-sm font-bold">
-                  Cargando QR...
-                </div>
-              )}
-              <span className="text-xs font-black text-slate-900 mt-2.5 tracking-wide">
-                ESCANEA CON TU CÁMARA
-              </span>
-            </div>
-
-            {/* Acciones para cliente y compartir enlace */}
-            <div className="space-y-2.5 pt-1">
+            {/* Botón Principal Protagonista (estilo círculo/píldora grande de acción) */}
+            <div className="w-full pt-1">
               <Link
                 href="/cliente"
-                className="block w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base tracking-wide transition-all shadow-lg active:scale-95"
+                className="w-full py-4 px-4 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base tracking-wide flex items-center justify-center gap-2.5 transition-all shadow-lg shadow-[#DC2626]/25 active:scale-95"
               >
-                Tomar Turno o Agendar Cita
+                <span className="text-2xl leading-none">✂️</span>
+                <span>Tomar Turno o Agendar</span>
               </Link>
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={copiarEnlaceCliente}
-                  className={`py-3 px-3 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 transition-all active:scale-95 ${
-                    isDark
-                      ? 'bg-slate-950 border-slate-800 text-slate-200 hover:border-[#2563EB]'
-                      : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-[#2563EB]'
-                  }`}
-                >
-                  <span>{copiadoEnlace ? '✅' : '📋'}</span>
-                  <span>{copiadoEnlace ? '¡Copiado!' : 'Copiar Enlace'}</span>
-                </button>
+            {/* Cuadrícula 3 botones grandes con iconos protagonistas (QR, Copiar, Compartir) */}
+            <div className="grid grid-cols-3 gap-2 w-full">
+              <button
+                type="button"
+                onClick={() => setMostrarQrModal(true)}
+                className={`py-3 px-2 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-800 text-slate-200 hover:border-[#2563EB]'
+                    : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-[#2563EB]'
+                }`}
+              >
+                <span className="text-2xl leading-none">📷</span>
+                <span className="text-xs font-black leading-tight">Ver QR</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={compartirEnlaceCliente}
-                  className="py-3 px-3 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
-                >
-                  <span>📲</span>
-                  <span>Compartir Link</span>
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={copiarEnlaceCliente}
+                className={`py-3 px-2 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all active:scale-95 ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-800 text-slate-200 hover:border-[#2563EB]'
+                    : 'bg-slate-50 border-slate-200 text-slate-800 hover:border-[#2563EB]'
+                }`}
+              >
+                <span className="text-2xl leading-none">{copiadoEnlace ? '✅' : '📋'}</span>
+                <span className="text-xs font-black leading-tight">
+                  {copiadoEnlace ? 'Copiado' : 'Copiar Link'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={compartirEnlaceCliente}
+                className="py-3 px-2 rounded-2xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white flex flex-col items-center justify-center gap-1 shadow-sm transition-all active:scale-95"
+              >
+                <span className="text-2xl leading-none">📲</span>
+                <span className="text-xs font-black leading-tight">Compartir</span>
+              </button>
             </div>
           </section>
 
-         <footer
-            className={`text-center text-xs pt-3 border-t space-y-1 ${
+          {/* Footer compacto */}
+          <footer
+            className={`text-center text-xs pt-2.5 border-t space-y-0.5 ${
               isDark
                 ? 'text-slate-500 border-slate-800/80'
                 : 'text-slate-400 border-slate-200'
             }`}
           >
             <p>
-              © {currentYear || 2026} {APP_CONFIG.nombreNegocio || 'Pégate Ahí'} · Barbería ·{' '}
+              © {currentYear || 2026} {APP_CONFIG.nombreNegocio || 'Pégate Ahí'} ·{' '}
               <span className="font-bold">v1.0.0</span>
             </p>
             <p className="text-[11px] font-semibold">
@@ -296,13 +303,57 @@ export default function HomeHub() {
                 rel="noopener noreferrer"
                 className="font-extrabold text-[#2563EB] hover:underline"
               >
-               (@cest.rodrigo.pmv)
+                (@cest.rodrigo.pmv)
               </a>{' '}
               & Max
             </p>
           </footer>
         </div>
       </div>
+
+      {/* Modal QR instantáneo (evita ocupar 220px verticales fijos en pantalla) */}
+      {mostrarQrModal && (
+        <div
+          onClick={() => setMostrarQrModal(false)}
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-[340px] rounded-3xl p-5 border-2 border-[#2563EB] text-center space-y-4 shadow-2xl ${
+              isDark ? 'bg-[#0F172A] text-white' : 'bg-white text-slate-900'
+            }`}
+          >
+            <div>
+              <span className="text-xs font-black uppercase tracking-wider text-[#2563EB]">
+                Acceso Rápido en Local
+              </span>
+              <h2 className="text-lg font-black mt-0.5">Escanea con tu cámara</h2>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-white border-2 border-[#2563EB] inline-block mx-auto shadow">
+              {qrCodeImageUrl ? (
+                <img
+                  src={qrCodeImageUrl}
+                  alt="Código QR para tomar turno"
+                  className="w-52 h-52 rounded-xl"
+                />
+              ) : (
+                <div className="w-52 h-52 bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-slate-900 text-sm font-bold">
+                  Cargando QR...
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setMostrarQrModal(false)}
+              className="w-full py-3 rounded-xl bg-[#DC2626] text-white font-black text-sm active:scale-95"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
