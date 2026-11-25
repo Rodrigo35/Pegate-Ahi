@@ -1115,7 +1115,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                       : 'bg-white text-slate-900 border-slate-300'
                   }`}
                 >
-                  {turno.modalidad_espera === 'diligencia' ? '🏃‍♂️ Diligencia' : '💈 En el local'}
+                  {turno.modalidad_espera === 'diligencia' ? '🏃♂️ Diligencia' : '💈 En el local'}
                 </span>
               </div>
 
@@ -1170,7 +1170,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               </>
             ) : turno.modalidad_espera === 'diligencia' && tiempoRestanteSegundos !== null ? (
               <>
-                <span className="text-5xl block">🏃‍♂️</span>
+                <span className="text-5xl block">🏃♂️</span>
                 <h2 className="text-xl font-black text-[#DC2626]">¡El barbero te está llamando!</h2>
                 <div className="py-2.5 px-5 rounded-xl bg-slate-950 border border-slate-800 text-white">
                   <span className="text-xs uppercase font-bold text-slate-400 block">
@@ -1228,29 +1228,49 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     );
   }
 
-  // --- FORMULARIO POR PASOS (SIN SCROLL VERTICAL + ICONOS PROTAGONISTAS 2x2) ---
-  return (
-    <div className="pt-3 space-y-4">
-      {/* Alerta si su turno/cita anterior venció por los 15 minutos */}
-      {avisoExpirado && (
+  // --- PANTALLA PROTAGONISTA DE TURNO / CITA CANCELADA ---
+  if (avisoExpirado) {
+    return (
+      <div className="pt-4">
         <div
-          className={`p-3 rounded-2xl border text-xs leading-snug flex items-start justify-between gap-2 ${
+          className={`p-6 rounded-3xl border-2 border-[#DC2626] text-center space-y-4 shadow-lg ${
             isDark
-              ? 'bg-[#DC2626]/15 border-[#DC2626]/50 text-red-200'
-              : 'bg-red-50 border-red-300 text-red-800'
+              ? 'bg-[#DC2626]/15 text-red-100'
+              : 'bg-red-50 text-red-950'
           }`}
         >
-          <span>⏰ {avisoExpirado}</span>
+          <div className="w-20 h-20 rounded-full bg-[#DC2626] text-white flex items-center justify-center text-4xl mx-auto shadow-md">
+            ⏰
+          </div>
+
+          <div className="space-y-1.5">
+            <span className="inline-block px-3.5 py-1 rounded-full bg-[#DC2626] text-white text-xs font-black uppercase tracking-wider">
+              Turno Cancelado
+            </span>
+            <h2 className="text-2xl font-black text-[#DC2626] leading-tight pt-1">
+              ¡Tu turno ha sido cancelado!
+            </h2>
+          </div>
+
+          <p className="text-base font-bold leading-relaxed">
+            {avisoExpirado}
+          </p>
+
           <button
             type="button"
             onClick={() => setAvisoExpirado(null)}
-            className="font-black text-xs shrink-0 opacity-70 hover:opacity-100"
+            className="w-full py-4 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base uppercase tracking-wider shadow-md transition-all active:scale-95"
           >
-            ✕
+            Volver a programar turno
           </button>
         </div>
-      )}
+      </div>
+    );
+  }
 
+  // --- FORMULARIO POR PASOS (SIN SCROLL VERTICAL + ICONOS PROTAGONISTAS 2x2) ---
+  return (
+    <div className="pt-3 space-y-4">
       {/* Indicador de 3 pasos */}
       <div className="flex items-center justify-between gap-2">
         {[
