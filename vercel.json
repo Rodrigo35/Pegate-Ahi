@@ -1,8 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/push-recordatorio-individual",
-      "schedule": "0 19 * * *"
+      "path": "/api/recordatorios-retoque",
+      "schedule": "0 14 * * 4"
     }
   ]
 }
