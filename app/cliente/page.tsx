@@ -617,10 +617,19 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       })
       .subscribe();
 
+    const channelCitasActual = supabase
+      .channel('cliente_realtime_cita_activa')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'citas' }, () => {
+        const actualCita = citaParam || citaConfirmada?.codigo_ticket;
+        if (actualCita) cargarCitaGuardada(actualCita);
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(channelCitasActual);
     };
-  }, [ticketParam, citaParam, turno?.id, turno?.codigo_ticket, reseteando]);
+  }, [ticketParam, citaParam, turno?.id, turno?.codigo_ticket, citaConfirmada?.codigo_ticket, reseteando]);
 
   useEffect(() => {
     if (
@@ -656,7 +665,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       modalidadEspera === 'local'
         ? horaLlegadaLocal !== 'ahora'
           ? horaLlegadaLocal
-          : bloquesHoy[0]?.etiqueta || ''
+          : ''
         : '';
 
     if (etiquetaHora) {
@@ -736,6 +745,28 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     if (!nombre.trim() || !telefono.trim() || !horaCitaSeleccionada) return;
 
     setRegistrando(true);
+
+    // Validación en tiempo real de disponibilidad de cupo antes de insertar
+    const { count: totalSillas } = await supabase
+      .from('sillas')
+      .select('*', { count: 'exact', head: true })
+      .eq('activa', true);
+    const capacidadPorHora = Math.max(1, totalSillas || 1);
+
+    const { count: ocupadasAhora } = await supabase
+      .from('citas')
+      .select('*', { count: 'exact', head: true })
+      .eq('fecha', fechaCita)
+      .eq('hora_inicio', horaCitaSeleccionada)
+      .neq('estado', 'cancelada');
+
+    if ((ocupadasAhora || 0) >= capacidadPorHora) {
+      alert('Ese bloque horario acaba de ocuparse. Por favor elige otra hora disponible.');
+      await cargarHorarios();
+      setRegistrando(false);
+      return;
+    }
+
     const numero = Math.floor(Math.random() * 900) + 100;
     const codigo = `C-${numero}`;
 
@@ -949,6 +980,17 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               </span>
             </div>
           )}
+        </div>
+
+        {/* Aviso de puntualidad */}
+        <div
+          className={`p-3 rounded-2xl border text-xs text-left leading-snug ${
+            isDark
+              ? 'bg-amber-950/30 border-amber-700/40 text-amber-300'
+              : 'bg-amber-50 border-amber-300 text-amber-800'
+          }`}
+        >
+          ⏰ <strong>Importante:</strong> Preséntate puntual a tu hora reservada. Si pierdes tu bloque, se libera el turno para no retrasar a los demás clientes y deberás reasignar según disponibilidad.
         </div>
 
         <div className="space-y-2.5">
@@ -1246,7 +1288,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             </h2>
           </div>
 
-          {/* Cuadrícula 2x2 con círculos grandes estilo referencia visual (sin cortar palabras) */}
+          {/* Cuadrícula 2x2 con círculos grandes */}
           <div className="grid grid-cols-2 gap-3">
             {listaServicios.map((srv) => {
               const selected = servicioSeleccionado.nombre === srv.nombre;
@@ -1263,7 +1305,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                       : 'bg-slate-50 border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  {/* Medallón circular grande */}
                   <div
                     className={`w-16 h-16 rounded-full border-[3px] flex items-center justify-center text-3xl mb-2 transition-all ${
                       selected
@@ -1276,7 +1317,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                     {srv.icono}
                   </div>
 
-                  {/* Nombre completo sin truncate */}
                   <span className="text-sm font-black leading-snug break-words">
                     {srv.nombre}
                   </span>
@@ -1322,7 +1362,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       {/* ================= PASO 2: BARBERO (CIRCULAR) + HORARIO EN TIRA HORIZONTAL ================= */}
       {paso === 2 && (
         <div className="space-y-4">
-          {/* Carrusel horizontal de barberos con avatar circular (estilo pantalla 3) */}
           {sillasActivas.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
@@ -1419,7 +1458,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 >
                   <span className="text-2xl mb-0.5">💈</span>
                   <span className="text-sm font-black">En el Local</span>
-                  <span className="text-[11px] opacity-80">Elige hora</span>
+                  <span className="text-[11px] opacity-80">Orden de llegada</span>
                 </button>
 
                 <button
@@ -1445,12 +1484,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 </button>
               </div>
 
-              {/* Tira horizontal de horas de hoy (cero scroll vertical) */}
               {modalidadEspera === 'local' && (
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between px-1">
                     <span className="text-xs font-extrabold uppercase text-slate-400">
-                      🕒 Hora de llegada hoy
+                      🕒 Llegada estimada hoy
                     </span>
                     <span className="text-xs font-bold text-[#2563EB]">Desliza →</span>
                   </div>
@@ -1467,7 +1505,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                           : 'bg-slate-50 border-slate-200 text-slate-800'
                       }`}
                     >
-                      ⚡ Ahora mismo
+                      ⚡ Ya estoy aquí
                     </button>
 
                     {bloquesHoy.map((b) => {
@@ -1611,7 +1649,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita}
           className="space-y-4"
         >
-          {/* Resumen compacto de lo elegido */}
           <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 ${subCardClass}`}>
             <div className="flex items-center gap-2.5">
               <span className="w-11 h-11 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-2xl shrink-0">
@@ -1622,9 +1659,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <p className="text-xs font-bold text-slate-400">
                   {modoRegistro === 'cola'
                     ? horaLlegadaLocal === 'ahora'
-                      ? 'Turno hoy · Ahora'
-                      : `Turno hoy · ${horaLlegadaLocal}`
-                    : `Cita · ${fechaCita} (${horaCitaSeleccionada.substring(0, 5)})`}
+                      ? 'Turno hoy · Orden de llegada'
+                      : `Turno hoy · Llegada ~${horaLlegadaLocal}`
+                    : `Cita puntual · ${fechaCita} (${horaCitaSeleccionada.substring(0, 5)})`}
                 </p>
               </div>
             </div>
