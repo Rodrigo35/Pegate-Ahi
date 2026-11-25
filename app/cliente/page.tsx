@@ -53,6 +53,17 @@ interface ServicioOption {
 const STORAGE_KEY = 'pegate_ahi_registro_activo';
 const THEME_STORAGE_KEY = 'pegate_ahi_tema';
 
+const urlBase64ToUint8Array = (base64String: string) => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+};
+
 const getMananaLocal = () => {
   const d = new Date();
   d.setDate(d.getDate() + 1);
@@ -144,6 +155,52 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [horaActual, setHoraActual] = useState<string>('');
   const [tiempoRestanteSegundos, setTiempoRestanteSegundos] = useState<number | null>(null);
   const [distanciaKm, setDistanciaKm] = useState<number | null>(null);
+
+  const registrarSuscripcionPushCliente = async (
+    nombreCliente: string,
+    telefonoCliente: string
+  ) => {
+    try {
+      if (
+        typeof window === 'undefined' ||
+        !('serviceWorker' in navigator) ||
+        !('PushManager' in window)
+      ) {
+        return;
+      }
+
+      const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      if (!vapidPublicKey) return;
+
+      let permission = Notification.permission;
+      if (permission === 'default') {
+        permission = await Notification.requestPermission();
+      }
+      if (permission !== 'granted') return;
+
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        });
+      }
+
+      await fetch('/api/push-suscribir-cliente', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscription: subscription.toJSON(),
+          cliente_telefono: telefonoCliente,
+          nombre_cliente: nombreCliente,
+        }),
+      });
+    } catch {
+      // Ignorar si el navegador bloquea Push o no soporta SW
+    }
+  };
 
   const cargarHorasOcupadasHoy = async () => {
     const inicioDia = `${getHoyLocal()}T00:00:00`;
@@ -509,6 +566,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         }
       }
     } else if (!miTurno || miTurno.estado === 'cancelado') {
+      if (turno && turno.estado !== 'cancelado') {
+        alert('Tu turno fue cancelado por la barbería.');
+      }
       limpiarPersistencia();
       setTurno(null);
     }
@@ -647,6 +707,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       .single();
 
     if (!error && data) {
+      registrarSuscripcionPushCliente(nombre.trim(), telefono);
+
       fetch('/api/push-cita', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -701,6 +763,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       .single();
 
     if (!error && data) {
+      registrarSuscripcionPushCliente(nombre.trim(), telefono);
+
       fetch('/api/push-cita', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -720,6 +784,42 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       cargarHorarios();
     }
     setRegistrando(false);
+  };
+
+  const cancelarCita = async () => {
+    if (!citaConfirmada) return;
+    const confirmar = confirm('¿Seguro que deseas cancelar tu cita agendada?');
+    if (!confirmar) return;
+
+    const citaCancelada = { ...citaConfirmada };
+
+    const { error } = await supabase
+      .from('citas')
+      .update({ estado: 'cancelada' })
+      .eq('id', citaCancelada.id);
+
+    if (!error) {
+      try {
+        await fetch('/api/push-cita', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          keepalive: true,
+          body: JSON.stringify({
+            tipo: 'cancelacion',
+            codigo_ticket: citaCancelada.codigo_ticket,
+            nombre_cliente: citaCancelada.nombre_cliente,
+            tipo_corte: citaCancelada.tipo_corte,
+            fecha: citaCancelada.fecha,
+            hora_inicio: citaCancelada.hora_inicio,
+            barbero_preferido: citaCancelada.barbero_preferido,
+          }),
+        });
+      } catch (err) {
+        console.error('Error enviando push de cancelación de cita:', err);
+      }
+    }
+
+    volverAlInicio();
   };
 
   const cambiarModalidadEnVivo = async (nuevaModalidad: 'local' | 'diligencia') => {
@@ -855,13 +955,23 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={volverAlInicio}
-          className="w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base uppercase tracking-wider shadow-md active:scale-95"
-        >
-          Volver al Inicio
-        </button>
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={volverAlInicio}
+            className="w-full py-4 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-base uppercase tracking-wider shadow-md active:scale-95"
+          >
+            Volver al Inicio
+          </button>
+
+          <button
+            type="button"
+            onClick={cancelarCita}
+            className="w-full py-3.5 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-extrabold text-base transition-all"
+          >
+            Cancelar mi cita
+          </button>
+        </div>
       </div>
     );
   }
