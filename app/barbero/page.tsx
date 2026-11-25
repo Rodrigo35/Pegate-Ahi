@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 import { APP_CONFIG } from '../../lib/config';
@@ -239,6 +239,12 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [horaActual, setHoraActual] = useState<string>('');
   const [hoyStr, setHoyStr] = useState<string>('');
   const [ahoraMs, setAhoraMs] = useState<number>(Date.now());
+
+  // Estados para sostener y arrastrar (reordenar cola en móvil y PC)
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const filaRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Estados Web Push
   const [pushEstado, setPushEstado] = useState<'verificando' | 'inactivo' | 'activo' | 'no_soportado'>('verificando');
@@ -701,6 +707,103 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const turnosEnAtencion = turnos.filter((t) => t.estado === 'atendiendo');
   const colaEspera = turnos.filter((t) => t.estado === 'espera');
 
+  // --- Lógica de sostener y arrastrar para reordenar cola ---
+  const reordenarCola = async (fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= colaEspera.length || toIdx >= colaEspera.length) {
+      return;
+    }
+
+    const listaReordenada = [...colaEspera];
+    const [movido] = listaReordenada.splice(fromIdx, 1);
+    listaReordenada.splice(toIdx, 0, movido);
+
+    let nuevoCreadoEnMs: number;
+    if (toIdx === 0) {
+      const siguienteMs = new Date(listaReordenada[1].creado_en).getTime();
+      nuevoCreadoEnMs = siguienteMs - 60000;
+    } else if (toIdx === listaReordenada.length - 1) {
+      const anteriorMs = new Date(listaReordenada[toIdx - 1].creado_en).getTime();
+      nuevoCreadoEnMs = anteriorMs + 60000;
+    } else {
+      const anteriorMs = new Date(listaReordenada[toIdx - 1].creado_en).getTime();
+      const siguienteMs = new Date(listaReordenada[toIdx + 1].creado_en).getTime();
+      nuevoCreadoEnMs = Math.floor((anteriorMs + siguienteMs) / 2);
+      if (nuevoCreadoEnMs === anteriorMs) nuevoCreadoEnMs = anteriorMs + 1;
+    }
+
+    const nuevoIso = new Date(nuevoCreadoEnMs).toISOString();
+
+    // Actualización optimista inmediata en pantalla
+    setTurnos((prev) =>
+      prev
+        .map((t) => (t.id === movido.id ? { ...t, creado_en: nuevoIso } : t))
+        .sort((a, b) => new Date(a.creado_en).getTime() - new Date(b.creado_en).getTime())
+    );
+
+    const { error } = await supabase
+      .from('turnos')
+      .update({ creado_en: nuevoIso })
+      .eq('id', movido.id);
+
+    if (error) {
+      console.error('Error al reordenar cola:', error);
+      fetchTurnosYCitas();
+    }
+  };
+
+  const iniciarSostenerArrastre = (idx: number, e: React.PointerEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    if (colaEspera.length < 2) return;
+
+    const targetEl = e.currentTarget;
+    const pointerId = e.pointerId;
+
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+
+    holdTimerRef.current = setTimeout(() => {
+      setDragIdx(idx);
+      setHoverIdx(idx);
+      try {
+        targetEl.setPointerCapture(pointerId);
+      } catch {
+        // Ignorar
+      }
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        try {
+          navigator.vibrate(35);
+        } catch {
+          // Ignorar
+        }
+      }
+    }, 220);
+  };
+
+  const moverArrastre = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (dragIdx === null) return;
+    const clientY = e.clientY;
+    for (let i = 0; i < colaEspera.length; i++) {
+      const el = filaRefs.current[i];
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (clientY >= rect.top && clientY <= rect.bottom) {
+        if (hoverIdx !== i) setHoverIdx(i);
+        break;
+      }
+    }
+  };
+
+  const finalizarArrastre = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+    if (dragIdx !== null && hoverIdx !== null && dragIdx !== hoverIdx) {
+      reordenarCola(dragIdx, hoverIdx);
+    }
+    setDragIdx(null);
+    setHoverIdx(null);
+  };
+
   const totalIngresos = turnosFinalizados.reduce((acc, t) => acc + (t.monto || 0), 0);
   const totalAtendidos = turnosFinalizados.length;
 
@@ -728,6 +831,38 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       `¡Hola ${nombre}! ✂️ Tu turno ${ticket} ha sido llamado${destino} en ${APP_CONFIG.nombreNegocio}. Dispones de ${APP_CONFIG.tiempoLimiteDiligenciaMin} minutos para llegar al local.`
     );
     window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
+  };
+
+  const confirmarAsistenciaWhatsApp = (turno: Turno, telefonoEspecifico?: string) => {
+    const telefonoFinal = telefonoEspecifico || turno.cliente_telefono;
+    if (!telefonoFinal) return;
+
+    let numLimpio = telefonoFinal.replace(/\D/g, '');
+    if (numLimpio.startsWith('0')) numLimpio = '58' + numLimpio.substring(1);
+
+    const mensaje = encodeURIComponent(
+      `¡Hola ${turno.nombre_cliente}! 💈 Te escribimos de ${APP_CONFIG.nombreNegocio}. Tu turno (${turno.codigo_ticket}) ya está próximo en la fila. ¿Nos confirmas si vas a asistir al local?`
+    );
+    window.open(`https://wa.me/${numLimpio}?text=${mensaje}`, '_blank');
+  };
+
+  const cancelarTurnoEnEspera = async (turno: Turno) => {
+    const confirmar = confirm(
+      `¿Cancelar el turno de ${turno.nombre_cliente} (${turno.codigo_ticket})?`
+    );
+    if (!confirmar) return;
+
+    const { error } = await supabase
+      .from('turnos')
+      .update({ estado: 'cancelado' })
+      .eq('id', turno.id);
+
+    if (error) {
+      alert('No se pudo cancelar el turno.');
+      return;
+    }
+
+    fetchTurnosYCitas();
   };
 
   const procesarNotificacionCitaWA = async (cita: Cita, telefonoEspecifico?: string) => {
@@ -832,8 +967,8 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const llamarSiguienteParaSilla = async (silla: Silla) => {
     if (colaEspera.length === 0) return;
 
-    const clienteEnLocal = colaEspera.find((t) => t.modalidad_espera === 'local');
-    const siguiente = clienteEnLocal || colaEspera[0];
+    // Respeta exactamente el orden superior de la cola reordenada por el barbero
+    const siguiente = colaEspera[0];
     const etiquetaAsignada = `${silla.nombre_silla} · ${silla.nombre_barbero}`;
 
     await supabase
@@ -883,8 +1018,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     );
 
     if (colaRestante.length > 0) {
-      const clienteEnLocal = colaRestante.find((t) => t.modalidad_espera === 'local');
-      const siguiente = clienteEnLocal || colaRestante[0];
+      const siguiente = colaRestante[0];
       const etiquetaAsignada = silla
         ? `${silla.nombre_silla} · ${silla.nombre_barbero}`
         : turnoAusente.nombre_barbero || null;
@@ -1383,14 +1517,16 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
               </>
             )}
 
-            {/* Lista de Espera compartida del día */}
+            {/* Lista de Espera compartida del día (Sostener y arrastrar para reordenar) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs font-black uppercase text-slate-400">
                   En espera ({colaEspera.length})
                 </span>
-                <span className="text-xs font-bold text-slate-400">
-                  Prom. ~{tiempoPromedioMinutos}m
+                <span className="text-[11px] font-bold text-slate-400">
+                  {colaEspera.length > 1
+                    ? 'Mantén pulsado ⋮⋮ para mover'
+                    : `Prom. ~${tiempoPromedioMinutos}m`}
                 </span>
               </div>
 
@@ -1399,43 +1535,111 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   No hay clientes en espera hoy.
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[210px] overflow-y-auto pr-0.5">
-                  {colaEspera.map((item, idx) => (
-                    <div
-                      key={item.id}
-                      className={`p-3 rounded-2xl border flex items-center justify-between gap-2 ${cardSurface}`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] flex items-center justify-center text-xs font-black shrink-0">
-                          #{idx + 1}
-                        </div>
-                        <div>
-                          <div className="flex flex-wrap items-center gap-1">
-                            <span className="text-sm font-black leading-snug break-words">
-                              {item.nombre_cliente}
-                            </span>
-                            <span className="text-xs font-black text-[#DC2626]">
-                              ({item.codigo_ticket})
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-400 font-semibold leading-snug">
-                            {item.tipo_corte} ·{' '}
-                            {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 Local'}
-                          </p>
-                          {item.barbero_preferido && (
-                            <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
-                              💈 Pidió: {item.barbero_preferido}
+                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5">
+                  {colaEspera.map((item, idx) => {
+                    const siendoArrastrado = dragIdx === idx;
+                    const destinoArrastre =
+                      dragIdx !== null && hoverIdx === idx && dragIdx !== idx;
+
+                    return (
+                      <div
+                        key={item.id}
+                        ref={(el) => {
+                          filaRefs.current[idx] = el;
+                        }}
+                        onPointerDown={(e) => iniciarSostenerArrastre(idx, e)}
+                        onPointerMove={moverArrastre}
+                        onPointerUp={finalizarArrastre}
+                        onPointerCancel={finalizarArrastre}
+                        style={{ touchAction: dragIdx !== null ? 'none' : 'pan-y' }}
+                        className={`p-3 rounded-2xl border flex items-center justify-between gap-2 select-none transition-all ${cardSurface} ${
+                          siendoArrastrado
+                            ? 'scale-[1.02] border-[#2563EB] ring-2 ring-[#2563EB]/40 shadow-lg opacity-90 z-10'
+                            : destinoArrastre
+                            ? 'border-dashed border-2 border-[#DC2626]'
+                            : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {colaEspera.length > 1 && (
+                            <span
+                              className="text-slate-400 font-black text-sm leading-none cursor-grab active:cursor-grabbing px-0.5 shrink-0"
+                              title="Mantén presionado para reordenar"
+                            >
+                              ⋮⋮
                             </span>
                           )}
+                          <div className="w-8 h-8 rounded-full bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] flex items-center justify-center text-xs font-black shrink-0">
+                            #{idx + 1}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-sm font-black leading-snug break-words">
+                                {item.nombre_cliente}
+                              </span>
+                              <span className="text-xs font-black text-[#DC2626]">
+                                ({item.codigo_ticket})
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 font-semibold leading-snug">
+                              {item.tipo_corte} ·{' '}
+                              {item.modalidad_espera === 'diligencia' ? '🏃‍♂️ Fuera' : '💈 Local'} ·{' '}
+                              <span className="text-[#2563EB] font-black">
+                                {APP_CONFIG.monedaSimbolo}
+                                {item.monto || precioServicio}
+                              </span>
+                            </p>
+                            {item.barbero_preferido && (
+                              <span className="block text-[11px] font-black text-[#2563EB] mt-0.5">
+                                💈 Pidió: {item.barbero_preferido}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {item.cliente_telefono ? (
+                            <button
+                              type="button"
+                              onClick={() => confirmarAsistenciaWhatsApp(item)}
+                              title="Confirmar asistencia por WhatsApp"
+                              className="px-2.5 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-xs transition-all active:scale-95"
+                            >
+                              📲 WA
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const num = prompt(`Teléfono WhatsApp para ${item.nombre_cliente}:`);
+                                if (num) {
+                                  await supabase
+                                    .from('turnos')
+                                    .update({ cliente_telefono: num })
+                                    .eq('id', item.id);
+                                  confirmarAsistenciaWhatsApp(item, num);
+                                  fetchTurnosYCitas();
+                                }
+                              }}
+                              title="Agregar teléfono y enviar WhatsApp"
+                              className="px-2.5 py-2 rounded-xl bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] font-black text-xs transition-all active:scale-95"
+                            >
+                              ➕ Tlf
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => cancelarTurnoEnEspera(item)}
+                            title="Cancelar turno"
+                            className="px-2.5 py-2 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all active:scale-95"
+                          >
+                            ✕
+                          </button>
                         </div>
                       </div>
-
-                      <span className="text-sm font-black text-[#2563EB] shrink-0">
-                        {APP_CONFIG.monedaSimbolo}
-                        {item.monto || precioServicio}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
