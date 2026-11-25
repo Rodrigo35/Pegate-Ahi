@@ -147,6 +147,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [reseteando, setReseteando] = useState<boolean>(false);
 
+  // Mensaje cuando el turno o cita expiró/fue cancelado por superar los 15 min
+  const [avisoExpirado, setAvisoExpirado] = useState<string | null>(null);
+
   const [fechaCita, setFechaCita] = useState<string>('');
   const [diasProximos, setDiasProximos] = useState<
     { fecha: string; diaCorto: string; numDia: string; mesCorto: string }[]
@@ -514,17 +517,22 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       .from('citas')
       .select('*')
       .eq('codigo_ticket', codigoCita.toUpperCase())
-      .neq('estado', 'cancelada')
       .maybeSingle();
 
-    if (!error && data) {
+    if (!error && data && data.estado !== 'cancelada') {
       if (data.estado === 'atendida') {
         await cargarTurnoYPosicion(data.codigo_ticket);
         return;
       }
       setCitaConfirmada(data as CitaCliente);
     } else {
+      if (citaConfirmada && data?.estado === 'cancelada') {
+        setAvisoExpirado(
+          'Tu cita fue cancelada por superar los 15 minutos de tolerancia o por gestión de la barbería. Puedes volver a programar un nuevo horario.'
+        );
+      }
       limpiarPersistencia();
+      setCitaConfirmada(null);
     }
     setLoading(false);
   };
@@ -562,7 +570,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       }
     } else if (!miTurno || miTurno.estado === 'cancelado') {
       if (turno && turno.estado !== 'cancelado') {
-        alert('Tu turno fue cancelado por la barbería.');
+        setAvisoExpirado(
+          'Tu turno fue cancelado por superar el límite máximo de 15 minutos o por ausencia. Debes volver a programar un nuevo turno.'
+        );
       }
       limpiarPersistencia();
       setTurno(null);
@@ -660,6 +670,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     if (!nombre.trim() || !telefono.trim()) return;
 
     setRegistrando(true);
+    setAvisoExpirado(null);
 
     const etiquetaHora =
       modalidadEspera === 'local'
@@ -745,6 +756,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     if (!nombre.trim() || !telefono.trim() || !horaCitaSeleccionada) return;
 
     setRegistrando(true);
+    setAvisoExpirado(null);
 
     // Validación en tiempo real de disponibilidad de cupo antes de insertar
     const { count: totalSillas } = await supabase
@@ -982,7 +994,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           )}
         </div>
 
-        {/* Aviso de puntualidad */}
+        {/* Aviso de puntualidad y tolerancia máxima de 15 minutos */}
         <div
           className={`p-3 rounded-2xl border text-xs text-left leading-snug ${
             isDark
@@ -990,7 +1002,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               : 'bg-amber-50 border-amber-300 text-amber-800'
           }`}
         >
-          ⏰ <strong>Importante:</strong> Preséntate puntual a tu hora reservada. Si pierdes tu bloque, se libera el turno para no retrasar a los demás clientes y deberás reasignar según disponibilidad.
+          ⏰ <strong>Tolerancia máxima de 15 min:</strong> Preséntate puntual. Si no llegas dentro de los 15 minutos posteriores a tu hora, la cita se cancela automáticamente y deberás volver a programar.
         </div>
 
         <div className="space-y-2.5">
@@ -1113,7 +1125,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   onClick={() => cambiarModalidadEnVivo('diligencia')}
                   className="w-full py-3 rounded-xl border-2 border-[#2563EB] text-[#2563EB] hover:bg-[#2563EB] hover:text-white font-extrabold text-sm transition-all"
                 >
-                  Salgo a diligencia ({APP_CONFIG.tiempoLimiteDiligenciaMin} min tolerancia)
+                  Salgo a diligencia (15 min tolerancia máx.)
                 </button>
               ) : (
                 <button
@@ -1192,16 +1204,23 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
         {(turno.estado === 'finalizado' || turno.estado === 'ausente') && (
           <div className={`p-5 rounded-2xl border text-center space-y-3.5 ${subCardClass}`}>
-            <span className="text-4xl block">{turno.estado === 'finalizado' ? '✨' : '⏳'}</span>
+            <span className="text-4xl block">{turno.estado === 'finalizado' ? '✨' : '🚫'}</span>
             <h2 className="text-xl font-black">
-              {turno.estado === 'finalizado' ? '¡Gracias por tu visita!' : 'Tiempo agotado'}
+              {turno.estado === 'finalizado'
+                ? '¡Gracias por tu visita!'
+                : 'Turno cancelado por ausencia'}
             </h2>
+            {turno.estado === 'ausente' && (
+              <p className="text-xs font-semibold text-slate-400 leading-snug">
+                Superaste el límite máximo de 15 minutos sin presentarte. Debes volver a programar un nuevo turno.
+              </p>
+            )}
             <button
               type="button"
               onClick={volverAlInicio}
               className="w-full py-3.5 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base uppercase tracking-wider active:scale-95"
             >
-              Solicitar nuevo turno
+              Volver a programar
             </button>
           </div>
         )}
@@ -1212,6 +1231,26 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   // --- FORMULARIO POR PASOS (SIN SCROLL VERTICAL + ICONOS PROTAGONISTAS 2x2) ---
   return (
     <div className="pt-3 space-y-4">
+      {/* Alerta si su turno/cita anterior venció por los 15 minutos */}
+      {avisoExpirado && (
+        <div
+          className={`p-3 rounded-2xl border text-xs leading-snug flex items-start justify-between gap-2 ${
+            isDark
+              ? 'bg-[#DC2626]/15 border-[#DC2626]/50 text-red-200'
+              : 'bg-red-50 border-red-300 text-red-800'
+          }`}
+        >
+          <span>⏰ {avisoExpirado}</span>
+          <button
+            type="button"
+            onClick={() => setAvisoExpirado(null)}
+            className="font-black text-xs shrink-0 opacity-70 hover:opacity-100"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Indicador de 3 pasos */}
       <div className="flex items-center justify-between gap-2">
         {[
@@ -1478,9 +1517,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 >
                   <span className="text-2xl mb-0.5">🏃‍♂️</span>
                   <span className="text-sm font-black">Diligencia</span>
-                  <span className="text-[11px] opacity-80">
-                    {APP_CONFIG.tiempoLimiteDiligenciaMin} min tolerancia
-                  </span>
+                  <span className="text-[11px] opacity-80">15 min tolerancia máx.</span>
                 </button>
               </div>
 
