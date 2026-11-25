@@ -118,6 +118,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
   const citaParam = searchParams.get('cita');
 
+  // Flujo por pasos (1: Servicio 2x2, 2: Barbero y Horario/Modalidad, 3: Tus Datos y Confirmar)
+  const [paso, setPaso] = useState<1 | 2 | 3>(1);
+
   const [modoRegistro, setModoRegistro] = useState<'cola' | 'cita'>('cola');
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -248,7 +251,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ tipo, codigo }));
     } catch {
-      // Ignorar si localStorage está restringido
+      // Ignorar
     }
     const paramName = tipo === 'turno' ? 'ticket' : 'cita';
     router.replace(`/cliente?${paramName}=${encodeURIComponent(codigo)}`, { scroll: false });
@@ -311,18 +314,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
     const diasNombres = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const mesesNombres = [
-      'Ene',
-      'Feb',
-      'Mar',
-      'Abr',
-      'May',
-      'Jun',
-      'Jul',
-      'Ago',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dic',
+      'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
     ];
     const listaDias = [];
     for (let i = 1; i <= 14; i++) {
@@ -382,6 +375,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             icono = '🪒';
           } else if (s.id === 'corte_barba' || s.nombre.includes('+')) {
             icono = '💈';
+          } else if (s.nombre.toLowerCase().includes('ozono') || s.nombre.toLowerCase().includes('vapor')) {
+            icono = '💨';
           }
 
           unicosMap.set(s.nombre.toLowerCase().trim(), {
@@ -855,6 +850,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setHoraCitaSeleccionada('');
     setBarberoPreferido('');
     setHoraLlegadaLocal('ahora');
+    setPaso(1);
   };
 
   const cancelarTurno = async () => {
@@ -913,21 +909,21 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   // --- CITA CONFIRMADA ---
   if (citaConfirmada) {
     return (
-      <div className="pt-4 text-center space-y-5">
-        <div className="w-16 h-16 rounded-2xl bg-[#2563EB]/15 border border-[#2563EB]/50 text-white flex items-center justify-center text-3xl mx-auto">
+      <div className="pt-3 text-center space-y-4">
+        <div className="w-16 h-16 rounded-full bg-[#2563EB]/15 border-2 border-[#2563EB] text-white flex items-center justify-center text-3xl mx-auto">
           📅
         </div>
         <div>
-          <span className="inline-block px-3.5 py-1 rounded-full bg-[#2563EB]/15 text-[#2563EB] border border-[#2563EB]/30 text-sm font-extrabold uppercase tracking-wider">
+          <span className="inline-block px-3.5 py-1 rounded-full bg-[#2563EB]/15 text-[#2563EB] border border-[#2563EB]/30 text-xs font-extrabold uppercase tracking-wider">
             Cita Confirmada
           </span>
-          <h2 className="text-4xl font-black text-[#DC2626] mt-2">
+          <h2 className="text-4xl font-black text-[#DC2626] mt-1.5">
             {citaConfirmada.codigo_ticket}
           </h2>
-          <p className="text-lg font-bold mt-1">{citaConfirmada.nombre_cliente}</p>
+          <p className="text-lg font-bold mt-0.5 break-words">{citaConfirmada.nombre_cliente}</p>
         </div>
 
-        <div className={`p-4 rounded-2xl border text-base space-y-2.5 text-left ${subCardClass}`}>
+        <div className={`p-4 rounded-2xl border text-sm space-y-2 text-left ${subCardClass}`}>
           <div className="flex justify-between">
             <span className="text-slate-400">Fecha:</span>
             <span className="font-bold">{citaConfirmada.fecha}</span>
@@ -938,28 +934,28 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               {citaConfirmada.hora_inicio.substring(0, 5)} hrs
             </span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-slate-400">Servicio:</span>
-            <span className="font-extrabold">
+          <div className="flex justify-between gap-2">
+            <span className="text-slate-400 shrink-0">Servicio:</span>
+            <span className="font-extrabold text-right">
               {citaConfirmada.tipo_corte} ({APP_CONFIG.monedaSimbolo}
               {citaConfirmada.monto})
             </span>
           </div>
           {citaConfirmada.barbero_preferido && (
-            <div className="flex justify-between">
-              <span className="text-slate-400">Barbero:</span>
-              <span className="font-black text-[#2563EB]">
+            <div className="flex justify-between gap-2">
+              <span className="text-slate-400 shrink-0">Barbero:</span>
+              <span className="font-black text-[#2563EB] text-right">
                 💈 {citaConfirmada.barbero_preferido}
               </span>
             </div>
           )}
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <button
             type="button"
             onClick={volverAlInicio}
-            className="w-full py-4 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-base uppercase tracking-wider shadow-md active:scale-95"
+            className="w-full py-3.5 rounded-2xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-base uppercase tracking-wider shadow-md active:scale-95"
           >
             Volver al Inicio
           </button>
@@ -967,7 +963,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           <button
             type="button"
             onClick={cancelarCita}
-            className="w-full py-3.5 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-extrabold text-base transition-all"
+            className="w-full py-3 rounded-2xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-extrabold text-sm transition-all"
           >
             Cancelar mi cita
           </button>
@@ -993,24 +989,24 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           );
 
     return (
-      <div className="pt-4 space-y-5">
-        <div className={`flex items-center justify-between p-4 rounded-2xl border ${subCardClass}`}>
-          <div className="flex items-center gap-3.5">
-            <div className="px-4 py-3 rounded-xl bg-[#DC2626] text-white text-xl font-black shrink-0">
+      <div className="pt-3 space-y-4">
+        <div className={`flex items-center justify-between p-3.5 rounded-2xl border ${subCardClass}`}>
+          <div className="flex items-center gap-3">
+            <div className="px-3.5 py-2.5 rounded-2xl bg-[#DC2626] text-white text-lg font-black shrink-0">
               {turno.codigo_ticket}
             </div>
             <div>
-              <span className="text-sm font-bold text-slate-400 block">
+              <span className="text-xs font-bold text-slate-400 block">
                 Tu Turno · {horaActual}
               </span>
-              <h2 className="text-xl font-black leading-tight mt-0.5">{turno.nombre_cliente}</h2>
-              <p className="text-sm font-semibold text-slate-400 mt-0.5">
+              <h2 className="text-lg font-black leading-snug break-words">{turno.nombre_cliente}</h2>
+              <p className="text-xs font-semibold text-slate-400">
                 {turno.tipo_corte} · {APP_CONFIG.monedaSimbolo}
                 {turno.monto}
               </p>
               {turno.barbero_preferido && (
-                <p className="text-sm font-black text-[#2563EB] mt-1">
-                  💈 Preferencia: {turno.barbero_preferido}
+                <p className="text-xs font-black text-[#2563EB] mt-0.5">
+                  💈 {turno.barbero_preferido}
                 </p>
               )}
             </div>
@@ -1019,13 +1015,13 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
         {turno.estado === 'espera' && (
           <>
-            <div className={`p-4 rounded-2xl border space-y-2.5 ${subCardClass}`}>
-              <div className="flex justify-between text-base font-extrabold">
+            <div className={`p-3.5 rounded-2xl border space-y-2 ${subCardClass}`}>
+              <div className="flex justify-between text-sm font-extrabold">
                 <span>Progreso de fila</span>
                 <span className="text-[#2563EB]">{porcentajeProgreso}%</span>
               </div>
               <div
-                className={`w-full h-3.5 rounded-full overflow-hidden ${
+                className={`w-full h-3 rounded-full overflow-hidden ${
                   isDark ? 'bg-slate-800' : 'bg-slate-200'
                 }`}
               >
@@ -1036,36 +1032,36 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className={`p-4 rounded-2xl border text-center ${subCardClass}`}>
-                <span className="text-sm font-bold text-slate-400 uppercase block">
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className={`p-3.5 rounded-2xl border text-center ${subCardClass}`}>
+                <span className="text-xs font-bold text-slate-400 uppercase block">
                   Delante de ti
                 </span>
-                <p className="text-4xl font-black text-[#DC2626] mt-1.5">{personasAdelante}</p>
-                <span className="text-sm font-semibold text-slate-400 mt-1 block">clientes</span>
+                <p className="text-3xl font-black text-[#DC2626] mt-1">{personasAdelante}</p>
+                <span className="text-xs font-semibold text-slate-400 block">clientes</span>
               </div>
-              <div className={`p-4 rounded-2xl border text-center ${subCardClass}`}>
-                <span className="text-sm font-bold text-slate-400 uppercase block">
+              <div className={`p-3.5 rounded-2xl border text-center ${subCardClass}`}>
+                <span className="text-xs font-bold text-slate-400 uppercase block">
                   Espera aprox.
                 </span>
-                <p className="text-4xl font-black text-[#2563EB] mt-1.5">{tiempoEstimado}m</p>
-                <span className="text-sm font-semibold text-slate-400 mt-1 block">
-                  {sillasActivasCount > 1 ? `${sillasActivasCount} sillas activas` : 'estimados'}
+                <p className="text-3xl font-black text-[#2563EB] mt-1">{tiempoEstimado}m</p>
+                <span className="text-xs font-semibold text-slate-400 block">
+                  {sillasActivasCount > 1 ? `${sillasActivasCount} sillas` : 'estimados'}
                 </span>
               </div>
             </div>
 
-            <div className={`p-4 rounded-2xl border space-y-3.5 ${subCardClass}`}>
-              <div className="flex items-center justify-between text-base">
+            <div className={`p-3.5 rounded-2xl border space-y-2.5 ${subCardClass}`}>
+              <div className="flex items-center justify-between text-sm">
                 <span className="font-bold text-slate-400">Modalidad:</span>
                 <span
-                  className={`px-3.5 py-1.5 rounded-lg font-extrabold text-sm border ${
+                  className={`px-3 py-1 rounded-lg font-extrabold text-xs border ${
                     isDark
                       ? 'bg-slate-800 text-white border-slate-700'
                       : 'bg-white text-slate-900 border-slate-300'
                   }`}
                 >
-                  {turno.modalidad_espera === 'diligencia' ? '🏃♂️ Diligencia' : '💈 En el local'}
+                  {turno.modalidad_espera === 'diligencia' ? '🏃‍♂️ Diligencia' : '💈 En el local'}
                 </span>
               </div>
 
@@ -1073,7 +1069,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <button
                   type="button"
                   onClick={() => cambiarModalidadEnVivo('diligencia')}
-                  className="w-full py-3.5 rounded-xl border-2 border-[#2563EB] text-[#2563EB] hover:bg-[#2563EB] hover:text-white font-extrabold text-base transition-all"
+                  className="w-full py-3 rounded-xl border-2 border-[#2563EB] text-[#2563EB] hover:bg-[#2563EB] hover:text-white font-extrabold text-sm transition-all"
                 >
                   Salgo a diligencia ({APP_CONFIG.tiempoLimiteDiligenciaMin} min tolerancia)
                 </button>
@@ -1081,14 +1077,14 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <button
                   type="button"
                   onClick={() => cambiarModalidadEnVivo('local')}
-                  className="w-full py-3.5 rounded-xl bg-[#2563EB] text-white font-extrabold text-base"
+                  className="w-full py-3 rounded-xl bg-[#2563EB] text-white font-extrabold text-sm"
                 >
                   Ya regresé a la barbería
                 </button>
               )}
 
               {distanciaKm !== null && turno.modalidad_espera === 'diligencia' && (
-                <p className="text-sm text-center text-slate-400">
+                <p className="text-xs text-center text-slate-400">
                   📍 Distancia al local: <strong>~{distanciaKm} km</strong>
                 </p>
               )}
@@ -1097,7 +1093,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             <button
               type="button"
               onClick={cancelarTurno}
-              className="w-full py-4 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-extrabold text-base transition-all"
+              className="w-full py-3.5 rounded-2xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-extrabold text-sm transition-all"
             >
               Cancelar mi turno
             </button>
@@ -1105,9 +1101,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         )}
 
         {turno.estado === 'atendiendo' && (
-          <div className={`p-6 rounded-2xl border-2 border-[#DC2626] text-center space-y-4 ${subCardClass}`}>
+          <div className={`p-5 rounded-2xl border-2 border-[#DC2626] text-center space-y-3.5 ${subCardClass}`}>
             {turno.nombre_barbero && (
-              <span className="inline-block px-4 py-1.5 rounded-full bg-[#2563EB] text-white text-sm font-black uppercase tracking-wider">
+              <span className="inline-block px-4 py-1.5 rounded-full bg-[#2563EB] text-white text-xs font-black uppercase tracking-wider">
                 💺 {turno.nombre_barbero}
               </span>
             )}
@@ -1116,24 +1112,24 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               <>
                 <span className="text-5xl block">💈</span>
                 <h2 className="text-2xl font-black text-[#DC2626]">¡Ya estás reportado!</h2>
-                <p className="text-base font-semibold">El barbero sabe que estás listo en el local.</p>
+                <p className="text-sm font-semibold">El barbero sabe que estás listo en el local.</p>
               </>
             ) : turno.modalidad_espera === 'diligencia' && tiempoRestanteSegundos !== null ? (
               <>
-                <span className="text-5xl block">🏃♂️</span>
+                <span className="text-5xl block">🏃‍♂️</span>
                 <h2 className="text-xl font-black text-[#DC2626]">¡El barbero te está llamando!</h2>
-                <div className="py-3 px-5 rounded-xl bg-slate-950 border border-slate-800 text-white">
-                  <span className="text-sm uppercase font-bold text-slate-400 block">
+                <div className="py-2.5 px-5 rounded-xl bg-slate-950 border border-slate-800 text-white">
+                  <span className="text-xs uppercase font-bold text-slate-400 block">
                     Tiempo para llegar
                   </span>
-                  <p className="text-4xl font-black font-mono mt-1 text-[#2563EB]">
+                  <p className="text-4xl font-black font-mono mt-0.5 text-[#2563EB]">
                     {formatearTiempo(tiempoRestanteSegundos)}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={notificarLlegadaPresencial}
-                  className="w-full py-4 rounded-xl bg-[#DC2626] text-white font-black text-base uppercase tracking-wider shadow-md active:scale-95"
+                  className="w-full py-3.5 rounded-2xl bg-[#DC2626] text-white font-black text-base uppercase tracking-wider shadow-md active:scale-95"
                 >
                   📍 ¡Ya llegué al local!
                 </button>
@@ -1142,7 +1138,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               <>
                 <span className="text-5xl block">✂️</span>
                 <h2 className="text-2xl font-black text-[#DC2626]">¡Es tu turno!</h2>
-                <p className="text-base font-semibold">
+                <p className="text-sm font-semibold">
                   {turno.nombre_barbero
                     ? `Pasa adelante a ${turno.nombre_barbero}.`
                     : 'Pasa adelante, tu silla está lista.'}
@@ -1153,7 +1149,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         )}
 
         {(turno.estado === 'finalizado' || turno.estado === 'ausente') && (
-          <div className={`p-6 rounded-2xl border text-center space-y-4 ${subCardClass}`}>
+          <div className={`p-5 rounded-2xl border text-center space-y-3.5 ${subCardClass}`}>
             <span className="text-4xl block">{turno.estado === 'finalizado' ? '✨' : '⏳'}</span>
             <h2 className="text-xl font-black">
               {turno.estado === 'finalizado' ? '¡Gracias por tu visita!' : 'Tiempo agotado'}
@@ -1161,7 +1157,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             <button
               type="button"
               onClick={volverAlInicio}
-              className="w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base uppercase tracking-wider active:scale-95"
+              className="w-full py-3.5 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base uppercase tracking-wider active:scale-95"
             >
               Solicitar nuevo turno
             </button>
@@ -1171,116 +1167,87 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     );
   }
 
-  // --- FORMULARIO AZUL, BLANCO Y ROJO ---
+  // --- FORMULARIO POR PASOS (SIN SCROLL VERTICAL + ICONOS PROTAGONISTAS 2x2) ---
   return (
-    <div className="pt-4 space-y-5">
-      <div className="text-center">
-        <h2 className="text-2xl font-black tracking-tight">
-          {nombre.trim() ? `Hola, ${nombre.trim().split(' ')[0]}` : 'Bienvenido'}
-        </h2>
-        <p className="text-sm text-slate-400 mt-0.5">
-          Elige si vienes hoy o deseas agendar una cita
-        </p>
-      </div>
-
-      {/* Selector Cola Hoy (Rojo) / Agendar Cita (Azul) */}
-      <div
-        className={`grid grid-cols-2 gap-1.5 p-1.5 rounded-xl border ${
-          isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
-        }`}
-      >
-        <button
-          type="button"
-          onClick={() => setModoRegistro('cola')}
-          className={`py-2.5 rounded-lg text-sm font-black transition-all ${
-            modoRegistro === 'cola'
-              ? 'bg-[#DC2626] text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          ✂️ Turno Hoy
-        </button>
-        <button
-          type="button"
-          onClick={() => setModoRegistro('cita')}
-          className={`py-2.5 rounded-lg text-sm font-black transition-all ${
-            modoRegistro === 'cita'
-              ? 'bg-[#2563EB] text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          📅 Agendar Cita
-        </button>
-      </div>
-
-      {/* Barberos activos del turno */}
-      {sillasActivas.length > 0 && (
-        <div className={`p-3.5 rounded-xl border space-y-2.5 ${subCardClass}`}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-              💈 Barberos de turno ({sillasActivas.length})
-            </span>
-            <span className="text-xs font-bold text-[#2563EB]">
-              {barberoPreferido ? 'Elegido' : 'Toca para elegir'}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
+    <div className="pt-3 space-y-4">
+      {/* Indicador de 3 pasos */}
+      <div className="flex items-center justify-between gap-2">
+        {[
+          { num: 1, label: 'Servicio' },
+          { num: 2, label: 'Horario' },
+          { num: 3, label: 'Confirmar' },
+        ].map((st) => {
+          const activo = paso === st.num;
+          const completado = paso > st.num;
+          return (
             <button
+              key={st.num}
               type="button"
-              onClick={() => setBarberoPreferido('')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-black border transition-all ${
-                barberoPreferido === ''
-                  ? 'bg-[#2563EB] border-[#2563EB] text-white'
+              onClick={() => {
+                if (st.num < paso) setPaso(st.num as 1 | 2 | 3);
+              }}
+              className={`flex-1 py-2 px-2 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 transition-all ${
+                activo
+                  ? 'bg-[#2563EB] border-[#2563EB] text-white shadow-sm'
+                  : completado
+                  ? isDark
+                    ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-400'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-700'
                   : isDark
-                  ? 'bg-slate-950 border-slate-800 text-slate-300'
-                  : 'bg-white border-slate-300 text-slate-700'
+                  ? 'bg-slate-950 border-slate-800 text-slate-500'
+                  : 'bg-slate-100 border-slate-200 text-slate-400'
               }`}
             >
-              ⚡ Cualquiera
+              <span>{completado ? '✓' : st.num}</span>
+              <span>{st.label}</span>
             </button>
+          );
+        })}
+      </div>
 
-            {sillasActivas.map((s) => {
-              const etiqueta = `${s.nombre_barbero} (${s.nombre_silla})`;
-              const isSelected = barberoPreferido === etiqueta;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setBarberoPreferido(etiqueta)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-black border transition-all ${
-                    isSelected
-                      ? 'bg-[#2563EB] border-[#2563EB] text-white'
-                      : isDark
-                      ? 'bg-slate-950 border-slate-800 text-slate-200 hover:border-[#2563EB]/50'
-                      : 'bg-white border-slate-300 text-slate-800 hover:border-[#2563EB]/50'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span>{s.nombre_barbero}</span>
-                  <span
-                    className={`text-xs font-bold ${
-                      isSelected ? 'text-white/90' : 'text-[#2563EB]'
-                    }`}
-                  >
-                    · {s.nombre_silla}
-                  </span>
-                </button>
-              );
-            })}
+      {/* ================= PASO 1: MODALIDAD + SERVICIOS EN CUADRÍCULA 2x2 CIRCULAR ================= */}
+      {paso === 1 && (
+        <div className="space-y-4">
+          {/* Selector Cola Hoy / Agendar Cita */}
+          <div
+            className={`grid grid-cols-2 gap-1.5 p-1.5 rounded-2xl border ${
+              isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => setModoRegistro('cola')}
+              className={`py-2.5 rounded-xl text-sm font-black flex items-center justify-center gap-1.5 transition-all ${
+                modoRegistro === 'cola'
+                  ? 'bg-[#DC2626] text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="text-lg leading-none">✂️</span>
+              <span>Turno Hoy</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoRegistro('cita')}
+              className={`py-2.5 rounded-xl text-sm font-black flex items-center justify-center gap-1.5 transition-all ${
+                modoRegistro === 'cita'
+                  ? 'bg-[#2563EB] text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <span className="text-lg leading-none">📅</span>
+              <span>Agendar Cita</span>
+            </button>
           </div>
-        </div>
-      )}
 
-      <form
-        onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita}
-        className="space-y-5"
-      >
-        <div>
-          <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-2">
-            1. Selecciona tu servicio
-          </label>
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="text-center">
+            <h2 className="text-lg font-black tracking-tight uppercase">
+              Elige tu Servicio
+            </h2>
+          </div>
+
+          {/* Cuadrícula 2x2 con círculos grandes estilo referencia visual (sin cortar palabras) */}
+          <div className="grid grid-cols-2 gap-3">
             {listaServicios.map((srv) => {
               const selected = servicioSeleccionado.nombre === srv.nombre;
               return (
@@ -1288,19 +1255,37 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                   type="button"
                   key={srv.id}
                   onClick={() => setServicioSeleccionado(srv)}
-                  className={`p-3 rounded-xl border-2 flex flex-col items-center justify-center text-center transition-all ${
+                  className={`p-3.5 rounded-3xl border-2 flex flex-col items-center justify-center text-center transition-all active:scale-95 ${
                     selected
-                      ? 'bg-[#2563EB] border-[#2563EB] text-white shadow-md'
+                      ? 'bg-[#2563EB]/15 border-[#2563EB] shadow-md'
                       : isDark
-                      ? 'bg-slate-950/80 border-slate-800 text-slate-400 hover:border-slate-700'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:border-slate-300'
+                      ? 'bg-slate-950/90 border-slate-800 hover:border-slate-700'
+                      : 'bg-slate-50 border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <span className="text-2xl mb-1">{srv.icono}</span>
-                  <span className="text-sm font-extrabold leading-snug">{srv.nombre}</span>
+                  {/* Medallón circular grande */}
+                  <div
+                    className={`w-16 h-16 rounded-full border-[3px] flex items-center justify-center text-3xl mb-2 transition-all ${
+                      selected
+                        ? 'bg-[#2563EB] border-[#DC2626] text-white scale-105 shadow-md'
+                        : isDark
+                        ? 'bg-slate-900 border-slate-700 text-white'
+                        : 'bg-white border-slate-300 text-slate-900'
+                    }`}
+                  >
+                    {srv.icono}
+                  </div>
+
+                  {/* Nombre completo sin truncate */}
+                  <span className="text-sm font-black leading-snug break-words">
+                    {srv.nombre}
+                  </span>
+
                   <span
-                    className={`text-base font-black mt-0.5 ${
-                      selected ? 'text-white' : 'text-[#2563EB]'
+                    className={`mt-1 px-2.5 py-0.5 rounded-full text-xs font-black ${
+                      selected
+                        ? 'bg-[#DC2626] text-white'
+                        : 'bg-[#2563EB]/15 text-[#2563EB]'
                     }`}
                   >
                     {APP_CONFIG.monedaSimbolo}
@@ -1313,258 +1298,395 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
           {servicioSeleccionado?.descripcion && (
             <div
-              className={`mt-2.5 p-3 rounded-xl border text-xs leading-relaxed flex items-start gap-2 ${
+              className={`p-2.5 rounded-2xl border text-xs leading-snug flex items-start gap-2 ${
                 isDark
                   ? 'bg-slate-950/90 border-[#2563EB]/40 text-slate-300'
                   : 'bg-blue-50/70 border-[#2563EB]/30 text-slate-700'
               }`}
             >
-              <span className="text-sm shrink-0">ℹ️</span>
-              <div>
-                <span className="font-extrabold text-[#2563EB] block">
-                  {servicioSeleccionado.nombre}:
-                </span>
-                <span>{servicioSeleccionado.descripcion}</span>
-              </div>
+              <span className="text-base shrink-0">ℹ️</span>
+              <span>{servicioSeleccionado.descripcion}</span>
             </div>
           )}
+
+          <button
+            type="button"
+            onClick={() => setPaso(2)}
+            className="w-full py-4 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base tracking-wide shadow-lg transition-all active:scale-95"
+          >
+            Continuar →
+          </button>
         </div>
+      )}
 
-        <div className="space-y-3">
-          <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400">
-            2. Tus datos de contacto
-          </label>
-          <input
-            type="text"
-            required
-            placeholder="Tu nombre completo *"
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            className={`w-full px-4 py-3 rounded-xl border text-base font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
-              isDark
-                ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
-                : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
-            }`}
-          />
-          <input
-            type="tel"
-            required
-            placeholder="WhatsApp (Ej: 04141234567) *"
-            value={telefono}
-            onChange={(e) => setTelefono(e.target.value)}
-            className={`w-full px-4 py-3 rounded-xl border text-base font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
-              isDark
-                ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
-                : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
-            }`}
-          />
-        </div>
-
-        {modoRegistro === 'cola' && (
-          <div className="space-y-3">
-            <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400">
-              3. ¿Dónde esperarás tu turno?
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setModalidadEspera('local')}
-                className={`p-3.5 rounded-xl border-2 text-left transition-all ${
-                  modalidadEspera === 'local'
-                    ? 'bg-[#2563EB] border-[#2563EB] text-white'
-                    : isDark
-                    ? 'bg-slate-950/80 border-slate-800 text-slate-400'
-                    : 'bg-slate-50 border-slate-200 text-slate-700'
-                }`}
-              >
-                <p className="text-base font-black">💈 En el Local</p>
-                <p className="text-sm opacity-80 mt-0.5">Elige hora de llegada</p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setModalidadEspera('diligencia');
-                  setHoraLlegadaLocal('ahora');
-                  obtenerUbicacionGPS();
-                }}
-                className={`p-3.5 rounded-xl border-2 text-left transition-all ${
-                  modalidadEspera === 'diligencia'
-                    ? 'bg-[#2563EB] border-[#2563EB] text-white'
-                    : isDark
-                    ? 'bg-slate-950/80 border-slate-800 text-slate-400'
-                    : 'bg-slate-50 border-slate-200 text-slate-700'
-                }`}
-              >
-                <p className="text-base font-black">🏃♂️ Diligencia</p>
-                <p className="text-sm opacity-80 mt-0.5">
-                  {APP_CONFIG.tiempoLimiteDiligenciaMin} min (GPS)
-                </p>
-              </button>
-            </div>
-
-            {modalidadEspera === 'local' && (
-              <div
-                className={`p-3 rounded-xl border space-y-2 ${
-                  isDark
-                    ? 'bg-slate-950/90 border-slate-800'
-                    : 'bg-slate-50 border-slate-200'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
-                    🕒 ¿A qué hora vienes al local?
-                  </span>
-                  <span className="text-xs font-bold text-[#2563EB]">
-                    9:00 AM – 8:00 PM
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 max-h-36 overflow-y-auto pr-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setHoraLlegadaLocal('ahora')}
-                    className={`py-2 px-2 rounded-lg border text-xs font-black transition-all ${
-                      horaLlegadaLocal === 'ahora'
-                        ? 'bg-[#DC2626] border-[#DC2626] text-white'
-                        : isDark
-                        ? 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-600'
-                        : 'bg-white border-slate-300 text-slate-800 hover:border-slate-400'
-                    }`}
-                  >
-                    ⚡ Ahora mismo
-                  </button>
-
-                  {bloquesHoy.map((b) => {
-                    const selected = horaLlegadaLocal === b.etiqueta;
-                    return (
-                      <button
-                        key={b.valor}
-                        type="button"
-                        onClick={() => setHoraLlegadaLocal(b.etiqueta)}
-                        className={`py-2 px-2 rounded-lg border text-xs font-black transition-all ${
-                          selected
-                            ? 'bg-[#DC2626] border-[#DC2626] text-white'
-                            : isDark
-                            ? 'bg-slate-900 border-slate-800 text-slate-200 hover:border-slate-600'
-                            : 'bg-white border-slate-300 text-slate-800 hover:border-slate-400'
-                        }`}
-                      >
-                        {b.etiqueta}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {modoRegistro === 'cita' && (
-          <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400">
-                  3. Elige el día
-                </label>
+      {/* ================= PASO 2: BARBERO (CIRCULAR) + HORARIO EN TIRA HORIZONTAL ================= */}
+      {paso === 2 && (
+        <div className="space-y-4">
+          {/* Carrusel horizontal de barberos con avatar circular (estilo pantalla 3) */}
+          {sillasActivas.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-slate-400">
+                  💈 Elige Barbero
+                </span>
                 <span className="text-xs font-bold text-[#2563EB]">Desliza →</span>
               </div>
-              <div className="flex gap-2 overflow-x-auto pb-1.5">
-                {diasProximos.map((d) => {
-                  const isSelected = fechaCita === d.fecha;
+
+              <div className="flex gap-2.5 overflow-x-auto pb-1">
+                <button
+                  type="button"
+                  onClick={() => setBarberoPreferido('')}
+                  className={`min-w-[96px] p-2.5 rounded-2xl border-2 flex flex-col items-center text-center shrink-0 transition-all ${
+                    barberoPreferido === ''
+                      ? 'bg-[#2563EB]/15 border-[#2563EB]'
+                      : isDark
+                      ? 'bg-slate-950 border-slate-800'
+                      : 'bg-slate-50 border-slate-200'
+                  }`}
+                >
+                  <div
+                    className={`w-12 h-12 rounded-full border-2 flex items-center justify-center text-2xl mb-1 ${
+                      barberoPreferido === ''
+                        ? 'bg-[#2563EB] border-[#DC2626] text-white'
+                        : isDark
+                        ? 'bg-slate-900 border-slate-700'
+                        : 'bg-white border-slate-300'
+                    }`}
+                  >
+                    ⚡
+                  </div>
+                  <span className="text-xs font-black leading-tight">Cualquiera</span>
+                  <span className="text-[10px] font-bold text-[#2563EB]">Más rápido</span>
+                </button>
+
+                {sillasActivas.map((s) => {
+                  const etiqueta = `${s.nombre_barbero} (${s.nombre_silla})`;
+                  const isSelected = barberoPreferido === etiqueta;
                   return (
                     <button
-                      key={d.fecha}
+                      key={s.id}
                       type="button"
-                      onClick={() => {
-                        setFechaCita(d.fecha);
-                        setHoraCitaSeleccionada('');
-                      }}
-                      className={`min-w-[58px] py-2.5 px-2 rounded-xl border flex flex-col items-center shrink-0 transition-all ${
+                      onClick={() => setBarberoPreferido(etiqueta)}
+                      className={`min-w-[104px] p-2.5 rounded-2xl border-2 flex flex-col items-center text-center shrink-0 transition-all ${
                         isSelected
-                          ? 'bg-[#2563EB] border-[#2563EB] text-white font-black shadow-sm'
+                          ? 'bg-[#2563EB]/15 border-[#2563EB]'
                           : isDark
-                          ? 'bg-slate-950 border-slate-800 text-slate-300'
-                          : 'bg-slate-50 border-slate-200 text-slate-800'
+                          ? 'bg-slate-950 border-slate-800'
+                          : 'bg-slate-50 border-slate-200'
                       }`}
                     >
-                      <span className="text-[11px] font-bold">{d.diaCorto}</span>
-                      <span className="text-base font-black leading-tight mt-0.5">{d.numDia}</span>
-                      <span
-                        className={`text-[10px] font-bold uppercase mt-0.5 ${
-                          isSelected ? 'text-white/90' : 'text-slate-400'
+                      <div
+                        className={`w-12 h-12 rounded-full border-2 flex items-center justify-center text-2xl mb-1 ${
+                          isSelected
+                            ? 'bg-[#2563EB] border-[#DC2626] text-white'
+                            : isDark
+                            ? 'bg-slate-900 border-slate-700'
+                            : 'bg-white border-slate-300'
                         }`}
                       >
-                        {d.mesCorto}
+                        💈
+                      </div>
+                      <span className="text-xs font-black leading-tight break-words">
+                        {s.nombre_barbero}
+                      </span>
+                      <span className="text-[10px] font-bold text-[#2563EB]">
+                        {s.nombre_silla}
                       </span>
                     </button>
                   );
                 })}
               </div>
             </div>
+          )}
 
-            <div>
-              <label className="block text-sm font-extrabold uppercase tracking-wider text-slate-400 mb-2">
-                4. Elige la hora disponible
-              </label>
-              {bloquesDisponibles.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-4 border border-dashed border-slate-700 rounded-xl">
-                  Sin horarios disponibles para este día.
-                </p>
-              ) : (
-                <div className="grid grid-cols-3 gap-2.5 max-h-36 overflow-y-auto pr-0.5">
-                  {bloquesDisponibles.map((b) => {
-                    const horaText = b.hora_inicio.substring(0, 5);
-                    const selected = horaCitaSeleccionada === b.hora_inicio;
+          {/* Opciones para TURNO HOY */}
+          {modoRegistro === 'cola' && (
+            <div className="space-y-3">
+              <span className="block text-xs font-extrabold uppercase tracking-wider text-slate-400 px-1">
+                ¿Dónde esperarás?
+              </span>
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setModalidadEspera('local')}
+                  className={`p-3 rounded-2xl border-2 flex flex-col items-center text-center transition-all ${
+                    modalidadEspera === 'local'
+                      ? 'bg-[#2563EB] border-[#2563EB] text-white'
+                      : isDark
+                      ? 'bg-slate-950 border-slate-800 text-slate-300'
+                      : 'bg-slate-50 border-slate-200 text-slate-700'
+                  }`}
+                >
+                  <span className="text-2xl mb-0.5">💈</span>
+                  <span className="text-sm font-black">En el Local</span>
+                  <span className="text-[11px] opacity-80">Elige hora</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModalidadEspera('diligencia');
+                    setHoraLlegadaLocal('ahora');
+                    obtenerUbicacionGPS();
+                  }}
+                  className={`p-3 rounded-2xl border-2 flex flex-col items-center text-center transition-all ${
+                    modalidadEspera === 'diligencia'
+                      ? 'bg-[#2563EB] border-[#2563EB] text-white'
+                      : isDark
+                      ? 'bg-slate-950 border-slate-800 text-slate-300'
+                      : 'bg-slate-50 border-slate-200 text-slate-700'
+                  }`}
+                >
+                  <span className="text-2xl mb-0.5">🏃‍♂️</span>
+                  <span className="text-sm font-black">Diligencia</span>
+                  <span className="text-[11px] opacity-80">
+                    {APP_CONFIG.tiempoLimiteDiligenciaMin} min tolerancia
+                  </span>
+                </button>
+              </div>
+
+              {/* Tira horizontal de horas de hoy (cero scroll vertical) */}
+              {modalidadEspera === 'local' && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs font-extrabold uppercase text-slate-400">
+                      🕒 Hora de llegada hoy
+                    </span>
+                    <span className="text-xs font-bold text-[#2563EB]">Desliza →</span>
+                  </div>
+
+                  <div className="flex gap-2 overflow-x-auto pb-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setHoraLlegadaLocal('ahora')}
+                      className={`px-3.5 py-2.5 rounded-xl border text-xs font-black shrink-0 transition-all ${
+                        horaLlegadaLocal === 'ahora'
+                          ? 'bg-[#DC2626] border-[#DC2626] text-white shadow-sm'
+                          : isDark
+                          ? 'bg-slate-950 border-slate-800 text-slate-200'
+                          : 'bg-slate-50 border-slate-200 text-slate-800'
+                      }`}
+                    >
+                      ⚡ Ahora mismo
+                    </button>
+
+                    {bloquesHoy.map((b) => {
+                      const selected = horaLlegadaLocal === b.etiqueta;
+                      return (
+                        <button
+                          key={b.valor}
+                          type="button"
+                          onClick={() => setHoraLlegadaLocal(b.etiqueta)}
+                          className={`px-3.5 py-2.5 rounded-xl border text-xs font-black shrink-0 transition-all ${
+                            selected
+                              ? 'bg-[#DC2626] border-[#DC2626] text-white shadow-sm'
+                              : isDark
+                              ? 'bg-slate-950 border-slate-800 text-slate-200'
+                              : 'bg-slate-50 border-slate-200 text-slate-800'
+                          }`}
+                        >
+                          {b.etiqueta}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Opciones para AGENDAR CITA (Tira horizontal días + Tira horizontal horas) */}
+          {modoRegistro === 'cita' && (
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1.5 px-1">
+                  <span className="text-xs font-extrabold uppercase text-slate-400">
+                    📅 Día de la cita
+                  </span>
+                  <span className="text-xs font-bold text-[#2563EB]">Desliza →</span>
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {diasProximos.map((d) => {
+                    const isSelected = fechaCita === d.fecha;
                     return (
                       <button
-                        key={b.id}
+                        key={d.fecha}
                         type="button"
-                        onClick={() => setHoraCitaSeleccionada(b.hora_inicio)}
-                        className={`py-2.5 rounded-xl border text-base font-black transition-all flex flex-col items-center ${
-                          selected
-                            ? 'bg-[#DC2626] border-[#DC2626] text-white'
+                        onClick={() => {
+                          setFechaCita(d.fecha);
+                          setHoraCitaSeleccionada('');
+                        }}
+                        className={`min-w-[56px] py-2 px-2 rounded-2xl border flex flex-col items-center shrink-0 transition-all ${
+                          isSelected
+                            ? 'bg-[#DC2626] border-[#DC2626] text-white font-black shadow-sm'
                             : isDark
-                            ? 'bg-slate-950 border-slate-800 text-slate-200 hover:border-slate-600'
-                            : 'bg-slate-50 border-slate-200 text-slate-900 hover:border-slate-400'
+                            ? 'bg-slate-950 border-slate-800 text-slate-300'
+                            : 'bg-slate-50 border-slate-200 text-slate-800'
                         }`}
                       >
-                        <span>{horaText}</span>
-                        {sillasActivasCount > 1 && (
-                          <span
-                            className={`text-xs font-bold ${
-                              selected ? 'text-white/90' : 'text-[#2563EB]'
-                            }`}
-                          >
-                            {b.cuposRestantes} {b.cuposRestantes === 1 ? 'cupo' : 'cupos'}
-                          </span>
-                        )}
+                        <span className="text-[10px] font-bold uppercase">{d.diaCorto}</span>
+                        <span className="text-base font-black leading-tight">{d.numDia}</span>
+                        <span className="text-[10px] font-bold opacity-80">{d.mesCorto}</span>
                       </button>
                     );
                   })}
                 </div>
-              )}
-            </div>
-          </div>
-        )}
+              </div>
 
-        <button
-          type="submit"
-          disabled={
-            registrando ||
-            !nombre.trim() ||
-            !telefono.trim() ||
-            (modoRegistro === 'cita' && !horaCitaSeleccionada)
-          }
-          className="w-full py-4 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base tracking-wide shadow-lg transition-all active:scale-95 disabled:opacity-40"
+              <div>
+                <div className="flex items-center justify-between mb-1.5 px-1">
+                  <span className="text-xs font-extrabold uppercase text-slate-400">
+                    🕒 Hora disponible
+                  </span>
+                  <span className="text-xs font-bold text-[#2563EB]">Desliza →</span>
+                </div>
+                {bloquesDisponibles.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-3 border border-dashed border-slate-700 rounded-xl">
+                    Sin horarios disponibles para este día.
+                  </p>
+                ) : (
+                  <div className="flex gap-2 overflow-x-auto pb-1.5">
+                    {bloquesDisponibles.map((b) => {
+                      const horaText = b.hora_inicio.substring(0, 5);
+                      const selected = horaCitaSeleccionada === b.hora_inicio;
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => setHoraCitaSeleccionada(b.hora_inicio)}
+                          className={`min-w-[78px] py-2.5 px-3 rounded-2xl border text-sm font-black shrink-0 flex flex-col items-center transition-all ${
+                            selected
+                              ? 'bg-[#2563EB] border-[#2563EB] text-white shadow-sm'
+                              : isDark
+                              ? 'bg-slate-950 border-slate-800 text-slate-200'
+                              : 'bg-slate-50 border-slate-200 text-slate-900'
+                          }`}
+                        >
+                          <span>{horaText}</span>
+                          {sillasActivasCount > 1 && (
+                            <span
+                              className={`text-[10px] font-bold ${
+                                selected ? 'text-white/90' : 'text-[#2563EB]'
+                              }`}
+                            >
+                              {b.cuposRestantes} {b.cuposRestantes === 1 ? 'cupo' : 'cupos'}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setPaso(1)}
+              className={`px-4 py-3.5 rounded-2xl border text-sm font-black ${
+                isDark
+                  ? 'border-slate-800 text-slate-300'
+                  : 'border-slate-300 text-slate-700'
+              }`}
+            >
+              ← Atrás
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaso(3)}
+              disabled={modoRegistro === 'cita' && !horaCitaSeleccionada}
+              className="flex-1 py-3.5 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base shadow-md active:scale-95 disabled:opacity-40"
+            >
+              Siguiente →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ================= PASO 3: DATOS Y RESUMEN FINAL ================= */}
+      {paso === 3 && (
+        <form
+          onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita}
+          className="space-y-4"
         >
-          {registrando
-            ? 'Procesando...'
-            : modoRegistro === 'cola'
-            ? 'Tomar Turno Ahora'
-            : 'Confirmar Reserva'}
-        </button>
-      </form>
+          {/* Resumen compacto de lo elegido */}
+          <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 ${subCardClass}`}>
+            <div className="flex items-center gap-2.5">
+              <span className="w-11 h-11 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-2xl shrink-0">
+                {servicioSeleccionado.icono}
+              </span>
+              <div>
+                <p className="text-sm font-black leading-snug">{servicioSeleccionado.nombre}</p>
+                <p className="text-xs font-bold text-slate-400">
+                  {modoRegistro === 'cola'
+                    ? horaLlegadaLocal === 'ahora'
+                      ? 'Turno hoy · Ahora'
+                      : `Turno hoy · ${horaLlegadaLocal}`
+                    : `Cita · ${fechaCita} (${horaCitaSeleccionada.substring(0, 5)})`}
+                </p>
+              </div>
+            </div>
+            <span className="text-lg font-black text-[#2563EB] shrink-0">
+              {APP_CONFIG.monedaSimbolo}
+              {servicioSeleccionado.precio}
+            </span>
+          </div>
+
+          <div className="space-y-2.5">
+            <input
+              type="text"
+              required
+              placeholder="Tu nombre completo *"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              className={`w-full px-4 py-3.5 rounded-2xl border text-base font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                isDark
+                  ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
+                  : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+              }`}
+            />
+            <input
+              type="tel"
+              required
+              placeholder="WhatsApp (Ej: 04141234567) *"
+              value={telefono}
+              onChange={(e) => setTelefono(e.target.value)}
+              className={`w-full px-4 py-3.5 rounded-2xl border text-base font-semibold focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                isDark
+                  ? 'bg-slate-950 border-slate-800 text-white placeholder-slate-500'
+                  : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'
+              }`}
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setPaso(2)}
+              className={`px-4 py-4 rounded-2xl border text-sm font-black ${
+                isDark
+                  ? 'border-slate-800 text-slate-300'
+                  : 'border-slate-300 text-slate-700'
+              }`}
+            >
+              ← Atrás
+            </button>
+            <button
+              type="submit"
+              disabled={registrando || !nombre.trim() || !telefono.trim()}
+              className="flex-1 py-4 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base tracking-wide shadow-lg transition-all active:scale-95 disabled:opacity-40"
+            >
+              {registrando
+                ? 'Procesando...'
+                : modoRegistro === 'cola'
+                ? 'Confirmar Turno'
+                : 'Confirmar Cita'}
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -1578,7 +1700,7 @@ export default function ClienteView() {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, nuevoModo);
     } catch {
-      // Ignorar si localStorage está bloqueado
+      // Ignorar
     }
   };
 
@@ -1606,16 +1728,16 @@ export default function ClienteView() {
 
   return (
     <main
-      className={`min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 transition-colors duration-300 ${
+      className={`min-h-[100dvh] flex flex-col items-center justify-center p-3 sm:p-5 transition-colors duration-300 ${
         isDark ? 'bg-[#080D1A] text-white' : 'bg-[#F1F5F9] text-slate-900'
       }`}
     >
       <div
-        className={`w-full max-w-[440px] rounded-3xl p-3 sm:p-4 shadow-2xl border transition-colors ${
+        className={`w-full max-w-[430px] rounded-3xl p-2.5 sm:p-3.5 shadow-2xl border transition-colors ${
           isDark ? 'bg-[#0F172A] border-slate-800' : 'bg-white border-slate-200'
         }`}
       >
-        <div className="rounded-2xl border-2 border-[#2563EB]/60 p-5 sm:p-6">
+        <div className="rounded-2xl border-2 border-[#2563EB]/60 p-4 sm:p-5">
           <div
             className={`flex items-center justify-between pb-3 border-b ${
               isDark ? 'border-slate-800' : 'border-slate-200'
@@ -1623,7 +1745,7 @@ export default function ClienteView() {
           >
             <Link
               href="/"
-              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-extrabold transition-all active:scale-95 ${
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold transition-all active:scale-95 ${
                 isDark
                   ? 'bg-slate-900 text-white border border-slate-800 hover:border-[#2563EB]'
                   : 'bg-slate-100 text-slate-900 hover:bg-slate-200'
@@ -1633,13 +1755,13 @@ export default function ClienteView() {
             </Link>
 
             <div
-              className={`flex items-center gap-1 p-1 rounded-full border text-sm font-bold ${
+              className={`flex items-center gap-1 p-1 rounded-full border text-xs font-bold ${
                 isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
               }`}
             >
               <button
                 onClick={() => cambiarTema('light')}
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'light' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-400'
                 }`}
               >
@@ -1647,7 +1769,7 @@ export default function ClienteView() {
               </button>
               <button
                 onClick={() => cambiarTema('dark')}
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                   modoTema === 'dark' ? 'bg-[#2563EB] text-white shadow-xs' : 'text-slate-400'
                 }`}
               >
@@ -1655,7 +1777,7 @@ export default function ClienteView() {
               </button>
               <button
                 onClick={() => cambiarTema('auto')}
-                className={`px-3 h-8 rounded-full transition-all ${
+                className={`px-2.5 h-7 rounded-full transition-all ${
                   modoTema === 'auto' ? 'bg-[#DC2626] text-white shadow-xs' : 'text-slate-400'
                 }`}
               >
