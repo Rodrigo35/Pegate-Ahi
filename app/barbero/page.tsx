@@ -707,6 +707,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
   const turnosEnAtencion = turnos.filter((t) => t.estado === 'atendiendo');
   const colaEspera = turnos.filter((t) => t.estado === 'espera');
+  const turnoEnSillaActual = sillaActual
+    ? turnosEnAtencion.find((t) => t.silla_id === sillaActual.id)
+    : undefined;
 
   // --- Lógica de arrastrar y reordenar cola ---
   const reordenarCola = async (fromIdx: number, toIdx: number) => {
@@ -979,11 +982,13 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     setEditandoTurnoId(null);
   };
 
-  const llamarSiguienteParaSilla = async (silla: Silla) => {
-    if (colaEspera.length === 0) return;
+  const llamarClienteParaSilla = async (turno: Turno, silla: Silla) => {
+    const sillaOcupada = turnosEnAtencion.some((t) => t.silla_id === silla.id);
+    if (sillaOcupada) {
+      alert(`${silla.nombre_silla} (${silla.nombre_barbero}) ya está atendiendo un corte.`);
+      return;
+    }
 
-    // Respeta exactamente el orden superior de la cola reordenada por el barbero
-    const siguiente = colaEspera[0];
     const etiquetaAsignada = `${silla.nombre_silla} · ${silla.nombre_barbero}`;
 
     await supabase
@@ -994,13 +999,13 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
         nombre_barbero: etiquetaAsignada,
         llamado_en: new Date().toISOString(),
       })
-      .eq('id', siguiente.id);
+      .eq('id', turno.id);
 
-    if (siguiente.cliente_telefono && siguiente.modalidad_espera === 'diligencia') {
+    if (turno.cliente_telefono && turno.modalidad_espera === 'diligencia') {
       enviarWhatsAppTurno(
-        siguiente.cliente_telefono,
-        siguiente.nombre_cliente,
-        siguiente.codigo_ticket,
+        turno.cliente_telefono,
+        turno.nombre_cliente,
+        turno.codigo_ticket,
         etiquetaAsignada
       );
     }
@@ -1296,7 +1301,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
                 {/* Tarjeta única de la silla seleccionada */}
                 {sillaActual && (() => {
-                  const turnoEnSilla = turnosEnAtencion.find((t) => t.silla_id === sillaActual.id);
+                  const turnoEnSilla = turnoEnSillaActual;
                   const minRestantes =
                     turnoEnSilla &&
                     turnoEnSilla.modalidad_espera === 'diligencia' &&
@@ -1498,14 +1503,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                           </div>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => llamarSiguienteParaSilla(sillaActual)}
-                          disabled={colaEspera.length === 0}
-                          className="w-full py-3.5 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-sm tracking-wide shadow-md active:scale-95 disabled:opacity-40"
-                        >
-                          📢 Llamar Siguiente ({colaEspera.length})
-                        </button>
+                        <p className="text-xs font-bold text-slate-400">
+                          {colaEspera.length > 0
+                            ? 'Presiona "Llamar" en el cliente de la fila que vas a atender.'
+                            : 'Esperando clientes en la fila...'}
+                        </p>
                       )}
                     </div>
                   );
@@ -1550,7 +1552,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   No hay clientes en espera hoy.
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[260px] overflow-y-auto pr-0.5">
+                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-0.5">
                   {colaEspera.map((item, idx) => {
                     const siendoArrastrado = dragIdx === idx;
                     const destinoArrastre =
@@ -1618,45 +1620,63 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {item.cliente_telefono ? (
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {sillaActual && (
                             <button
                               type="button"
-                              onClick={() => confirmarAsistenciaWhatsApp(item)}
-                              title="Confirmar asistencia por WhatsApp"
-                              className="px-2.5 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-xs transition-all active:scale-95"
+                              onClick={() => llamarClienteParaSilla(item, sillaActual)}
+                              disabled={Boolean(turnoEnSillaActual)}
+                              title={
+                                turnoEnSillaActual
+                                  ? 'Finaliza el corte actual de esta silla primero'
+                                  : `Pasar a ${sillaActual.nombre_silla}`
+                              }
+                              className="w-full px-3 py-1.5 rounded-xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-xs shadow-xs transition-all active:scale-95 disabled:opacity-40"
                             >
-                              📲 WA
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const num = prompt(`Teléfono WhatsApp para ${item.nombre_cliente}:`);
-                                if (num) {
-                                  await supabase
-                                    .from('turnos')
-                                    .update({ cliente_telefono: num })
-                                    .eq('id', item.id);
-                                  confirmarAsistenciaWhatsApp(item, num);
-                                  fetchTurnosYCitas();
-                                }
-                              }}
-                              title="Agregar teléfono y enviar WhatsApp"
-                              className="px-2.5 py-2 rounded-xl bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] font-black text-xs transition-all active:scale-95"
-                            >
-                              ➕ Tlf
+                              📢 Llamar
                             </button>
                           )}
 
-                          <button
-                            type="button"
-                            onClick={() => cancelarTurnoEnEspera(item)}
-                            title="Cancelar turno"
-                            className="px-2.5 py-2 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all active:scale-95"
-                          >
-                            ✕
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            {item.cliente_telefono ? (
+                              <button
+                                type="button"
+                                onClick={() => confirmarAsistenciaWhatsApp(item)}
+                                title="Confirmar asistencia por WhatsApp"
+                                className="px-2.5 py-1.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-xs transition-all active:scale-95"
+                              >
+                                📲 WA
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const num = prompt(`Teléfono WhatsApp para ${item.nombre_cliente}:`);
+                                  if (num) {
+                                    await supabase
+                                      .from('turnos')
+                                      .update({ cliente_telefono: num })
+                                      .eq('id', item.id);
+                                    confirmarAsistenciaWhatsApp(item, num);
+                                    fetchTurnosYCitas();
+                                  }
+                                }}
+                                title="Agregar teléfono y enviar WhatsApp"
+                                className="px-2.5 py-1.5 rounded-xl bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] font-black text-xs transition-all active:scale-95"
+                              >
+                                ➕ Tlf
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => cancelarTurnoEnEspera(item)}
+                              title="Cancelar turno"
+                              className="px-2.5 py-1.5 rounded-xl border border-[#DC2626]/40 text-[#DC2626] hover:bg-[#DC2626] hover:text-white font-black text-xs transition-all active:scale-95"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
