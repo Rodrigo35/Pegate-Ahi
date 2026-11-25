@@ -28,7 +28,8 @@ export async function POST(req: Request) {
 
     const { data: subs, error } = await supabaseAdmin
       .from('push_subscriptions')
-      .select('id, endpoint, p256dh, auth');
+      .select('id, endpoint, p256dh, auth')
+      .eq('rol', 'barbero');
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
