@@ -8,21 +8,21 @@ const supabaseAdmin = createClient(
 );
 
 const MENSAJES_RECORDATORIO = [
-  (nombre: string) => ({
-    title: `✂️ ¡Qué tal, ${nombre}!`,
-    body: 'Ya pasó una semana desde tu último corte. Toca aquí y asegura tu silla hoy sin hacer fila.',
+  (nombre: string, servicio: string) => ({
+    title: `✂️ ¡Hora de retocar tu ${servicio}, ${nombre}!`,
+    body: 'Ya toca mantenimiento para mantener ese estilo impecable. Toca aquí y aparta tu silla sin hacer fila.',
   }),
-  (nombre: string) => ({
-    title: `💈 ${nombre}, tu estilo pide mantenimiento`,
-    body: 'Pégate ahí antes de que se llene la barbería. Toma tu turno en segundos.',
+  (nombre: string, servicio: string) => ({
+    title: `💈 ${nombre}, tu corte pide retoque`,
+    body: `Pégate ahí antes de que se llene la barbería y renueva tu ${servicio} en segundos.`,
   }),
-  (nombre: string) => ({
-    title: `🔥 ¿Listo para renovar el look, ${nombre}?`,
-    body: 'Tu barbero está disponible. Revisa la fila en vivo o agenda tu próxima cita.',
+  (nombre: string, servicio: string) => ({
+    title: `🔥 ¿Listo para el retoque, ${nombre}?`,
+    body: `Tu barbero está disponible para tu próximo ${servicio}. Revisa la fila en vivo o agenda tu cita.`,
   }),
-  (nombre: `string`) => ({
-    title: `⚡ ${nombre}, cero filas hoy`,
-    body: 'Mira cuántos clientes hay delante y llega justo a tu hora en Pégate Ahí.',
+  (nombre: string, servicio: string) => ({
+    title: `⚡ ${nombre}, cero filas para tu retoque`,
+    body: `Ya cumpliste los días recomendados desde tu último ${servicio}. Llega justo a tu hora en Pégate Ahí.`,
   }),
 ];
 
@@ -46,10 +46,20 @@ export async function GET(req: Request) {
     webpush.setVapidDetails(subject, publicKey, privateKey);
 
     const ahora = new Date();
-    const hace7Dias = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const ahoraMs = ahora.getTime();
+    const hace7Dias = new Date(ahoraMs - 7 * 24 * 60 * 60 * 1000).toISOString();
     const hoyStr = ahora.toISOString().split('T')[0];
 
-    // 1. Obtener suscripciones de clientes que no han recibido recordatorio en los últimos 7 días
+    // 1. Obtener días recomendados de retoque por servicio
+    const { data: serviciosConfig } = await supabaseAdmin
+      .from('servicios_config')
+      .select('nombre, dias_retoque');
+
+    const mapaDiasRetoque = new Map<string, number>(
+      (serviciosConfig || []).map((s) => [s.nombre.toLowerCase().trim(), Number(s.dias_retoque) || 7])
+    );
+
+    // 2. Obtener suscripciones de clientes
     const { data: subsClientes, error: errorSubs } = await supabaseAdmin
       .from('push_subscriptions')
       .select('id, endpoint, p256dh, auth, cliente_telefono, nombre_cliente, ultimo_recordatorio_en')
@@ -64,7 +74,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ ok: true, enviados: 0, motivo: 'Sin clientes suscritos' });
     }
 
-    // 2. Obtener clientes que ya tienen turno activo hoy o cita futura confirmada para no molestarlos
+    // 3. Obtener clientes que ya tienen turno activo hoy o cita futura confirmada para no molestarlos
     const [{ data: turnosActivos }, { data: citasActivas }] = await Promise.all([
       supabaseAdmin
         .from('turnos')
@@ -91,30 +101,40 @@ export async function GET(req: Request) {
       const tel = String(sub.cliente_telefono || '').replace(/\D/g, '');
       if (!tel || telefonosConReservaActiva.has(tel)) continue;
 
-      // Validar que no se le haya enviado recordatorio hace menos de 7 días
+      // Validar que no se le haya enviado recordatorio en los últimos 7 días
       if (sub.ultimo_recordatorio_en && sub.ultimo_recordatorio_en > hace7Dias) {
         continue;
       }
 
-      // Buscar su última visita finalizada
+      // Buscar su última visita finalizada junto con el servicio realizado
       const { data: ultimoTurno } = await supabaseAdmin
         .from('turnos')
-        .select('creado_en')
+        .select('tipo_corte, finalizado_en, creado_en')
         .ilike('cliente_telefono', `%${tel.slice(-10)}%`)
         .eq('estado', 'finalizado')
         .order('creado_en', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      // Solo enviar si ya pasaron al menos 7 días desde su último corte finalizado
-      if (!ultimoTurno || ultimoTurno.creado_en > hace7Dias) {
+      if (!ultimoTurno) continue;
+
+      const fechaUltimoServicio = ultimoTurno.finalizado_en || ultimoTurno.creado_en;
+      const diasTranscurridos = Math.floor(
+        (ahoraMs - new Date(fechaUltimoServicio).getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      const servicioNombre = (ultimoTurno.tipo_corte || 'corte').trim();
+      const diasRequeridos = mapaDiasRetoque.get(servicioNombre.toLowerCase()) ?? 7;
+
+      // Solo enviar si ya cumplió los días configurados para retoque de ese servicio
+      if (diasTranscurridos < diasRequeridos) {
         continue;
       }
 
       const primerNombre = (sub.nombre_cliente || 'Amigo').trim().split(' ')[0];
       const plantilla =
         MENSAJES_RECORDATORIO[Math.floor(Math.random() * MENSAJES_RECORDATORIO.length)];
-      const mensaje = plantilla(primerNombre);
+      const mensaje = plantilla(primerNombre, servicioNombre.toLowerCase());
 
       const payload = JSON.stringify({
         title: mensaje.title,
