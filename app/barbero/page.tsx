@@ -240,10 +240,11 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [hoyStr, setHoyStr] = useState<string>('');
   const [ahoraMs, setAhoraMs] = useState<number>(Date.now());
 
-  // Estados para sostener y arrastrar (reordenar cola en móvil y PC)
+  // Estados para arrastrar y reordenar cola (móvil y PC sin conflictos de scroll)
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [dragOffsetY, setDragOffsetY] = useState<number>(0);
+  const dragStartYRef = useRef<number>(0);
   const filaRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Estados Web Push
@@ -707,7 +708,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const turnosEnAtencion = turnos.filter((t) => t.estado === 'atendiendo');
   const colaEspera = turnos.filter((t) => t.estado === 'espera');
 
-  // --- Lógica de sostener y arrastrar para reordenar cola ---
+  // --- Lógica de arrastrar y reordenar cola ---
   const reordenarCola = async (fromIdx: number, toIdx: number) => {
     if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 || fromIdx >= colaEspera.length || toIdx >= colaEspera.length) {
       return;
@@ -751,57 +752,71 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
     }
   };
 
-  const iniciarSostenerArrastre = (idx: number, e: React.PointerEvent<HTMLDivElement>) => {
-    if ((e.target as HTMLElement).closest('button')) return;
+  const iniciarArrastreDirecto = (idx: number, e: React.PointerEvent<HTMLElement>) => {
     if (colaEspera.length < 2) return;
+    e.stopPropagation();
 
-    const targetEl = e.currentTarget;
-    const pointerId = e.pointerId;
+    dragStartYRef.current = e.clientY;
+    setDragOffsetY(0);
+    setDragIdx(idx);
+    setHoverIdx(idx);
 
-    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Ignorar
+    }
 
-    holdTimerRef.current = setTimeout(() => {
-      setDragIdx(idx);
-      setHoverIdx(idx);
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try {
-        targetEl.setPointerCapture(pointerId);
+        navigator.vibrate(25);
       } catch {
         // Ignorar
       }
-      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-        try {
-          navigator.vibrate(35);
-        } catch {
-          // Ignorar
-        }
-      }
-    }, 220);
+    }
   };
 
-  const moverArrastre = (e: React.PointerEvent<HTMLDivElement>) => {
+  const moverArrastre = (e: React.PointerEvent<HTMLElement>) => {
     if (dragIdx === null) return;
     const clientY = e.clientY;
+    setDragOffsetY(clientY - dragStartYRef.current);
+
     for (let i = 0; i < colaEspera.length; i++) {
       const el = filaRefs.current[i];
       if (!el) continue;
       const rect = el.getBoundingClientRect();
+      const puntoMedio = rect.top + rect.height / 2;
       if (clientY >= rect.top && clientY <= rect.bottom) {
         if (hoverIdx !== i) setHoverIdx(i);
+        break;
+      } else if (i === 0 && clientY < puntoMedio) {
+        if (hoverIdx !== 0) setHoverIdx(0);
+        break;
+      } else if (i === colaEspera.length - 1 && clientY > puntoMedio) {
+        if (hoverIdx !== colaEspera.length - 1) setHoverIdx(colaEspera.length - 1);
         break;
       }
     }
   };
 
-  const finalizarArrastre = () => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
+  const finalizarArrastre = (e: React.PointerEvent<HTMLElement>) => {
+    if (dragIdx === null) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      // Ignorar
     }
-    if (dragIdx !== null && hoverIdx !== null && dragIdx !== hoverIdx) {
-      reordenarCola(dragIdx, hoverIdx);
-    }
+
+    const origen = dragIdx;
+    const destino = hoverIdx;
+
     setDragIdx(null);
     setHoverIdx(null);
+    setDragOffsetY(0);
+
+    if (destino !== null && origen !== destino) {
+      reordenarCola(origen, destino);
+    }
   };
 
   const totalIngresos = turnosFinalizados.reduce((acc, t) => acc + (t.monto || 0), 0);
@@ -1517,7 +1532,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
               </>
             )}
 
-            {/* Lista de Espera compartida del día (Sostener y arrastrar para reordenar) */}
+            {/* Lista de Espera compartida del día (Arrastrar desde ⋮⋮ para reordenar) */}
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs font-black uppercase text-slate-400">
@@ -1525,7 +1540,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                 </span>
                 <span className="text-[11px] font-bold text-slate-400">
                   {colaEspera.length > 1
-                    ? 'Mantén pulsado ⋮⋮ para mover'
+                    ? 'Arrastra ⋮⋮ para mover'
                     : `Prom. ~${tiempoPromedioMinutos}m`}
                 </span>
               </div>
@@ -1535,7 +1550,7 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                   No hay clientes en espera hoy.
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[220px] overflow-y-auto pr-0.5">
+                <div className="space-y-2 max-h-[260px] overflow-y-auto pr-0.5">
                   {colaEspera.map((item, idx) => {
                     const siendoArrastrado = dragIdx === idx;
                     const destinoArrastre =
@@ -1547,27 +1562,33 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
                         ref={(el) => {
                           filaRefs.current[idx] = el;
                         }}
-                        onPointerDown={(e) => iniciarSostenerArrastre(idx, e)}
-                        onPointerMove={moverArrastre}
-                        onPointerUp={finalizarArrastre}
-                        onPointerCancel={finalizarArrastre}
-                        style={{ touchAction: dragIdx !== null ? 'none' : 'pan-y' }}
-                        className={`p-3 rounded-2xl border flex items-center justify-between gap-2 select-none transition-all ${cardSurface} ${
+                        style={{
+                          transform: siendoArrastrado
+                            ? `translateY(${dragOffsetY}px) scale(1.02)`
+                            : undefined,
+                          zIndex: siendoArrastrado ? 30 : 1,
+                        }}
+                        className={`relative p-3 rounded-2xl border flex items-center justify-between gap-2 select-none ${cardSurface} ${
                           siendoArrastrado
-                            ? 'scale-[1.02] border-[#2563EB] ring-2 ring-[#2563EB]/40 shadow-lg opacity-90 z-10'
+                            ? 'border-[#2563EB] ring-2 ring-[#2563EB]/50 shadow-xl opacity-95 transition-none'
                             : destinoArrastre
-                            ? 'border-dashed border-2 border-[#DC2626]'
-                            : ''
+                            ? 'border-dashed border-2 border-[#DC2626] bg-[#DC2626]/5 transition-all'
+                            : 'transition-all'
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           {colaEspera.length > 1 && (
-                            <span
-                              className="text-slate-400 font-black text-sm leading-none cursor-grab active:cursor-grabbing px-0.5 shrink-0"
-                              title="Mantén presionado para reordenar"
+                            <div
+                              onPointerDown={(e) => iniciarArrastreDirecto(idx, e)}
+                              onPointerMove={moverArrastre}
+                              onPointerUp={finalizarArrastre}
+                              onPointerCancel={finalizarArrastre}
+                              style={{ touchAction: 'none' }}
+                              className="touch-none py-2 px-1.5 -ml-1 rounded-lg text-slate-400 hover:text-[#2563EB] active:text-[#2563EB] font-black text-base leading-none cursor-grab active:cursor-grabbing shrink-0"
+                              title="Arrastra arriba o abajo para reordenar"
                             >
                               ⋮⋮
-                            </span>
+                            </div>
                           )}
                           <div className="w-8 h-8 rounded-full bg-[#2563EB]/15 border border-[#2563EB]/40 text-[#2563EB] flex items-center justify-center text-xs font-black shrink-0">
                             #{idx + 1}
