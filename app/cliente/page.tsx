@@ -50,6 +50,13 @@ interface ServicioOption {
   descripcion?: string;
 }
 
+interface BloqueHora {
+  id: string;
+  hora_inicio: string;
+  etiqueta: string;
+  cuposRestantes: number;
+}
+
 const STORAGE_KEY = 'pegate_ahi_registro_activo';
 const THEME_STORAGE_KEY = 'pegate_ahi_tema';
 
@@ -64,15 +71,6 @@ const urlBase64ToUint8Array = (base64String: string) => {
   return outputArray;
 };
 
-const getMananaLocal = () => {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
 const getHoyLocal = () => {
   const d = new Date();
   const year = d.getFullYear();
@@ -81,35 +79,24 @@ const getHoyLocal = () => {
   return `${year}-${month}-${day}`;
 };
 
-const generarBloquesHoy = () => {
-  const ahora = new Date();
-  const minutosActuales = ahora.getHours() * 60 + ahora.getMinutes();
-  const bloques: { valor: string; etiqueta: string }[] = [];
+const formatearHora12 = (hora24: string) => {
+  const [hStr, mStr] = hora24.split(':');
+  const h = parseInt(hStr, 10);
+  const m = mStr || '00';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${h12}:${m} ${ampm}`;
+};
 
+const generarRangoHoras9a20 = (): string[] => {
+  const horas: string[] = [];
   for (let h = 9; h <= 20; h++) {
-    const mins00 = h * 60;
-    if (mins00 > minutosActuales) {
-      const h12 = h > 12 ? h - 12 : h;
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      bloques.push({
-        valor: `${String(h).padStart(2, '0')}:00`,
-        etiqueta: `${h12}:00 ${ampm}`,
-      });
-    }
-
+    horas.push(`${String(h).padStart(2, '0')}:00:00`);
     if (h < 20) {
-      const mins30 = h * 60 + 30;
-      if (mins30 > minutosActuales) {
-        const h12 = h > 12 ? h - 12 : h;
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        bloques.push({
-          valor: `${String(h).padStart(2, '0')}:30`,
-          etiqueta: `${h12}:30 ${ampm}`,
-        });
-      }
+      horas.push(`${String(h).padStart(2, '0')}:30:00`);
     }
   }
-  return bloques;
+  return horas;
 };
 
 function ClienteContent({ isDark }: { isDark: boolean }) {
@@ -118,10 +105,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const ticketParam = searchParams.get('ticket') || searchParams.get('id');
   const citaParam = searchParams.get('cita');
 
-  // Flujo por pasos (1: Servicio 2x2, 2: Barbero y Horario/Modalidad, 3: Tus Datos y Confirmar)
+  // Flujo por pasos (1: Servicio 2x2, 2: Barbero y Calendario/Horas, 3: Tus Datos y Confirmar)
   const [paso, setPaso] = useState<1 | 2 | 3>(1);
 
-  const [modoRegistro, setModoRegistro] = useState<'cola' | 'cita'>('cola');
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
 
@@ -136,10 +122,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [barberoPreferido, setBarberoPreferido] = useState<string>('');
   const sillasActivasCount = Math.max(1, sillasActivas.length);
 
-  const [modalidadEspera, setModalidadEspera] = useState<'local' | 'diligencia'>('local');
-  const [horaLlegadaLocal, setHoraLlegadaLocal] = useState<string>('ahora');
-  const [horasOcupadasHoy, setHorasOcupadasHoy] = useState<string[]>([]);
-
   const [registrando, setRegistrando] = useState(false);
   const [turno, setTurno] = useState<TurnoCliente | null>(null);
   const [personasAdelante, setPersonasAdelante] = useState<number>(0);
@@ -147,20 +129,17 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   const [loading, setLoading] = useState<boolean>(true);
   const [reseteando, setReseteando] = useState<boolean>(false);
 
-  // Mensaje cuando el turno o cita expiró/fue cancelado por superar los 15 min
   const [avisoExpirado, setAvisoExpirado] = useState<string | null>(null);
 
-  const [fechaCita, setFechaCita] = useState<string>('');
+  const [fechaSeleccionada, setFechaSeleccionada] = useState<string>(() => getHoyLocal());
   const [diasProximos, setDiasProximos] = useState<
-    { fecha: string; diaCorto: string; numDia: string; mesCorto: string }[]
+    { fecha: string; diaCorto: string; numDia: string; mesCorto: string; esHoy: boolean }[]
   >([]);
-  const [bloquesDisponibles, setBloquesDisponibles] = useState<any[]>([]);
-  const [horaCitaSeleccionada, setHoraCitaSeleccionada] = useState<string>('');
+  const [bloquesDisponibles, setBloquesDisponibles] = useState<BloqueHora[]>([]);
+  const [horaSeleccionada, setHoraSeleccionada] = useState<string>('ahora');
   const [citaConfirmada, setCitaConfirmada] = useState<CitaCliente | null>(null);
 
   const [horaActual, setHoraActual] = useState<string>('');
-  const [tiempoRestanteSegundos, setTiempoRestanteSegundos] = useState<number | null>(null);
-  const [distanciaKm, setDistanciaKm] = useState<number | null>(null);
 
   const registrarSuscripcionPushCliente = async (
     nombreCliente: string,
@@ -207,48 +186,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       // Ignorar si el navegador bloquea Push o no soporta SW
     }
   };
-
-  const cargarHorasOcupadasHoy = async () => {
-    const inicioDia = `${getHoyLocal()}T00:00:00`;
-    const { data } = await supabase
-      .from('turnos')
-      .select('nombre_cliente')
-      .in('estado', ['espera', 'atendiendo'])
-      .gte('creado_en', inicioDia);
-
-    if (data) {
-      const ocupadas: string[] = [];
-      data.forEach((t) => {
-        const match = t.nombre_cliente?.match(/· 🕒 (.+)$/);
-        if (match && match[1]) {
-          ocupadas.push(match[1].trim());
-        }
-      });
-      setHorasOcupadasHoy(ocupadas);
-      setHoraLlegadaLocal((prev) =>
-        prev !== 'ahora' && ocupadas.includes(prev) ? 'ahora' : prev
-      );
-    }
-  };
-
-  useEffect(() => {
-    cargarHorasOcupadasHoy();
-
-    const channelHorasHoy = supabase
-      .channel('cliente_horas_ocupadas_hoy')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {
-        cargarHorasOcupadasHoy();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channelHorasHoy);
-    };
-  }, []);
-
-  const bloquesHoy = generarBloquesHoy().filter(
-    (b) => !horasOcupadasHoy.includes(b.etiqueta)
-  );
 
   const guardarPersistencia = (tipo: 'turno' | 'cita', codigo: string) => {
     try {
@@ -312,8 +249,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   };
 
   useEffect(() => {
-    const mananaInit = getMananaLocal();
-    setFechaCita((prev) => prev || mananaInit);
+    const hoyInit = getHoyLocal();
+    setFechaSeleccionada((prev) => prev || hoyInit);
 
     const diasNombres = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const mesesNombres = [
@@ -321,7 +258,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
     ];
     const listaDias = [];
-    for (let i = 1; i <= 14; i++) {
+    for (let i = 0; i <= 14; i++) {
       const d = new Date();
       d.setDate(d.getDate() + i);
       const y = d.getFullYear();
@@ -329,9 +266,10 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       const day = String(d.getDate()).padStart(2, '0');
       listaDias.push({
         fecha: `${y}-${m}-${day}`,
-        diaCorto: diasNombres[d.getDay()],
+        diaCorto: i === 0 ? 'Hoy' : diasNombres[d.getDay()],
         numDia: day,
         mesCorto: mesesNombres[d.getMonth()],
+        esHoy: i === 0,
       });
     }
     setDiasProximos(listaDias);
@@ -415,8 +353,10 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
   }, []);
 
   const cargarHorarios = async () => {
-    if (!fechaCita) return;
-    const fechaObj = new Date(fechaCita + 'T00:00:00');
+    if (!fechaSeleccionada) return;
+    const hoyStr = getHoyLocal();
+    const esHoy = fechaSeleccionada === hoyStr;
+    const fechaObj = new Date(fechaSeleccionada + 'T00:00:00');
     const diaSemana = fechaObj.getDay();
 
     const { count: totalSillas } = await supabase
@@ -425,7 +365,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
       .eq('activa', true);
     const capacidadPorHora = Math.max(1, totalSillas || 1);
 
-    const { data: bloques } = await supabase
+    const { data: bloquesConfig } = await supabase
       .from('horarios_disponibles')
       .select('*')
       .eq('dia_semana', diaSemana)
@@ -435,37 +375,85 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     const { data: citasOcupadas } = await supabase
       .from('citas')
       .select('hora_inicio')
-      .eq('fecha', fechaCita)
+      .eq('fecha', fechaSeleccionada)
       .neq('estado', 'cancelada');
 
     const conteoPorHora: Record<string, number> = {};
     citasOcupadas?.forEach((c) => {
-      conteoPorHora[c.hora_inicio] = (conteoPorHora[c.hora_inicio] || 0) + 1;
+      const hNorm = c.hora_inicio.length === 5 ? `${c.hora_inicio}:00` : c.hora_inicio;
+      conteoPorHora[hNorm] = (conteoPorHora[hNorm] || 0) + 1;
     });
 
-    if (bloques) {
-      const libres = bloques
-        .filter((b) => (conteoPorHora[b.hora_inicio] || 0) < capacidadPorHora)
-        .map((b) => ({
-          ...b,
-          cuposRestantes: capacidadPorHora - (conteoPorHora[b.hora_inicio] || 0),
-        }));
+    if (esHoy) {
+      const { data: turnosHoy } = await supabase
+        .from('turnos')
+        .select('nombre_cliente')
+        .in('estado', ['espera', 'atendiendo'])
+        .gte('creado_en', `${hoyStr}T00:00:00`);
 
-      setBloquesDisponibles(libres);
-      setHoraCitaSeleccionada((prevHora) =>
-        prevHora && (conteoPorHora[prevHora] || 0) >= capacidadPorHora ? '' : prevHora
-      );
+      turnosHoy?.forEach((t) => {
+        const match = t.nombre_cliente?.match(/· 🕒 (.+)$/);
+        if (match && match[1]) {
+          const etiquetaMatch = match[1].trim();
+          const bloqueMatch = generarRangoHoras9a20().find(
+            (h24) => formatearHora12(h24) === etiquetaMatch
+          );
+          if (bloqueMatch) {
+            conteoPorHora[bloqueMatch] = (conteoPorHora[bloqueMatch] || 0) + 1;
+          }
+        }
+      });
     }
+
+    const baseHoras: { id: string; hora_inicio: string }[] =
+      bloquesConfig && bloquesConfig.length > 0
+        ? bloquesConfig.map((b) => ({
+            id: String(b.id),
+            hora_inicio: b.hora_inicio.length === 5 ? `${b.hora_inicio}:00` : b.hora_inicio,
+          }))
+        : generarRangoHoras9a20().map((h24) => ({ id: h24, hora_inicio: h24 }));
+
+    const ahora = new Date();
+    const minutosActuales = ahora.getHours() * 60 + ahora.getMinutes();
+
+    const libres: BloqueHora[] = baseHoras
+      .filter((b) => {
+        const [hh, mm] = b.hora_inicio.split(':').map(Number);
+        const minsBloque = hh * 60 + mm;
+        const enRango = minsBloque >= 9 * 60 && minsBloque <= 20 * 60;
+        const noPasada = !esHoy || minsBloque > minutosActuales;
+        const cupoLibre = (conteoPorHora[b.hora_inicio] || 0) < capacidadPorHora;
+        return enRango && noPasada && cupoLibre;
+      })
+      .map((b) => ({
+        id: b.id,
+        hora_inicio: b.hora_inicio,
+        etiqueta: formatearHora12(b.hora_inicio),
+        cuposRestantes: capacidadPorHora - (conteoPorHora[b.hora_inicio] || 0),
+      }));
+
+    setBloquesDisponibles(libres);
+    setHoraSeleccionada((prevHora) => {
+      if (prevHora === 'ahora') {
+        return esHoy ? 'ahora' : libres[0]?.hora_inicio || '';
+      }
+      const sigueDisponible = libres.some((l) => l.hora_inicio === prevHora);
+      if (sigueDisponible) return prevHora;
+      return esHoy ? 'ahora' : libres[0]?.hora_inicio || '';
+    });
   };
 
   useEffect(() => {
-    if (modoRegistro !== 'cita' || !fechaCita) return;
+    if (paso !== 2 || !fechaSeleccionada) return;
 
     cargarHorarios();
 
     const channelCitasCliente = supabase
       .channel('cliente_bloques_citas')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'citas' }, () => {
+        cargarHorarios();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {
         cargarHorarios();
       })
       .on(
@@ -483,34 +471,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     return () => {
       supabase.removeChannel(channelCitasCliente);
     };
-  }, [fechaCita, modoRegistro]);
-
-  const obtenerUbicacionGPS = () => {
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const latBarberia = APP_CONFIG.ubicacionLocal.latitud;
-          const lngBarberia = APP_CONFIG.ubicacionLocal.longitud;
-          const latCliente = pos.coords.latitude;
-          const lngCliente = pos.coords.longitude;
-
-          const R = 6371;
-          const dLat = ((latCliente - latBarberia) * Math.PI) / 180;
-          const dLng = ((lngCliente - lngBarberia) * Math.PI) / 180;
-          const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos((latBarberia * Math.PI) / 180) *
-              Math.cos((latCliente * Math.PI) / 180) *
-              Math.sin(dLng / 2) *
-              Math.sin(dLng / 2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          const dist = R * c;
-          setDistanciaKm(parseFloat(dist.toFixed(1)));
-        },
-        () => console.log('Ubicación no obtenida')
-      );
-    }
-  };
+  }, [fechaSeleccionada, paso]);
 
   const cargarCitaGuardada = async (codigoCita: string) => {
     const { data, error } = await supabase
@@ -528,7 +489,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     } else {
       if (citaConfirmada && data?.estado === 'cancelada') {
         setAvisoExpirado(
-          'Tu cita fue cancelada por superar los 15 minutos de tolerancia o por gestión de la barbería. Puedes volver a programar un nuevo horario.'
+          'Perdiste el turno, vuelve a solicitar cita.'
         );
       }
       limpiarPersistencia();
@@ -571,7 +532,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     } else if (!miTurno || miTurno.estado === 'cancelado') {
       if (turno && turno.estado !== 'cancelado') {
         setAvisoExpirado(
-          'Tu turno fue cancelado por superar el límite máximo de 15 minutos o por ausencia. Debes volver a programar un nuevo turno.'
+          'Perdiste el turno, vuelve a solicitar cita.'
         );
       }
       limpiarPersistencia();
@@ -641,124 +602,85 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     };
   }, [ticketParam, citaParam, turno?.id, turno?.codigo_ticket, citaConfirmada?.codigo_ticket, reseteando]);
 
-  useEffect(() => {
-    if (
-      turno &&
-      turno.estado === 'atendiendo' &&
-      turno.modalidad_espera === 'diligencia' &&
-      turno.llamado_en &&
-      !turno.cliente_llego
-    ) {
-      const interval = setInterval(() => {
-        const horaLlamado = new Date(turno.llamado_en!).getTime();
-        const ahora = new Date().getTime();
-        const segundosTranscurridos = Math.floor((ahora - horaLlamado) / 1000);
-        const limiteSegundos = APP_CONFIG.tiempoLimiteDiligenciaMin * 60;
-        const restante = limiteSegundos - segundosTranscurridos;
-
-        setTiempoRestanteSegundos(restante > 0 ? restante : 0);
-      }, 1000);
-
-      return () => clearInterval(interval);
-    } else {
-      setTiempoRestanteSegundos(null);
-    }
-  }, [turno]);
-
-  const unirmeALaCola = async (e: React.FormEvent) => {
+  const confirmarReserva = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nombre.trim() || !telefono.trim()) return;
+    if (!nombre.trim() || !telefono.trim() || !horaSeleccionada) return;
 
     setRegistrando(true);
     setAvisoExpirado(null);
 
-    const etiquetaHora =
-      modalidadEspera === 'local'
-        ? horaLlegadaLocal !== 'ahora'
-          ? horaLlegadaLocal
-          : ''
-        : '';
-
-    if (etiquetaHora) {
-      const inicioDia = `${getHoyLocal()}T00:00:00`;
-      const { data: yaExiste } = await supabase
-        .from('turnos')
-        .select('id')
-        .in('estado', ['espera', 'atendiendo'])
-        .gte('creado_en', inicioDia)
-        .ilike('nombre_cliente', `%· 🕒 ${etiquetaHora}%`)
-        .limit(1);
-
-      if (yaExiste && yaExiste.length > 0) {
-        alert(`Lo sentimos, la hora ${etiquetaHora} acaba de ser tomada por otro cliente. Elige otro horario.`);
-        await cargarHorasOcupadasHoy();
-        setRegistrando(false);
-        return;
-      }
-    }
-
-    const numero = Math.floor(Math.random() * 900) + 100;
-    const codigo = `B-${numero}`;
-
-    const nombreConHora = etiquetaHora
-      ? `${nombre.trim()} · 🕒 ${etiquetaHora}`
-      : nombre.trim();
-
-    const { data, error } = await supabase
-      .from('turnos')
-      .insert([
-        {
-          codigo_ticket: codigo,
-          nombre_cliente: nombreConHora,
-          cliente_telefono: telefono,
-          tipo_corte: servicioSeleccionado.nombre,
-          monto: servicioSeleccionado.precio,
-          modalidad_espera: modalidadEspera,
-          barbero_preferido: barberoPreferido || null,
-          estado: 'espera',
-        },
-      ])
-      .select()
-      .single();
-
-    if (!error && data) {
-      registrarSuscripcionPushCliente(nombre.trim(), telefono);
-
-      fetch('/api/push-cita', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tipo: 'turno',
-          codigo_ticket: data.codigo_ticket,
-          nombre_cliente: data.nombre_cliente,
-          tipo_corte: data.tipo_corte,
-          modalidad_espera: data.modalidad_espera,
-          barbero_preferido: data.barbero_preferido,
-        }),
-      }).catch(() => {});
-
-      setTurno(data as TurnoCliente);
-      guardarPersistencia('turno', data.codigo_ticket);
-      cargarTurnoYPosicion(data.codigo_ticket);
-    }
-    setRegistrando(false);
-  };
-
-  const agendarCita = async (e: React.FormEvent) => {
-    e.preventDefault();
-
     const hoyStr = getHoyLocal();
-    if (fechaCita <= hoyStr) {
-      alert('Las citas solo se pueden reservar a partir del día de mañana.');
+    const esHoy = fechaSeleccionada === hoyStr;
+
+    if (esHoy) {
+      const etiquetaHora =
+        horaSeleccionada !== 'ahora' ? formatearHora12(horaSeleccionada) : '';
+
+      if (etiquetaHora) {
+        const inicioDia = `${hoyStr}T00:00:00`;
+        const { data: yaExiste } = await supabase
+          .from('turnos')
+          .select('id')
+          .in('estado', ['espera', 'atendiendo'])
+          .gte('creado_en', inicioDia)
+          .ilike('nombre_cliente', `%· 🕒 ${etiquetaHora}%`)
+          .limit(1);
+
+        if (yaExiste && yaExiste.length > 0) {
+          alert(`Lo sentimos, la hora ${etiquetaHora} acaba de ser tomada. Elige otra hora disponible.`);
+          await cargarHorarios();
+          setRegistrando(false);
+          return;
+        }
+      }
+
+      const numero = Math.floor(Math.random() * 900) + 100;
+      const codigo = `B-${numero}`;
+      const nombreConHora = etiquetaHora
+        ? `${nombre.trim()} · 🕒 ${etiquetaHora}`
+        : nombre.trim();
+
+      const { data, error } = await supabase
+        .from('turnos')
+        .insert([
+          {
+            codigo_ticket: codigo,
+            nombre_cliente: nombreConHora,
+            cliente_telefono: telefono,
+            tipo_corte: servicioSeleccionado.nombre,
+            monto: servicioSeleccionado.precio,
+            modalidad_espera: 'local',
+            barbero_preferido: barberoPreferido || null,
+            estado: 'espera',
+          },
+        ])
+        .select()
+        .single();
+
+      if (!error && data) {
+        registrarSuscripcionPushCliente(nombre.trim(), telefono);
+
+        fetch('/api/push-cita', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tipo: 'turno',
+            codigo_ticket: data.codigo_ticket,
+            nombre_cliente: data.nombre_cliente,
+            tipo_corte: data.tipo_corte,
+            modalidad_espera: 'local',
+            barbero_preferido: data.barbero_preferido,
+          }),
+        }).catch(() => {});
+
+        setTurno(data as TurnoCliente);
+        guardarPersistencia('turno', data.codigo_ticket);
+        cargarTurnoYPosicion(data.codigo_ticket);
+      }
+      setRegistrando(false);
       return;
     }
 
-    if (!nombre.trim() || !telefono.trim() || !horaCitaSeleccionada) return;
-
-    setRegistrando(true);
-    setAvisoExpirado(null);
-
-    // Validación en tiempo real de disponibilidad de cupo antes de insertar
     const { count: totalSillas } = await supabase
       .from('sillas')
       .select('*', { count: 'exact', head: true })
@@ -768,8 +690,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     const { count: ocupadasAhora } = await supabase
       .from('citas')
       .select('*', { count: 'exact', head: true })
-      .eq('fecha', fechaCita)
-      .eq('hora_inicio', horaCitaSeleccionada)
+      .eq('fecha', fechaSeleccionada)
+      .eq('hora_inicio', horaSeleccionada)
       .neq('estado', 'cancelada');
 
     if ((ocupadasAhora || 0) >= capacidadPorHora) {
@@ -791,8 +713,8 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           cliente_telefono: telefono,
           tipo_corte: servicioSeleccionado.nombre,
           monto: servicioSeleccionado.precio,
-          fecha: fechaCita,
-          hora_inicio: horaCitaSeleccionada,
+          fecha: fechaSeleccionada,
+          hora_inicio: horaSeleccionada,
           barbero_preferido: barberoPreferido || null,
           estado: 'confirmada',
         },
@@ -860,20 +782,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     volverAlInicio();
   };
 
-  const cambiarModalidadEnVivo = async (nuevaModalidad: 'local' | 'diligencia') => {
-    if (!turno) return;
-    setTurno({ ...turno, modalidad_espera: nuevaModalidad });
-
-    if (nuevaModalidad === 'diligencia') {
-      obtenerUbicacionGPS();
-    }
-
-    await supabase
-      .from('turnos')
-      .update({ modalidad_espera: nuevaModalidad, cliente_llego: nuevaModalidad === 'local' })
-      .eq('id', turno.id);
-  };
-
   const notificarLlegadaPresencial = async () => {
     if (!turno) return;
     setTurno({ ...turno, cliente_llego: true, modalidad_espera: 'local' });
@@ -890,9 +798,9 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     setCitaConfirmada(null);
     setNombre('');
     setTelefono('');
-    setHoraCitaSeleccionada('');
+    setFechaSeleccionada(getHoyLocal());
+    setHoraSeleccionada('ahora');
     setBarberoPreferido('');
-    setHoraLlegadaLocal('ahora');
     setPaso(1);
   };
 
@@ -928,12 +836,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
     }
 
     volverAlInicio();
-  };
-
-  const formatearTiempo = (seg: number) => {
-    const mins = Math.floor(seg / 60);
-    const secs = seg % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const subCardClass = isDark
@@ -974,7 +876,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           <div className="flex justify-between">
             <span className="text-slate-400">Hora:</span>
             <span className="font-black text-[#2563EB]">
-              {citaConfirmada.hora_inicio.substring(0, 5)} hrs
+              {formatearHora12(citaConfirmada.hora_inicio)}
             </span>
           </div>
           <div className="flex justify-between gap-2">
@@ -994,7 +896,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
           )}
         </div>
 
-        {/* Aviso de puntualidad y tolerancia máxima de 15 minutos */}
         <div
           className={`p-3 rounded-2xl border text-xs text-left leading-snug ${
             isDark
@@ -1002,7 +903,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               : 'bg-amber-50 border-amber-300 text-amber-800'
           }`}
         >
-          ⏰ <strong>Tolerancia máxima de 15 min:</strong> Preséntate puntual. Si no llegas dentro de los 15 minutos posteriores a tu hora, la cita se cancela automáticamente y deberás volver a programar.
+          ⏰ <strong>Tolerancia de 5 min:</strong> Si no llegas dentro de los 5 minutos posteriores a tu hora, pierdes el turno y deberás volver a solicitar cita.
         </div>
 
         <div className="space-y-2.5">
@@ -1105,45 +1006,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               </div>
             </div>
 
-            <div className={`p-3.5 rounded-2xl border space-y-2.5 ${subCardClass}`}>
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-bold text-slate-400">Modalidad:</span>
-                <span
-                  className={`px-3 py-1 rounded-lg font-extrabold text-xs border ${
-                    isDark
-                      ? 'bg-slate-800 text-white border-slate-700'
-                      : 'bg-white text-slate-900 border-slate-300'
-                  }`}
-                >
-                  {turno.modalidad_espera === 'diligencia' ? '🏃♂️ Diligencia' : '💈 En el local'}
-                </span>
-              </div>
-
-              {turno.modalidad_espera === 'local' ? (
-                <button
-                  type="button"
-                  onClick={() => cambiarModalidadEnVivo('diligencia')}
-                  className="w-full py-3 rounded-xl border-2 border-[#2563EB] text-[#2563EB] hover:bg-[#2563EB] hover:text-white font-extrabold text-sm transition-all"
-                >
-                  Salgo a diligencia (15 min tolerancia máx.)
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => cambiarModalidadEnVivo('local')}
-                  className="w-full py-3 rounded-xl bg-[#2563EB] text-white font-extrabold text-sm"
-                >
-                  Ya regresé a la barbería
-                </button>
-              )}
-
-              {distanciaKm !== null && turno.modalidad_espera === 'diligencia' && (
-                <p className="text-xs text-center text-slate-400">
-                  📍 Distancia al local: <strong>~{distanciaKm} km</strong>
-                </p>
-              )}
-            </div>
-
             <button
               type="button"
               onClick={cancelarTurno}
@@ -1168,26 +1030,6 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                 <h2 className="text-2xl font-black text-[#DC2626]">¡Ya estás reportado!</h2>
                 <p className="text-sm font-semibold">El barbero sabe que estás listo en el local.</p>
               </>
-            ) : turno.modalidad_espera === 'diligencia' && tiempoRestanteSegundos !== null ? (
-              <>
-                <span className="text-5xl block">🏃♂️</span>
-                <h2 className="text-xl font-black text-[#DC2626]">¡El barbero te está llamando!</h2>
-                <div className="py-2.5 px-5 rounded-xl bg-slate-950 border border-slate-800 text-white">
-                  <span className="text-xs uppercase font-bold text-slate-400 block">
-                    Tiempo para llegar
-                  </span>
-                  <p className="text-4xl font-black font-mono mt-0.5 text-[#2563EB]">
-                    {formatearTiempo(tiempoRestanteSegundos)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={notificarLlegadaPresencial}
-                  className="w-full py-3.5 rounded-2xl bg-[#DC2626] text-white font-black text-base uppercase tracking-wider shadow-md active:scale-95"
-                >
-                  📍 ¡Ya llegué al local!
-                </button>
-              </>
             ) : (
               <>
                 <span className="text-5xl block">✂️</span>
@@ -1197,6 +1039,13 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
                     ? `Pasa adelante a ${turno.nombre_barbero}.`
                     : 'Pasa adelante, tu silla está lista.'}
                 </p>
+                <button
+                  type="button"
+                  onClick={notificarLlegadaPresencial}
+                  className="w-full py-3 rounded-2xl bg-[#2563EB] text-white font-black text-sm uppercase tracking-wider"
+                >
+                  📍 Confirmar que estoy en el local
+                </button>
               </>
             )}
           </div>
@@ -1208,11 +1057,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             <h2 className="text-xl font-black">
               {turno.estado === 'finalizado'
                 ? '¡Gracias por tu visita!'
-                : 'Turno cancelado por ausencia'}
+                : 'Perdiste el turno'}
             </h2>
             {turno.estado === 'ausente' && (
               <p className="text-xs font-semibold text-slate-400 leading-snug">
-                Superaste el límite máximo de 15 minutos sin presentarte. Debes volver a programar un nuevo turno.
+                Perdiste el turno, vuelve a solicitar cita.
               </p>
             )}
             <button
@@ -1220,7 +1069,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               onClick={volverAlInicio}
               className="w-full py-3.5 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base uppercase tracking-wider active:scale-95"
             >
-              Volver a programar
+              Volver a solicitar cita
             </button>
           </div>
         )}
@@ -1248,7 +1097,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               Turno Cancelado
             </span>
             <h2 className="text-2xl font-black text-[#DC2626] leading-tight pt-1">
-              ¡Tu turno ha sido cancelado!
+              ¡Perdiste el turno!
             </h2>
           </div>
 
@@ -1261,17 +1110,18 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             onClick={() => setAvisoExpirado(null)}
             className="w-full py-4 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base uppercase tracking-wider shadow-md transition-all active:scale-95"
           >
-            Volver a programar turno
+            Vuelve a solicitar cita
           </button>
         </div>
       </div>
     );
   }
 
-  // --- FORMULARIO POR PASOS (SIN SCROLL VERTICAL + ICONOS PROTAGONISTAS 2x2) ---
+  const esFechaHoy = fechaSeleccionada === getHoyLocal();
+
+  // --- FORMULARIO POR PASOS ---
   return (
     <div className="pt-3 space-y-4">
-      {/* Indicador de 3 pasos */}
       <div className="flex items-center justify-between gap-2">
         {[
           { num: 1, label: 'Servicio' },
@@ -1306,48 +1156,15 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         })}
       </div>
 
-      {/* ================= PASO 1: MODALIDAD + SERVICIOS EN CUADRÍCULA 2x2 CIRCULAR ================= */}
+      {/* ================= PASO 1: SERVICIOS EN CUADRÍCULA 2x2 CIRCULAR ================= */}
       {paso === 1 && (
         <div className="space-y-4">
-          {/* Selector Cola Hoy / Agendar Cita */}
-          <div
-            className={`grid grid-cols-2 gap-1.5 p-1.5 rounded-2xl border ${
-              isDark ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setModoRegistro('cola')}
-              className={`py-2.5 rounded-xl text-sm font-black flex items-center justify-center gap-1.5 transition-all ${
-                modoRegistro === 'cola'
-                  ? 'bg-[#DC2626] text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <span className="text-lg leading-none">✂️</span>
-              <span>Turno Hoy</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setModoRegistro('cita')}
-              className={`py-2.5 rounded-xl text-sm font-black flex items-center justify-center gap-1.5 transition-all ${
-                modoRegistro === 'cita'
-                  ? 'bg-[#2563EB] text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <span className="text-lg leading-none">📅</span>
-              <span>Agendar Cita</span>
-            </button>
-          </div>
-
           <div className="text-center">
             <h2 className="text-lg font-black tracking-tight uppercase">
               Elige tu Servicio
             </h2>
           </div>
 
-          {/* Cuadrícula 2x2 con círculos grandes */}
           <div className="grid grid-cols-2 gap-3">
             {listaServicios.map((srv) => {
               const selected = servicioSeleccionado.nombre === srv.nombre;
@@ -1418,7 +1235,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
         </div>
       )}
 
-      {/* ================= PASO 2: BARBERO (CIRCULAR) + HORARIO EN TIRA HORIZONTAL ================= */}
+      {/* ================= PASO 2: BARBERO + CALENDARIO (INCLUYENDO HOY) + HORAS 9 AM - 8 PM ================= */}
       {paso === 2 && (
         <div className="space-y-4">
           {sillasActivas.length > 0 && (
@@ -1497,184 +1314,122 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             </div>
           )}
 
-          {/* Opciones para TURNO HOY */}
-          {modoRegistro === 'cola' && (
-            <div className="space-y-3">
-              <span className="block text-xs font-extrabold uppercase tracking-wider text-slate-400 px-1">
-                ¿Dónde esperarás?
+          {/* Calendario desplegable / selector de fecha incluyendo Hoy */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-extrabold uppercase text-slate-400">
+                📅 Fecha (incluye Hoy)
               </span>
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setModalidadEspera('local')}
-                  className={`p-3 rounded-2xl border-2 flex flex-col items-center text-center transition-all ${
-                    modalidadEspera === 'local'
-                      ? 'bg-[#2563EB] border-[#2563EB] text-white'
-                      : isDark
-                      ? 'bg-slate-950 border-slate-800 text-slate-300'
-                      : 'bg-slate-50 border-slate-200 text-slate-700'
-                  }`}
-                >
-                  <span className="text-2xl mb-0.5">💈</span>
-                  <span className="text-sm font-black">En el Local</span>
-                  <span className="text-[11px] opacity-80">Orden de llegada</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setModalidadEspera('diligencia');
-                    setHoraLlegadaLocal('ahora');
-                    obtenerUbicacionGPS();
-                  }}
-                  className={`p-3 rounded-2xl border-2 flex flex-col items-center text-center transition-all ${
-                    modalidadEspera === 'diligencia'
-                      ? 'bg-[#2563EB] border-[#2563EB] text-white'
-                      : isDark
-                      ? 'bg-slate-950 border-slate-800 text-slate-300'
-                      : 'bg-slate-50 border-slate-200 text-slate-700'
-                  }`}
-                >
-                  <span className="text-2xl mb-0.5">🏃‍♂️</span>
-                  <span className="text-sm font-black">Diligencia</span>
-                  <span className="text-[11px] opacity-80">15 min tolerancia máx.</span>
-                </button>
-              </div>
-
-              {modalidadEspera === 'local' && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-xs font-extrabold uppercase text-slate-400">
-                      🕒 Llegada estimada hoy
-                    </span>
-                    <span className="text-xs font-bold text-[#2563EB]">Desliza →</span>
-                  </div>
-
-                  <div className="flex gap-2 overflow-x-auto pb-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setHoraLlegadaLocal('ahora')}
-                      className={`px-3.5 py-2.5 rounded-xl border text-xs font-black shrink-0 transition-all ${
-                        horaLlegadaLocal === 'ahora'
-                          ? 'bg-[#DC2626] border-[#DC2626] text-white shadow-sm'
-                          : isDark
-                          ? 'bg-slate-950 border-slate-800 text-slate-200'
-                          : 'bg-slate-50 border-slate-200 text-slate-800'
-                      }`}
-                    >
-                      ⚡ Ya estoy aquí
-                    </button>
-
-                    {bloquesHoy.map((b) => {
-                      const selected = horaLlegadaLocal === b.etiqueta;
-                      return (
-                        <button
-                          key={b.valor}
-                          type="button"
-                          onClick={() => setHoraLlegadaLocal(b.etiqueta)}
-                          className={`px-3.5 py-2.5 rounded-xl border text-xs font-black shrink-0 transition-all ${
-                            selected
-                              ? 'bg-[#DC2626] border-[#DC2626] text-white shadow-sm'
-                              : isDark
-                              ? 'bg-slate-950 border-slate-800 text-slate-200'
-                              : 'bg-slate-50 border-slate-200 text-slate-800'
-                          }`}
-                        >
-                          {b.etiqueta}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              <input
+                type="date"
+                min={getHoyLocal()}
+                value={fechaSeleccionada}
+                onChange={(e) => {
+                  if (!e.target.value) return;
+                  setFechaSeleccionada(e.target.value);
+                  setHoraSeleccionada(e.target.value === getHoyLocal() ? 'ahora' : '');
+                }}
+                className={`px-2.5 py-1 rounded-xl border text-xs font-black focus:outline-none focus:ring-2 focus:ring-[#2563EB] ${
+                  isDark
+                    ? 'bg-slate-950 border-slate-800 text-white'
+                    : 'bg-slate-50 border-slate-300 text-slate-900'
+                }`}
+              />
             </div>
-          )}
 
-          {/* Opciones para AGENDAR CITA (Tira horizontal días + Tira horizontal horas) */}
-          {modoRegistro === 'cita' && (
-            <div className="space-y-3">
-              <div>
-                <div className="flex items-center justify-between mb-1.5 px-1">
-                  <span className="text-xs font-extrabold uppercase text-slate-400">
-                    📅 Día de la cita
-                  </span>
-                  <span className="text-xs font-bold text-[#2563EB]">Desliza →</span>
-                </div>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {diasProximos.map((d) => {
-                    const isSelected = fechaCita === d.fecha;
-                    return (
-                      <button
-                        key={d.fecha}
-                        type="button"
-                        onClick={() => {
-                          setFechaCita(d.fecha);
-                          setHoraCitaSeleccionada('');
-                        }}
-                        className={`min-w-[56px] py-2 px-2 rounded-2xl border flex flex-col items-center shrink-0 transition-all ${
-                          isSelected
-                            ? 'bg-[#DC2626] border-[#DC2626] text-white font-black shadow-sm'
-                            : isDark
-                            ? 'bg-slate-950 border-slate-800 text-slate-300'
-                            : 'bg-slate-50 border-slate-200 text-slate-800'
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {diasProximos.map((d) => {
+                const isSelected = fechaSeleccionada === d.fecha;
+                return (
+                  <button
+                    key={d.fecha}
+                    type="button"
+                    onClick={() => {
+                      setFechaSeleccionada(d.fecha);
+                      setHoraSeleccionada(d.esHoy ? 'ahora' : '');
+                    }}
+                    className={`min-w-[58px] py-2 px-2 rounded-2xl border flex flex-col items-center shrink-0 transition-all ${
+                      isSelected
+                        ? 'bg-[#DC2626] border-[#DC2626] text-white font-black shadow-sm'
+                        : isDark
+                        ? 'bg-slate-950 border-slate-800 text-slate-300'
+                        : 'bg-slate-50 border-slate-200 text-slate-800'
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold uppercase">{d.diaCorto}</span>
+                    <span className="text-base font-black leading-tight">{d.numDia}</span>
+                    <span className="text-[10px] font-bold opacity-80">{d.mesCorto}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Horas desplegadas de 9:00 AM a 8:00 PM */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-extrabold uppercase text-slate-400">
+                🕒 Horarios (9:00 AM - 8:00 PM)
+              </span>
+              <span className="text-[11px] font-bold text-[#2563EB]">
+                {esFechaHoy ? 'Turno Hoy' : 'Cita'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 max-h-44 overflow-y-auto pr-1">
+              {esFechaHoy && (
+                <button
+                  type="button"
+                  onClick={() => setHoraSeleccionada('ahora')}
+                  className={`py-2.5 px-2 rounded-2xl border text-xs font-black flex flex-col items-center justify-center transition-all ${
+                    horaSeleccionada === 'ahora'
+                      ? 'bg-[#DC2626] border-[#DC2626] text-white shadow-sm'
+                      : isDark
+                      ? 'bg-slate-950 border-slate-800 text-slate-200'
+                      : 'bg-slate-50 border-slate-200 text-slate-900'
+                  }`}
+                >
+                  <span>⚡ Ya estoy aquí</span>
+                  <span className="text-[10px] opacity-80">Orden llegada</span>
+                </button>
+              )}
+
+              {bloquesDisponibles.map((b) => {
+                const selected = horaSeleccionada === b.hora_inicio;
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => setHoraSeleccionada(b.hora_inicio)}
+                    className={`py-2.5 px-2 rounded-2xl border text-xs font-black flex flex-col items-center justify-center transition-all ${
+                      selected
+                        ? 'bg-[#2563EB] border-[#2563EB] text-white shadow-sm'
+                        : isDark
+                        ? 'bg-slate-950 border-slate-800 text-slate-200'
+                        : 'bg-slate-50 border-slate-200 text-slate-900'
+                    }`}
+                  >
+                    <span>{b.etiqueta}</span>
+                    {sillasActivasCount > 1 && (
+                      <span
+                        className={`text-[10px] font-bold ${
+                          selected ? 'text-white/90' : 'text-[#2563EB]'
                         }`}
                       >
-                        <span className="text-[10px] font-bold uppercase">{d.diaCorto}</span>
-                        <span className="text-base font-black leading-tight">{d.numDia}</span>
-                        <span className="text-[10px] font-bold opacity-80">{d.mesCorto}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                        {b.cuposRestantes} {b.cuposRestantes === 1 ? 'cupo' : 'cupos'}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
 
-              <div>
-                <div className="flex items-center justify-between mb-1.5 px-1">
-                  <span className="text-xs font-extrabold uppercase text-slate-400">
-                    🕒 Hora disponible
-                  </span>
-                  <span className="text-xs font-bold text-[#2563EB]">Desliza →</span>
-                </div>
-                {bloquesDisponibles.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-3 border border-dashed border-slate-700 rounded-xl">
-                    Sin horarios disponibles para este día.
-                  </p>
-                ) : (
-                  <div className="flex gap-2 overflow-x-auto pb-1.5">
-                    {bloquesDisponibles.map((b) => {
-                      const horaText = b.hora_inicio.substring(0, 5);
-                      const selected = horaCitaSeleccionada === b.hora_inicio;
-                      return (
-                        <button
-                          key={b.id}
-                          type="button"
-                          onClick={() => setHoraCitaSeleccionada(b.hora_inicio)}
-                          className={`min-w-[78px] py-2.5 px-3 rounded-2xl border text-sm font-black shrink-0 flex flex-col items-center transition-all ${
-                            selected
-                              ? 'bg-[#2563EB] border-[#2563EB] text-white shadow-sm'
-                              : isDark
-                              ? 'bg-slate-950 border-slate-800 text-slate-200'
-                              : 'bg-slate-50 border-slate-200 text-slate-900'
-                          }`}
-                        >
-                          <span>{horaText}</span>
-                          {sillasActivasCount > 1 && (
-                            <span
-                              className={`text-[10px] font-bold ${
-                                selected ? 'text-white/90' : 'text-[#2563EB]'
-                              }`}
-                            >
-                              {b.cuposRestantes} {b.cuposRestantes === 1 ? 'cupo' : 'cupos'}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              {!esFechaHoy && bloquesDisponibles.length === 0 && (
+                <p className="col-span-3 text-xs text-slate-400 text-center py-4 border border-dashed border-slate-700 rounded-2xl">
+                  Sin horarios disponibles para este día.
+                </p>
+              )}
             </div>
-          )}
+          </div>
 
           <div className="flex gap-2 pt-1">
             <button
@@ -1691,7 +1446,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             <button
               type="button"
               onClick={() => setPaso(3)}
-              disabled={modoRegistro === 'cita' && !horaCitaSeleccionada}
+              disabled={!horaSeleccionada}
               className="flex-1 py-3.5 rounded-2xl bg-[#DC2626] hover:bg-[#B91C1C] text-white font-black text-base shadow-md active:scale-95 disabled:opacity-40"
             >
               Siguiente →
@@ -1702,10 +1457,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
 
       {/* ================= PASO 3: DATOS Y RESUMEN FINAL ================= */}
       {paso === 3 && (
-        <form
-          onSubmit={modoRegistro === 'cola' ? unirmeALaCola : agendarCita}
-          className="space-y-4"
-        >
+        <form onSubmit={confirmarReserva} className="space-y-4">
           <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-2 ${subCardClass}`}>
             <div className="flex items-center gap-2.5">
               <span className="w-11 h-11 rounded-full bg-[#2563EB] text-white flex items-center justify-center text-2xl shrink-0">
@@ -1714,11 +1466,11 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
               <div>
                 <p className="text-sm font-black leading-snug">{servicioSeleccionado.nombre}</p>
                 <p className="text-xs font-bold text-slate-400">
-                  {modoRegistro === 'cola'
-                    ? horaLlegadaLocal === 'ahora'
-                      ? 'Turno hoy · Orden de llegada'
-                      : `Turno hoy · Llegada ~${horaLlegadaLocal}`
-                    : `Cita puntual · ${fechaCita} (${horaCitaSeleccionada.substring(0, 5)})`}
+                  {esFechaHoy
+                    ? horaSeleccionada === 'ahora'
+                      ? 'Hoy · Orden de llegada'
+                      : `Hoy · ${formatearHora12(horaSeleccionada)}`
+                    : `Cita · ${fechaSeleccionada} (${formatearHora12(horaSeleccionada)})`}
                 </p>
               </div>
             </div>
@@ -1774,7 +1526,7 @@ function ClienteContent({ isDark }: { isDark: boolean }) {
             >
               {registrando
                 ? 'Procesando...'
-                : modoRegistro === 'cola'
+                : esFechaHoy
                 ? 'Confirmar Turno'
                 : 'Confirmar Cita'}
             </button>
