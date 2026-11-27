@@ -53,6 +53,7 @@ interface Cita {
 const PIN_BARBERO = process.env.NEXT_PUBLIC_BARBER_PIN || '1234';
 const AUTH_SESSION_KEY = 'pegate_ahi_barbero_auth';
 const THEME_STORAGE_KEY = 'pegate_ahi_tema';
+const AVISOS_STORAGE_KEY = 'pegate_ahi_avisos_15m';
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || '';
 const MAX_TOLERANCIA_SEGUNDOS = 15 * 60;
 
@@ -73,6 +74,26 @@ const getFechaLocalStr = () => {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+};
+
+const leerAvisosPersistidos = (): Record<string, number> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(AVISOS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return {};
+    const ahora = Date.now();
+    const validos: Record<string, number> = {};
+    for (const [id, ts] of Object.entries(parsed)) {
+      if (typeof ts === 'number' && ahora - ts < MAX_TOLERANCIA_SEGUNDOS * 1000) {
+        validos[id] = ts;
+      }
+    }
+    return validos;
+  } catch {
+    return {};
+  }
 };
 
 function BarberoPinGate({
@@ -242,7 +263,9 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
   const [ahoraMs, setAhoraMs] = useState<number>(Date.now());
 
   // Estados para aviso previo WA (15 min máx), Ausente y Reprogramar en fila
-  const [avisosTimestamp, setAvisosTimestamp] = useState<Record<string, number>>({});
+  const [avisosTimestamp, setAvisosTimestamp] = useState<Record<string, number>>(() =>
+    leerAvisosPersistidos()
+  );
   const [reprogramandoTurnoId, setReprogramandoTurnoId] = useState<string | null>(null);
   const [nuevaHoraTurnoHoy, setNuevaHoraTurnoHoy] = useState<string>('');
   const [guardandoReprogTurno, setGuardandoReprogTurno] = useState<boolean>(false);
@@ -297,6 +320,14 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
 
   const [nuevoTipoInput, setNuevoTipoInput] = useState<string>('Corte clásico');
   const [nuevoPrecioInput, setNuevoPrecioInput] = useState<string>('10');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AVISOS_STORAGE_KEY, JSON.stringify(avisosTimestamp));
+    } catch {
+      // Ignorar
+    }
+  }, [avisosTimestamp]);
 
   // Verificar estado inicial de Web Push + Service Worker
   useEffect(() => {
@@ -523,7 +554,23 @@ function BarberoContent({ isDark }: { isDark: boolean }) {
       .order('fecha', { ascending: true })
       .order('hora_inicio', { ascending: true });
 
-    if (activos) setTurnos(activos as Turno[]);
+    if (activos) {
+      const listaActivos = activos as Turno[];
+      setTurnos(listaActivos);
+      const idsEnEspera = new Set(listaActivos.filter((t) => t.estado === 'espera').map((t) => t.id));
+      setAvisosTimestamp((prev) => {
+        let cambio = false;
+        const siguiente: Record<string, number> = {};
+        for (const [id, ts] of Object.entries(prev)) {
+          if (idsEnEspera.has(id)) {
+            siguiente[id] = ts;
+          } else {
+            cambio = true;
+          }
+        }
+        return cambio ? siguiente : prev;
+      });
+    }
     if (finalizados) setTurnosFinalizados(finalizados as Turno[]);
     if (citas) setCitasDelDia(citas as Cita[]);
 
